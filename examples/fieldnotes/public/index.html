@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>fieldnotes</title>
+</head>
+<body>
+  <script src="ringscript.js"></script>
+  <script>RingScript.boot()</script>
+
+  <input id="title" placeholder="Note title">
+  <button onclick="ring.call('AddNote')">Add</button>
+  <button onclick="ring.call('ShowReport')">Report</button>
+  <div id="notes"></div>
+  <div id="report"></div>
+
+  <script type="text/ring">
+  # The same seam everywhere: serv.call("service.action", payload).
+  # :notes is :both  -> this runs against the local synced store.
+  # :report is :server -> the same gesture becomes a wire call.
+
+  func AddNote aEv
+      cTitle = Page(:getvalue, [ :id = "title" ])
+      serv.call("notes.create", [ :title = cTitle ])
+      Refresh()
+
+  func ShowReport aEv
+      oRep = serv.call("report.build", [])
+      Page(:settext, [ :id = "report",
+           :text = "Notes: " + oRep[:data][:count] ])
+
+  func Refresh
+      aNotes = serv.call("notes.list", [])
+      cText = ""
+      for oNote in aNotes[:data][:notes]
+          cText = cText + oNote[:title] + nl
+      next
+      Page(:settext, [ :id = "notes", :text = cText ])
+  </script>
+</body>
+</html>

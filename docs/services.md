@@ -1,0 +1,176 @@
+# The service model
+
+*RingServ's primary paradigm: services and actions over one endpoint,
+with typed declarative contracts. Learned from Pionia's Moonlight
+architecture, adapted to Ring's declarative soul, and shaped so that
+the browser side (RingScript) speaks it natively.*
+
+## 1. Why services, not routes
+
+REST makes you design URLs, pick verbs, and argue about both. For an
+API consumed by your own pages and apps, that machinery is ceremony —
+Pionia's insight, and it matches Ring's temperament: *declare the
+thing, don't choreograph the transport.*
+
+So the primary surface is **one endpoint per API version**:
+
+```
+POST /api/v1
+{ "service": "orders", "action": "place", "payload": { ... } }
+```
+
+and one uniform envelope back, always:
+
+```
+{ "code": 0, "message": "OK", "data": { ... } }
+```
+
+`code` 0 is success; anything else is a business failure code that
+belongs to your application. The HTTP status stays meaningful for the
+*transport* layer (400 malformed, 401 unauthenticated, 404 unknown
+service/action, 422 contract violation, 500 trapped error) — the dual
+signaling Pionia itself converged on after trying "always 200".
+
+Two consequences fall out for free:
+
+- a client needs **one wrapper function** for the whole API;
+- the wire shape is **exactly** RingScript's `ring.call(name, json)` —
+  so `serv.call("orders.place", payload)` from a page, and topology
+  aside, calling a local Ring function or a remote service is the
+  same gesture. This is the keystone of the two-player model.
+
+## 2. Declaring services — the declarative form
+
+For small applications, the whole server is one declaration:
+
+```ring
+Serv([
+    :port = 8080,
+
+    :services = [
+        :orders = [
+            :place = func oReq {
+                oOrder = oReq[:payload]
+                nId = Zql("insert into orders values ?", oOrder)
+                return Reply(:ok, [ :id = nId ])
+            },
+            :list = func oReq {
+                return Reply(:ok, Zql("select from orders"))
+            }
+        ]
+    ]
+])
+```
+
+`oReq` is a plain Ring list: `:service`, `:action`, `:payload`,
+`:auth` (the verified caller, if any), `:headers`. `Reply(code, data)`
+builds the envelope. Nothing else to learn.
+
+## 3. Declaring services — the class form
+
+For structured applications, a service is a class; methods ending in
+`Action` are reachable, everything else is private helpers — Pionia's
+suffix rule, which needs no registration ceremony beyond the class:
+
+```ring
+class OrdersService from Service
+
+    table = "orders"        # ← generic actions: see §4
+
+    func PlaceAction oReq
+        oOrder = oReq[:payload]
+        if not StockAvailable(oOrder)
+            return Reply(:fail, [ :reason = "out-of-stock" ])
+        ok
+        nId = Zql("insert into orders values ?", oOrder)
+        Notify(:orders, :placed, nId)
+        return Reply(:ok, [ :id = nId ])
+
+    private
+        func StockAvailable oOrder
+            # not reachable from the wire
+```
+
+## 4. Generic table services — the boilerplate killer
+
+Pionia's `UniversalGenericService` (itself a descendant of Django
+REST's generic views) is the single biggest lesson: most services are
+CRUD over one table. In RingServ, `table = "orders"` alone gives a
+service `list`, `get`, `create`, `update`, `delete` actions, run
+through ZQL, honoring the contract (§5) if one is declared, with
+pagination when the payload carries `limit`/`offset`. Override any
+action by defining it; restrict the set with
+`actions = [ :list, :get ]`.
+
+## 5. Contracts — typed, declarative, governed
+
+Ring's declarative style can *state* what an action accepts and
+returns. RingServ makes that statement operational:
+
+```ring
+Contract(:orders, [
+    :place = [
+        :in = [
+            :customer = [ :type = :string, :required = true ],
+            :items    = [ :type = :list,   :of = :number, :min = 1 ],
+            :notes    = [ :type = :string, :maxlen = 500 ]
+        ],
+        :out = [ :id = :number ],
+        :auth = :required
+    ]
+])
+```
+
+One declaration, four consumers:
+
+1. **The runtime** validates every payload at the door — violations
+   return a 422 envelope before your action runs.
+2. **`ringserv check`** verifies statically (via tree-sitter-ring)
+   that implementations and contracts agree — actions without
+   contracts, contracts without actions, `:out` shapes that the code
+   cannot produce.
+3. **`ringserv docs`** renders the API catalog from contracts alone.
+4. **`ringserv test`** generates conformance cases (valid payloads
+   must not 422; each violation must).
+
+This is the "typed programming experience" Ring can offer without
+ceasing to be Ring: types as declarations that govern, not
+annotations that decorate.
+
+## 6. Auth and middleware — kept small on purpose
+
+- **Auth is a service concern, declared in the contract**
+  (`:auth = :required`, or `:auth = "orders.manage"` for a
+  permission). Token verification (JWT-shaped) happens in the core
+  before dispatch; the verified claims arrive as `oReq[:auth]`.
+- **Middleware is two hooks, not an onion**: `OnRequest` (before
+  dispatch — may short-circuit with a Reply) and `OnResponse` (after —
+  may observe/annotate). Pionia's simplification, adopted: chains of
+  wrapping middleware are where routing frameworks hide their
+  complexity, and services don't need them.
+
+## 7. Versioning
+
+A version is a switchboard: `/api/v1` and `/api/v2` each map to a
+declared set of services. The same service class can be registered in
+both — v2 re-declares only what changed. Within a version, adding
+services and actions is additive and never breaks a client, because
+clients dispatch by name, not by URL shape.
+
+## 8. The secondary surface: routes
+
+Some things genuinely are URLs: static files, webhooks from third
+parties, SSE streams, a health check, a REST façade for an external
+consumer. The `Serv()` declaration accepts them without ceremony:
+
+```ring
+:routes = [
+    [ :get,  "/health",   func oReq { return Reply(:ok, [ :up = true ]) } ],
+    [ :post, "/webhooks/pay", func oReq { ... } ],
+    [ :static, "/", "public/" ]
+]
+```
+
+Handlers are fetch-shaped (Request in, Response out). This is the
+Hono-flavored door for the web-standards world; the service endpoint
+is itself just one such route, pre-wired.
