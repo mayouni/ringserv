@@ -55,8 +55,10 @@ extern fn ring_vm_error(pVM: ?*anyopaque, cStr: [*:0]const u8) void;
 
 /// Line number captured at error time by the RINGSCRIPT PATCH in
 /// ringvm/src/vmerror.c (catch-time state restore rewinds pVM->nLineNumber,
-/// so it cannot be read from the VM once the catch block runs).
-extern var rs_error_line: c_uint;
+/// so it cannot be read from the VM once the catch block runs). Thread-local
+/// on both sides (RINGSERV extension of the patch): N workers error
+/// independently.
+extern threadlocal var rs_error_line: c_uint;
 extern fn rs_vm_decimals(p: ?*anyopaque) c_uint;
 extern fn rs_vm_maincalled(p: ?*anyopaque) c_uint;
 extern fn ring_general_numtostring(nNum: f64, cStr: [*]u8, nDecimals: c_int) [*:0]u8;
@@ -76,26 +78,31 @@ extern fn rs_objcache_clear() void;
 
 // ---------------------------------------------------------------- state
 
-var g_state: ?*RingState = null;
-var g_out: std.ArrayList(u8) = .empty;
-var g_err: std.ArrayList(u8) = .empty;
-var g_result: std.ArrayList(u8) = .empty;
-var g_callcode: std.ArrayList(u8) = .empty;
-var g_arg: []const u8 = "";
-var g_input: std.ArrayList(u8) = .empty;
-var g_input_pos: usize = 0;
-var g_evalcode: std.ArrayList(u8) = .empty;
-var g_eval_counter: u64 = 0;
+threadlocal var g_state: ?*RingState = null;
+threadlocal var g_out: std.ArrayList(u8) = .empty;
+threadlocal var g_err: std.ArrayList(u8) = .empty;
+threadlocal var g_result: std.ArrayList(u8) = .empty;
+threadlocal var g_callcode: std.ArrayList(u8) = .empty;
+threadlocal var g_arg: []const u8 = "";
+threadlocal var g_input: std.ArrayList(u8) = .empty;
+threadlocal var g_input_pos: usize = 0;
+threadlocal var g_evalcode: std.ArrayList(u8) = .empty;
+threadlocal var g_eval_counter: u64 = 0;
 /// Sticky: once any eval renames keywords, `class` may no longer be spelled
 /// "class", so every later eval gets a terminator regardless of its text.
-var g_keywords_changed: bool = false;
+threadlocal var g_keywords_changed: bool = false;
 /// Re-entry guard — same contract as RingScript's (see that bridge for the
 /// full story): entering the VM while it runs would corrupt the buffers of
 /// the outer run, so it is refused before anything is cleared.
-var g_running: u32 = 0;
-var g_main_called: bool = false;
+threadlocal var g_running: u32 = 0;
+threadlocal var g_main_called: bool = false;
 /// CLI mode: stream output to stdout as it is produced.
-var g_echo: bool = false;
+threadlocal var g_echo: bool = false;
+/// Transport status for the current dispatch — servlib sets it through
+/// the __rs_status hook (404 unknown, 400 malformed, 422 contract, 500
+/// trapped); the HTTP core reads it after rs_call. Business status lives
+/// in the envelope, never here.
+threadlocal var g_http_status: u16 = 200;
 
 pub export fn rs_busy() u32 {
     return g_running;
@@ -142,7 +149,7 @@ fn seeHook(p: ?*anyopaque) callconv(.c) void {
 /// The code passed to the current rs_eval, valid for its duration; the eval
 /// shim pulls it through the rs_getcode hook so no string escaping exists
 /// anywhere in the pipeline.
-var g_code: []const u8 = "";
+threadlocal var g_code: []const u8 = "";
 
 fn getCodeHook(p: ?*anyopaque) callconv(.c) void {
     ring_vm_api_retstring2(p, g_code.ptr, @intCast(g_code.len));
@@ -173,6 +180,7 @@ const EmbeddedFile = struct { name: []const u8, data: []const u8 };
 
 const embedded_files = [_]EmbeddedFile{
     .{ .name = "ringlib/json.ring", .data = @embedFile("ringlib/json.ring") },
+    .{ .name = "ringlib/serv.ring", .data = @embedFile("ringlib/serv.ring") },
 };
 
 fn baseName(path: []const u8) []const u8 {
@@ -236,7 +244,7 @@ pub const LiveGive = struct {
     read_line: *const fn () ?[]const u8,
     echo: bool,
 };
-pub var live_give: ?LiveGive = null;
+pub threadlocal var live_give: ?LiveGive = null;
 
 /// C hook registered AS "ringvm_give": hand the next queued input line to
 /// Ring's give, echoing it the way a terminal would; when the queue runs
@@ -273,6 +281,19 @@ fn giveHook(p: ?*anyopaque) callconv(.c) void {
     ring_vm_api_retstring2(p, line.ptr, @intCast(line.len));
 }
 
+/// C hook: servlib's __rs_status(n) — transport status for this dispatch.
+fn httpStatusHook(p: ?*anyopaque) callconv(.c) void {
+    if (ring_vm_api_isnumber(p, 1) != 0) {
+        const n = ring_vm_api_getnumber(p, 1);
+        if (n >= 100 and n <= 599) g_http_status = @intFromFloat(n);
+    }
+}
+
+/// Transport status set by the last rs_call's dispatch (200 when untouched).
+pub export fn rs_last_status() u16 {
+    return g_http_status;
+}
+
 /// C hook for the auto-main pass — see RingScript's bridge for the story.
 fn mainFoundHook(p: ?*anyopaque) callconv(.c) void {
     if (g_main_called or rs_vm_maincalled(p) != 0) {
@@ -290,6 +311,8 @@ const see_shim = "func ringvm_see cData ring_vm_see(cData)";
 /// at init (no file layer involved); the embedded map above additionally
 /// serves `load "ringlib/json.ring"` from user code.
 const json_ring_src = @embedFile("ringlib/json.ring");
+/// servlib — the service model (Serv, __dispatch, Reply), pure Ring.
+const serv_ring_src = @embedFile("ringlib/serv.ring");
 
 /// Every eval runs through this wrapper: errors land in rs_reporterror and
 /// the resident state survives. Line numbers are real thanks to the two
@@ -308,8 +331,10 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "rs_setresult", &setResultHook);
     ring_vm_funcregister2(st, "ringvm_give", &giveHook);
     ring_vm_funcregister2(st, "rs_notemain", &mainFoundHook);
+    ring_vm_funcregister2(st, "__rs_status", &httpStatusHook);
     ring_state_runcode(st, see_shim);
     ring_state_runcode(st, json_ring_src);
+    ring_state_runcode(st, serv_ring_src);
     g_state = st;
     return 0;
 }
@@ -404,6 +429,7 @@ pub export fn rs_call(fname: [*:0]const u8, json: [*:0]const u8) [*:0]const u8 {
     g_out.clearRetainingCapacity();
     g_err.clearRetainingCapacity();
     g_result.clearRetainingCapacity();
+    g_http_status = 200;
 
     const name = std.mem.span(fname);
     if (name.len == 0) {

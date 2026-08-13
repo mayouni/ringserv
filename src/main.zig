@@ -4,8 +4,42 @@
 const std = @import("std");
 const bridge = @import("bridge");
 const bench = @import("bench.zig");
+const serve = @import("serve.zig");
 
 extern fn fflush(stream: ?*anyopaque) c_int;
+
+const ServDecl = struct { port: u16, workers: u32 };
+
+/// Ask the (already evaluated) app whether it declared Serv(), and with
+/// what. Answers null for plain programs — `run` then ends as before.
+fn servConfig(arena: std.mem.Allocator) ?ServDecl {
+    const raw = std.mem.span(bridge.rs_call("__rs_serv_config", "{}"));
+    if (std.mem.span(bridge.rs_last_error()).len != 0 or raw.len == 0) return null;
+    const parsed = std.json.parseFromSlice(std.json.Value, arena, raw, .{}) catch return null;
+    const obj = switch (parsed.value) {
+        .object => |o| o,
+        else => return null,
+    };
+    if (jsonNum(obj.get("serv")) orelse 0 != 1) return null;
+    const port_f = jsonNum(obj.get("port")) orelse 8080;
+    var workers_f = jsonNum(obj.get("workers")) orelse 0;
+    if (workers_f <= 0) {
+        const cpus: f64 = @floatFromInt(std.Thread.getCpuCount() catch 4);
+        workers_f = @min(4, @max(1, cpus / 2));
+    }
+    return .{
+        .port = if (port_f >= 1 and port_f <= 65535) @intFromFloat(port_f) else 8080,
+        .workers = @intFromFloat(@max(1, @min(64, workers_f))),
+    };
+}
+
+fn jsonNum(v: ?std.json.Value) ?f64 {
+    return switch (v orelse return null) {
+        .integer => |i| @floatFromInt(i),
+        .float => |f| f,
+        else => null,
+    };
+}
 
 const usage =
     \\ringserv — the Ring language, resident on your server (phase 1)
@@ -81,6 +115,14 @@ pub fn main() !u8 {
             std.debug.print("\nringserv: {s}\n", .{err});
             return 1;
         }
+
+        // If the program declared Serv(), the run continues as a server.
+        const cfg = servConfig(arena) orelse return 0;
+        try serve.start(.{
+            .port = cfg.port,
+            .workers = cfg.workers,
+            .app_source = code,
+        });
         return 0;
     }
 

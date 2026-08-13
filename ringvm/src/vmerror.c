@@ -8,7 +8,7 @@
 **  pVM->nLineNumber to its try-time value before any catch block runs, so
 **  the failing line must be captured here. Re-apply on vendor upgrades.
 */
-unsigned int rs_error_line = 0;
+_Thread_local unsigned int rs_error_line = 0; /* RINGSERV: thread-local for the N-worker model */
 
 RING_API void ring_vm_error(VM *pVM, const char *cStr) {
 	/* Check if we have active error */

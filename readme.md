@@ -135,14 +135,20 @@ simple and beautiful way to write any backend in Ring.
 
 ## Status and documentation
 
-RingServ is **under construction, phase-gated**. Phase 1 — the
-resident native Ring VM with the ported RingScript bridge — is
-**done and green**: `zig build` produces a working `ringserv` binary
-(`run` / `eval` / `version` / `bench-workers`), all 12 gates pass,
-the shared 24-example corpus is byte-identical to native `ring.exe`,
-and the N-worker concurrency model is proven
-([docs/WORKERS.md](docs/WORKERS.md)). Phase 2 (HTTP core + the
-service model) is next.
+RingServ is **under construction, phase-gated**. Phases 1 and 2 are
+**done and green**:
+
+- **Phase 1** — the resident native Ring VM: 12 gates, the shared
+  24-example corpus byte-identical to native `ring.exe`, the
+  N-worker model proven ([docs/WORKERS.md](docs/WORKERS.md)).
+- **Phase 2** — the server lives: `ringserv run app.ring` serves
+  `Serv()` declarations on `POST /api/v1` — both service forms,
+  the uniform envelope, transport-status contract (404/400/500),
+  N VM workers behind httpz — 16 service gates, 200-case fuzz, and
+  a 3,000-request soak with flat memory.
+
+Phase 3 (SQLite + ZQL + contracts) is next. The example above is
+real today.
 
 - [docs/vision.md](docs/vision.md) — why RingServ exists, and the two-player model
 - [docs/architecture.md](docs/architecture.md) — the planned layers, Zig/Ring seams

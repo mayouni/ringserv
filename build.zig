@@ -108,6 +108,36 @@ pub fn build(b: *std.Build) void {
     });
     addVm(bridge_mod, b);
 
+    // Vendored HTTP stack (vendor/VENDOR.md records the pins): httpz and
+    // its two deps as local modules — no build.zig.zon, nothing fetched.
+    const metrics_mod = b.createModule(.{
+        .root_source_file = b.path("vendor/metrics/src/metrics.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const websocket_mod = b.createModule(.{
+        .root_source_file = b.path("vendor/websocket/src/websocket.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const httpz_mod = b.createModule(.{
+        .root_source_file = b.path("vendor/httpz/src/httpz.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    httpz_mod.addImport("metrics", metrics_mod);
+    httpz_mod.addImport("websocket", websocket_mod);
+    // httpz and websocket each read an options module named "build"
+    // (httpz_blocking / websocket_blocking); their own build.zigs generate
+    // it — we do the same, defaults kept (non-blocking where the OS allows,
+    // httpz falls back by itself on Windows).
+    const vendor_opts = b.addOptions();
+    vendor_opts.addOption(bool, "httpz_blocking", false);
+    vendor_opts.addOption(bool, "websocket_blocking", false);
+    const vendor_opts_mod = vendor_opts.createModule();
+    httpz_mod.addImport("build", vendor_opts_mod);
+    websocket_mod.addImport("build", vendor_opts_mod);
+
     const main_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -115,6 +145,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     main_mod.addImport("bridge", bridge_mod);
+    main_mod.addImport("httpz", httpz_mod);
 
     const exe = b.addExecutable(.{ .name = "ringserv", .root_module = main_mod });
     // Deep C recursion happens in the parser and in recursive list

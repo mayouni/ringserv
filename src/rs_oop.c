@@ -58,7 +58,7 @@ typedef struct RsOcEntry {
 	unsigned char nState;
 } RsOcEntry;
 
-static RsOcEntry aRsOc[RS_OC_SLOTS];
+static _Thread_local RsOcEntry aRsOc[RS_OC_SLOTS]; /* RINGSERV: per-worker cache — entries borrow pointers into that worker's state */
 
 static RsOcEntry *rs_oc_slot(const List *pClass) {
 	size_t h = ((size_t)pClass >> 4) * 2654435761u;

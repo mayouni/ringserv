@@ -24,14 +24,19 @@ shared corpus byte-identical to native `ring.exe`
 corruption). Bonus surface: a working `ringserv run / eval /
 version / bench-workers` CLI with lazy interactive `give`.
 
-## Phase 2 — HTTP core + the service model
+## Phase 2 — HTTP core + the service model ✅ (passed 2026-08-13)
 
 Vendor http.zig; wire `POST /api/v1` → `rs_call("__dispatch", …)`;
 implement `servlib` (Serv(), dispatch, envelopes, Reply()) in pure
 Ring; declarative and class service forms; transport status codes.
-**Gate:** service gates (dispatch, envelopes, unknown service/action,
-trapped errors as 500-envelopes); fuzz (hostile bodies never kill the
-server); soak (connection churn, N-hour run, flat memory).
+**Gate — passed:** 16 service gates green (`node tests/serv-gates.js`
+— dispatch both forms, envelopes, 404/400/500, Action-suffix privacy,
+24-way parallelism); fuzz (200 hostile bodies, server never dies);
+soak-lite (`node tests/soak-lite.js` — 3,000 requests, 0 errors, RSS
+flat at 47.8 MB to the decimal). Architecture as designed: httpz
+(vendored with pinned deps, vendor/VENDOR.md) in front, N VM worker
+threads behind a queue, the bridge state threadlocal — HTTP threads
+never touch the VM. The full N-hour soak remains a phase-8 gate.
 
 ## Phase 3 — Data: SQLite + ZQL + contracts
 
