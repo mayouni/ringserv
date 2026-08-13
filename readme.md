@@ -135,9 +135,14 @@ simple and beautiful way to write any backend in Ring.
 
 ## Status and documentation
 
-RingServ is at the **design stage**: this repository currently holds
-the blueprint, written to be executed the way RingScript's
-`REPAIR_PLAN.md` was — in verifiable phases, each gated by tests.
+RingServ is **under construction, phase-gated**. Phase 1 — the
+resident native Ring VM with the ported RingScript bridge — is
+**done and green**: `zig build` produces a working `ringserv` binary
+(`run` / `eval` / `version` / `bench-workers`), all 12 gates pass,
+the shared 24-example corpus is byte-identical to native `ring.exe`,
+and the N-worker concurrency model is proven
+([docs/WORKERS.md](docs/WORKERS.md)). Phase 2 (HTTP core + the
+service model) is next.
 
 - [docs/vision.md](docs/vision.md) — why RingServ exists, and the two-player model
 - [docs/architecture.md](docs/architecture.md) — the planned layers, Zig/Ring seams

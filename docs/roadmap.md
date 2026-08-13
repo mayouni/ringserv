@@ -10,16 +10,19 @@ The design documents you are reading. **Gate:** the design survives
 review — including by the RingScript experience: every seam named
 here has a working precedent there, or an explicit risk note.
 
-## Phase 1 — The resident native VM
+## Phase 1 — The resident native VM ✅ (passed 2026-08-05)
 
 Port RingScript's bridge to a native target: `build.zig` compiles
 `ringvm/` + `bridge.zig` to a host binary; `rs_init / rs_eval /
 rs_call / rs_reset` work; errors trapped with real line numbers.
 Benchmark and settle the N-worker concurrency model (§2 of
 architecture.md) before anything depends on it.
-**Gate:** RingScript's gates.js equivalents pass natively; an oracle
-run against `ring.exe` on the shared corpus shows byte-identical
-output; a worker-model benchmark note is committed.
+**Gate — passed:** 12 gates green (`zig build test`); the 24-example
+shared corpus byte-identical to native `ring.exe`
+(`node tests/oracle.js`); the worker model proven and recorded in
+[WORKERS.md](WORKERS.md) (~9,500 evals/sec at 8 workers, zero
+corruption). Bonus surface: a working `ringserv run / eval /
+version / bench-workers` CLI with lazy interactive `give`.
 
 ## Phase 2 — HTTP core + the service model
 
