@@ -144,7 +144,7 @@ ringserv/
 │   ├── jsguest.zig           quickjs-ng embedding        (phase 6)
 │   ├── check/                tree-sitter-ring analysis   (phase 5)
 │   └── servlib/              pure Ring, embedded in the binary
-│       ├── serv.ring         Serv() — the app declaration seam
+│       ├── serv.ring         RingServ() — the app declaration seam
 │       ├── service.ring      dispatch, envelopes, generic table services
 │       ├── contract.ring     typed contracts + validation
 │       ├── json.ring         shared with RingScript

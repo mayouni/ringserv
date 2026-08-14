@@ -1,6 +1,6 @@
 # fieldnotes — services, declared once, placed by topology.ring
 
-Serv([
+RingServ([
     :port = 8080,
 
     :data = [

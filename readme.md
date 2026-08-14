@@ -20,7 +20,7 @@ to install, nothing to configure.
 ```ring
 # app.ring — a complete API server
 
-Serv([
+RingServ([
     :port = 8080,
 
     :services = [
@@ -142,7 +142,7 @@ RingServ is **under construction, phase-gated**. Phases 1 and 2 are
   24-example corpus byte-identical to native `ring.exe`, the
   N-worker model proven ([docs/WORKERS.md](docs/WORKERS.md)).
 - **Phase 2** — the server lives: `ringserv run app.ring` serves
-  `Serv()` declarations on `POST /api/v1` — both service forms,
+  `RingServ()` declarations on `POST /api/v1` — both service forms,
   the uniform envelope, transport-status contract (404/400/500),
   N VM workers behind httpz — 16 service gates, 200-case fuzz, and
   a 3,000-request soak with flat memory.

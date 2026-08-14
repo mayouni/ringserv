@@ -44,7 +44,7 @@ Two consequences fall out for free:
 For small applications, the whole server is one declaration:
 
 ```ring
-Serv([
+RingServ([
     :port = 8080,
 
     :services = [
@@ -161,7 +161,7 @@ clients dispatch by name, not by URL shape.
 
 Some things genuinely are URLs: static files, webhooks from third
 parties, SSE streams, a health check, a REST façade for an external
-consumer. The `Serv()` declaration accepts them without ceremony:
+consumer. The `RingServ()` declaration accepts them without ceremony:
 
 ```ring
 :routes = [

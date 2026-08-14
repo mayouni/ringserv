@@ -68,7 +68,7 @@ two sides of the wire**:
 | | RingScript (page) | RingServ (server) |
 |---|---|---|
 | Ring VM | wasm32-wasi, resident | native, resident |
-| Host seam | `Platform()` / `Page()` | `Serv()` / `Reply()` |
+| Host seam | `Platform()` / `Page()` | `RingServ()` / `Reply()` |
 | Call shape | `ring.call(name, json)` | `service` + `action` + `payload` |
 | Data | ZQL over synced local store | ZQL over SQLite |
 | Guest language | Ring is a guest in JS | JS is a guest in Ring (planned) |

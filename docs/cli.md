@@ -81,7 +81,7 @@ SQLite), print the paths that matter.
 ## Design rules
 
 1. **No configuration files for the tool itself.** The app declares
-   (`Serv()`, `Topology()`); the CLI reads the app. No
+   (`RingServ()`, `Topology()`); the CLI reads the app. No
    `ringserv.toml`.
 2. **Every command works offline.** Nothing fetches anything, ever —
    the binary is the supply chain.

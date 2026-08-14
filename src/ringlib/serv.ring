@@ -12,7 +12,7 @@ lRsServDeclared = 0
 
 # ------------------------------------------------------------ the seam
 
-func Serv aDecl
+func RingServ aDecl
 	aRsServDecl = aDecl
 	lRsServDeclared = 1
 
@@ -70,7 +70,7 @@ func __dispatch aReq
 		return RsRefuse(400, "malformed request: service and action are required names")
 	ok
 	if lRsServDeclared = 0
-		return RsRefuse(500, "no Serv() declaration in this application")
+		return RsRefuse(500, "no RingServ() declaration in this application")
 	ok
 	aServices = RsDeclGet(aRsServDecl, "services", [])
 	pSvc = RsDeclGet(aServices, cService, "")

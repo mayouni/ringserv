@@ -58,4 +58,4 @@ runs at 8 workers and the 16-worker oversubscription round.
 The HTTP core feeds N workers, each owning one resident RingState;
 requests are dispatched to idle workers; services stay stateless by
 contract (state lives in SQLite). Worker count defaults to physical
-cores, capped by measurement, configurable in `Serv()`.
+cores, capped by measurement, configurable in `RingServ()`.

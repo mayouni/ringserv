@@ -1,7 +1,7 @@
 # Phase-2 fixture: both service forms, all the gate cases.
-# Ring file order: statements first, classes after — Serv() leads.
+# Ring file order: statements first, classes after — RingServ() leads.
 
-Serv([
+RingServ([
 	:port = 8093,
 	:workers = 2,
 

@@ -27,7 +27,7 @@ version / bench-workers` CLI with lazy interactive `give`.
 ## Phase 2 — HTTP core + the service model ✅ (passed 2026-08-13)
 
 Vendor http.zig; wire `POST /api/v1` → `rs_call("__dispatch", …)`;
-implement `servlib` (Serv(), dispatch, envelopes, Reply()) in pure
+implement `servlib` (RingServ(), dispatch, envelopes, Reply()) in pure
 Ring; declarative and class service forms; transport status codes.
 **Gate — passed:** 16 service gates green (`node tests/serv-gates.js`
 — dispatch both forms, envelopes, 404/400/500, Action-suffix privacy,
