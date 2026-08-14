@@ -216,3 +216,92 @@ func RsRefuse nStatus, cMsg
 func RsFailed cErr
 	__rs_status(500)
 	return [ :code = 1, :message = "service error: " + cErr, :data = "" ]
+
+# ------------------------------------------- the catalog (check & docs)
+#
+# The application's own declaration, as data: services with their
+# actions and any table, plus every contract. `ringserv check` and
+# `ringserv docs` read THIS rather than reconstructing the same facts
+# from an AST — the runtime already holds the truth, and it stays
+# right for declarations that were computed rather than written.
+
+func __rs_catalog aIgnored
+	aServices = []
+	for aEntry in RsDeclGet(aRsServDecl, "services", [])
+		if not (islist(aEntry) and len(aEntry) = 2 and isstring(aEntry[1]))
+			loop
+		ok
+		cName = aEntry[1]
+		pSvc  = aEntry[2]
+		aActions = []
+		cTable   = ""
+		if isobject(pSvc)
+			# Class form: methods ending in "action" are the surface.
+			for cM in methods(pSvc)
+				if len(cM) > 6 and right(lower(cM), 6) = "action"
+					add(aActions, left(cM, len(cM) - 6))
+				ok
+			next
+		but islist(pSvc)
+			cTable = RsDeclGet(pSvc, "table", "")
+			if not isstring(cTable) cTable = "" ok
+			for aPair in pSvc
+				if not (islist(aPair) and len(aPair) = 2 and isstring(aPair[1]))
+					loop
+				ok
+				cKey = lower(aPair[1])
+				if cKey = "table" or cKey = "actions"
+					loop
+				ok
+				add(aActions, aPair[1])
+			next
+		ok
+		add(aServices, [ :name = cName, :table = cTable, :actions = aActions ])
+	next
+
+	aOut = []
+	for aEntry in aRsContracts
+		cService = aEntry[1]
+		for aAct in aEntry[2]
+			if not (islist(aAct) and len(aAct) = 2)
+				loop
+			ok
+			add(aOut, [
+				:service = cService,
+				:action  = aAct[1],
+				:in      = RsCatalogFields(RsDeclGet(aAct[2], "in", []))
+			])
+		next
+	next
+	return [ :services = aServices, :contracts = aOut ]
+
+func RsCatalogFields aIn
+	aOut = []
+	if not islist(aIn)
+		return aOut
+	ok
+	for aField in aIn
+		if not (islist(aField) and len(aField) = 2 and isstring(aField[1]))
+			loop
+		ok
+		aRule = aField[2]
+		cReq = "0"
+		if RsDeclGet(aRule, "required", 0) = 1 cReq = "1" ok
+		add(aOut, [
+			:name     = aField[1],
+			:type     = "" + RsDeclGet(aRule, "type", ""),
+			:required = cReq,
+			:limits   = RsCatalogLimits(aRule)
+		])
+	next
+	return aOut
+
+func RsCatalogLimits aRule
+	aBits = []
+	for cKey in [ "min", "max", "minlen", "maxlen", "of" ]
+		pVal = RsDeclGet(aRule, cKey, "")
+		if isnumber(pVal) or (isstring(pVal) and pVal != "")
+			add(aBits, cKey + " " + pVal)
+		ok
+	next
+	return RsJoin(aBits, ", ")

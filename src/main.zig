@@ -1,11 +1,12 @@
-//! ringserv — the CLI. Phase 1 surface: run, eval, version, bench-workers.
-//! (dev/check/test/docs/build arrive in their roadmap phases.)
+//! ringserv — the CLI: new, dev, test, check, docs, run, eval, where.
+//! (`build` — a single self-contained executable — is still ahead.)
 
 const std = @import("std");
 const bridge = @import("bridge");
 const bench = @import("bench.zig");
 const serve = @import("serve.zig");
 const cli = @import("cli.zig");
+const check = @import("check.zig");
 
 extern fn fflush(stream: ?*anyopaque) c_int;
 
@@ -71,6 +72,8 @@ const usage =
     \\  ringserv new <name>          scaffold an app that already runs
     \\  ringserv dev [app.ring]      serve it, reload on save
     \\  ringserv test [app.ring]     run tests/ against a scratch database
+    \\  ringserv check [app.ring]    syntax + contract agreement, before running
+    \\  ringserv docs [--json]       the API catalog, from the declarations
     \\  ringserv run <app.ring>      run for real (or run a plain program)
     \\  ringserv eval "<code>"       evaluate Ring code
     \\  ringserv where               versions and paths
@@ -108,6 +111,19 @@ pub fn main() !u8 {
 
     if (std.mem.eql(u8, cmd, "dev")) {
         return cli.dev(arena, if (args.len > 2) args[2] else "app.ring");
+    }
+
+    if (std.mem.eql(u8, cmd, "check")) {
+        return check.check(arena, if (args.len > 2) args[2] else "app.ring");
+    }
+
+    if (std.mem.eql(u8, cmd, "docs")) {
+        var app: []const u8 = "app.ring";
+        var as_json = false;
+        for (args[2..]) |a| {
+            if (std.mem.eql(u8, a, "--json")) as_json = true else app = a;
+        }
+        return check.docs(arena, app, as_json);
     }
 
     if (std.mem.eql(u8, cmd, "bench-workers")) {

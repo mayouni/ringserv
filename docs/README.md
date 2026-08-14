@@ -18,6 +18,7 @@ The blueprint, in reading order:
 
 Built and gated so far: **[GATES.md](GATES.md)** (every suite, one
 command, and what is still thin), **[WORKERS.md](WORKERS.md)** (the
-N-worker concurrency model, measured) and **[DATA.md](DATA.md)** (the
+N-worker concurrency model, measured), **[DATA.md](DATA.md)** (the
 data layer, and why RingServ's core carries no framework's query
-dialect).
+dialect) and **[CHECK.md](CHECK.md)** (how `check` and `docs` know
+things — and what the young grammar cannot see).

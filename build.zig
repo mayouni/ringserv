@@ -94,6 +94,27 @@ const sqlite_cflags = [_][]const u8{
     "-fno-sanitize=undefined",
 };
 
+// tree-sitter: the C runtime plus the Ring grammar (generated parser +
+// external scanner). Both vendored and pinned — vendor/VENDOR.md.
+const ts_cflags = [_][]const u8{
+    "-std=c11",
+    "-fno-sanitize=undefined",
+};
+
+fn addTreeSitter(mod: *std.Build.Module, b: *std.Build) void {
+    mod.addIncludePath(b.path("vendor/treesitter/lib/include"));
+    mod.addIncludePath(b.path("vendor/treesitter/lib/src"));
+    mod.addIncludePath(b.path("vendor/tsring/src"));
+    mod.addCSourceFiles(.{
+        .files = &.{
+            "vendor/treesitter/lib/src/lib.c",
+            "vendor/tsring/src/parser.c",
+            "vendor/tsring/src/scanner.c",
+        },
+        .flags = &ts_cflags,
+    });
+}
+
 fn addVm(mod: *std.Build.Module, b: *std.Build) void {
     mod.addIncludePath(b.path("ringvm/include"));
     mod.addIncludePath(b.path("vendor/sqlite"));
@@ -163,6 +184,7 @@ pub fn build(b: *std.Build) void {
     });
     main_mod.addImport("bridge", bridge_mod);
     main_mod.addImport("httpz", httpz_mod);
+    addTreeSitter(main_mod, b);
 
     const exe = b.addExecutable(.{ .name = "ringserv", .root_module = main_mod });
     // Deep C recursion happens in the parser and in recursive list

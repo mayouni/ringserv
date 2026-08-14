@@ -31,6 +31,7 @@ const suites = [
     { name: "CRUD + contracts  ", node: "crud-gates.js" },
     { name: "data fuzz         ", node: "fuzz-data.js" },
     { name: "CLI gates         ", node: "cli-gates.js" },
+    { name: "check + docs      ", node: "check-gates.js" },
 ];
 
 if (full) {

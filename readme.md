@@ -162,9 +162,15 @@ RingServ is **under construction, phase-gated**. Phases 1 and 2 are
   static files served by the Zig core; `zig build dist`
   cross-compiles five platforms — 16 CLI gates.
 
-Phase 5 (`check` and `docs`, via tree-sitter-ring) is next.
-Everything above is real today — **113 gates across eight suites**,
-all runnable with one command:
+- **Phase 5** — governance: `ringserv check` (syntax via a vendored
+  tree-sitter-ring grammar, contract agreement via the VM's own
+  catalog) and `ringserv docs` (the API reference, markdown or JSON,
+  generated from the declarations) — 21 seeded-defect gates
+  ([docs/CHECK.md](docs/CHECK.md)).
+
+Phase 6 (topology + sync) is next — and gated on the family's C3
+Placement Contract per `ALIGNMENT.md`. Everything above is real today
+— **134 gates across nine suites**, all runnable with one command:
 
 ```bash
 zig build gates -- --full

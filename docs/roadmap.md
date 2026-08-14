@@ -100,14 +100,23 @@ should not depend on another project's artifacts to scaffold), and
 the dist binaries are **not committed** (~32 MB per build would bloat
 git history permanently; they belong on releases).
 
-## Phase 5 — check + docs (tree-sitter-ring)
+## Phase 5 — check + docs ✅ (passed 2026-08-14)
 
 Vendor the grammar (pinned commit) + tree-sitter runtime;
 `ringserv check` (syntax, contract agreement, dead actions);
 `ringserv docs` (markdown + JSON catalog).
-**Gate:** check flags each seeded defect class in a fixture app and
-stays silent on the clean scaffold; docs output round-trips (JSON
-catalog → rendered markdown → same catalog).
+**Gate — passed:** 21 gates (`node tests/check-gates.js`) driven by
+**seeded defects** — a checker that reports nothing is
+indistinguishable from one that cannot see. Each planted fault must be
+named *and* fail the command; the clean scaffold stays silent; the
+markdown and JSON catalogs agree.
+
+Design note worth keeping: syntax comes from tree-sitter, **structure
+comes from the VM** (`__rs_catalog()`), because a Ring declaration is
+data the runtime already holds and can be computed — reconstructing it
+from an AST would be a second, weaker opinion. Details and the honest
+limits (including one gate recording a construct the young grammar
+does *not* catch) in [CHECK.md](CHECK.md).
 
 ## Phase 6 — Topology + sync
 

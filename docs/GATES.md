@@ -18,6 +18,7 @@ none stops the others: a full picture beats an early exit.
 | **schema gates** (18) | declared tables and columns, automatic `id`, 40 concurrent writes across workers, cross-worker visibility, persistence across restart, idempotent re-declaration, shared in-memory database |
 | **CRUD + contracts** (38) | every generic action, paging, filters, `:actions`, overrides, and **every validation rule the validator implements** |
 | **data fuzz** (9, 400 payloads) | the payload-key **SQL boundary**, hostile shapes, and proof the database is untouched afterwards |
+| **check + docs** (21) | seeded defects: syntax shapes, contracts naming things that do not exist, services that can never answer — each must be NAMED and fail; plus the clean scaffold staying silent |
 | **CLI gates** (16) | new → test → dev → edit → reload → where, including that a failing expectation *fails the run* |
 | **soak** (`--full`) | 3,000 requests with flat memory |
 | **native oracle** (`--full`) | 24 programs byte-identical to native `ring.exe` |
