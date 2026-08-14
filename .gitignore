@@ -3,3 +3,8 @@ zig-cache/
 zig-out/
 *.db
 *.db-journal
+
+# Cross-compiled release binaries: produced by `zig build dist`,
+# attached to releases — NOT committed (32 MB per build would bloat
+# git history permanently; see docs/cli.md).
+bin/

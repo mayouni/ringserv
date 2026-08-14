@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__APPNAME__</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 42rem;
+         margin: 3rem auto; padding: 0 1.25rem; }
+  h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+  p.sub { margin-top: 0; opacity: .7; }
+  fieldset { border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+             border-radius: .5rem; margin: 1.5rem 0; padding: 1rem 1.25rem; }
+  legend { padding: 0 .4rem; opacity: .7; font-size: .85rem; }
+  input { font: inherit; padding: .4rem .6rem; border-radius: .35rem;
+          border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+          background: transparent; color: inherit; }
+  button { font: inherit; padding: .4rem .9rem; border-radius: .35rem;
+           border: 1px solid currentColor; background: transparent;
+           color: inherit; cursor: pointer; }
+  output { display: block; margin-top: .75rem; font-family: ui-monospace, monospace;
+           white-space: pre-wrap; }
+  ul { padding-left: 1.2rem; }
+</style>
+</head>
+<body>
+
+<h1>__APPNAME__</h1>
+<p class="sub">Served by RingServ. The whole API is one endpoint.</p>
+
+<fieldset>
+  <legend>hello.greet — a service you wrote</legend>
+  <input id="name" value="Mansour" aria-label="your name">
+  <button onclick="greet()">Greet</button>
+  <output id="greeting"></output>
+</fieldset>
+
+<fieldset>
+  <legend>notes — CRUD you did not write</legend>
+  <input id="title" placeholder="a note title" aria-label="note title">
+  <button onclick="addNote()">Add</button>
+  <button onclick="loadNotes()">Refresh</button>
+  <output id="notes"></output>
+</fieldset>
+
+<script>
+// One wrapper function is the entire client for the entire API —
+// that is what a single service endpoint buys you.
+async function call(service, action, payload = {}) {
+  const res  = await fetch("/api/v1", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ service, action, payload }),
+  });
+  return res.json();     // { code, message, data }
+}
+
+async function greet() {
+  const r = await call("hello", "greet", { name: name_.value });
+  greeting.textContent = r.code === 0 ? r.data.message : "✗ " + r.message;
+}
+
+async function addNote() {
+  const r = await call("notes", "create", { title: title.value });
+  if (r.code !== 0) { notes.textContent = "✗ " + r.message; return; }
+  title.value = "";
+  loadNotes();
+}
+
+async function loadNotes() {
+  const r = await call("notes", "list", {});
+  notes.textContent = r.code === 0
+    ? (r.data.rows.map(n => "#" + n.id + "  " + n.title).join("\n") || "(none yet)")
+    : "✗ " + r.message;
+}
+
+const name_ = document.getElementById("name");
+loadNotes();
+</script>
+
+<!--
+  Want Ring in the page too, instead of JavaScript? Drop RingScript's
+  two files (ringscript.js, ringscript.wasm) next to this one and script
+  the page in Ring: https://github.com/mayouni/ringscript
+-->
+</body>
+</html>

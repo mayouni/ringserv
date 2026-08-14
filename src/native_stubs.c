@@ -100,6 +100,20 @@ void rs_echo_write(const unsigned char *pData, size_t nLen) {
 }
 
 /*
+** SQLITE_TRANSIENT is `((sqlite3_destructor_type)-1)` — a C macro that
+** casts -1 to a FUNCTION POINTER. Zig's translate-c refuses that on
+** aarch64 (code pointers there require an aligned address), which broke
+** the linux-arm64 and macos-arm64 cross-builds. Binding through this
+** shim keeps the macro on the C side, where it is legal, and costs one
+** call.
+*/
+#include "sqlite3.h"
+
+int rs_bind_text(sqlite3_stmt *pStmt, int nIdx, const char *cStr, int nLen) {
+	return sqlite3_bind_text(pStmt, nIdx, cStr, nLen, SQLITE_TRANSIENT);
+}
+
+/*
 ** List accessors as real functions. Ring exposes these as MACROS
 ** (rlist.h), which Zig cannot link against, so db.zig calls these thin
 ** wrappers instead. Same semantics, one call deep.

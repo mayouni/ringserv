@@ -296,6 +296,12 @@ pub export fn rs_last_status() u16 {
     return g_http_status;
 }
 
+/// C hook: __rs_laststatus() — the same value, readable from Ring, so a
+/// test can assert the transport status a call would have answered with.
+fn lastStatusHook(p: ?*anyopaque) callconv(.c) void {
+    ring_vm_api_retnumber(p, @floatFromInt(g_http_status));
+}
+
 /// C hook for the auto-main pass — see RingScript's bridge for the story.
 fn mainFoundHook(p: ?*anyopaque) callconv(.c) void {
     if (g_main_called or rs_vm_maincalled(p) != 0) {
@@ -320,6 +326,8 @@ const data_ring_src = @embedFile("ringlib/data.ring");
 /// Generic table services and contract validation, pure Ring.
 const generic_ring_src = @embedFile("ringlib/generic.ring");
 const contract_ring_src = @embedFile("ringlib/contract.ring");
+/// The test vocabulary — Call/Expect/…, used by `ringserv test`.
+const testing_ring_src = @embedFile("ringlib/testing.ring");
 
 /// Every eval runs through this wrapper: errors land in rs_reporterror and
 /// the resident state survives. Line numbers are real thanks to the two
@@ -339,6 +347,7 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "ringvm_give", &giveHook);
     ring_vm_funcregister2(st, "rs_notemain", &mainFoundHook);
     ring_vm_funcregister2(st, "__rs_status", &httpStatusHook);
+    ring_vm_funcregister2(st, "__rs_laststatus", &lastStatusHook);
     ring_vm_funcregister2(st, "__db_exec", &db.execHook);
     ring_vm_funcregister2(st, "__db_query", &db.queryHook);
     ring_vm_funcregister2(st, "__db_rows", &db.rowsHook);
@@ -351,6 +360,7 @@ pub export fn rs_init() i32 {
     ring_state_runcode(st, data_ring_src);
     ring_state_runcode(st, generic_ring_src);
     ring_state_runcode(st, contract_ring_src);
+    ring_state_runcode(st, testing_ring_src);
     g_state = st;
     return 0;
 }

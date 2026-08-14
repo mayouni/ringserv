@@ -35,6 +35,7 @@ RingServ([
 ```
 
 ```bash
+ringserv new myapp && cd myapp
 ringserv dev
 ```
 
@@ -155,8 +156,14 @@ RingServ is **under construction, phase-gated**. Phases 1 and 2 are
   422 envelopes — 18 schema gates + 25 CRUD/contract gates
   ([docs/DATA.md](docs/DATA.md)).
 
-Phase 4 (the CLI: `new` / `dev` / `test`) is next. Everything above
-is real today.
+- **Phase 4** — the CLI: `new` scaffolds an app whose tests already
+  pass, `dev` serves it and reloads on save, `test` runs in process
+  against a scratch database, `where` reports what is compiled in;
+  static files served by the Zig core; `zig build dist`
+  cross-compiles five platforms — 16 CLI gates.
+
+Phase 5 (`check` and `docs`, via tree-sitter-ring) is next.
+Everything above is real today: **87 gates** across six suites.
 
 - [docs/vision.md](docs/vision.md) — why RingServ exists, and the two-player model
 - [docs/architecture.md](docs/architecture.md) — the planned layers, Zig/Ring seams

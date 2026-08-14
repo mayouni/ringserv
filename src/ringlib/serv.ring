@@ -140,8 +140,34 @@ func __rs_serv_config aIgnored
 		:serv     = 1,
 		:port     = RsDeclGet(aRsServDecl, "port", 8080),
 		:workers  = RsDeclGet(aRsServDecl, "workers", 0),
-		:database = RsDeclGet(aRsServDecl, "database", ":memory:")
+		:database = RsDeclGet(aRsServDecl, "database", ":memory:"),
+		:static   = RsStaticRoutes()
 	]
+
+# The [ prefix, directory ] pairs declared as [ :static, "/", "public/" ]
+# in :routes. The Zig core serves these directly — a file is a file,
+# and the VM has no business in that path.
+func RsStaticRoutes
+	aOut = []
+	aRoutes = RsDeclGet(aRsServDecl, "routes", [])
+	if not islist(aRoutes)
+		return aOut
+	ok
+	for aRoute in aRoutes
+		if not (islist(aRoute) and len(aRoute) = 3)
+			loop
+		ok
+		if not isstring(aRoute[1]) or lower(aRoute[1]) != "static"
+			loop
+		ok
+		# Named keys, not a bare pair: Ring's JsonEncode renders a list of
+		# [key, value] pairs as an OBJECT, so [ "/", "public/" ] would
+		# reach the Zig side as {"/": "public/"} instead of a route.
+		if isstring(aRoute[2]) and isstring(aRoute[3])
+			add(aOut, [ :prefix = aRoute[2], :dir = aRoute[3] ])
+		ok
+	next
+	return aOut
 
 # The Zig core calls this in every worker after the app is evaluated:
 # a worker's own connection must see the schema too, and CREATE TABLE

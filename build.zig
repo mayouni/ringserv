@@ -183,4 +183,58 @@ pub fn build(b: *std.Build) void {
     const run_gates = b.addRunArtifact(gates);
     const test_step = b.step("test", "Run the phase-1 gates");
     test_step.dependOn(&run_gates.step);
+
+    // `zig build dist` — cross-compile the CLI for every shipped
+    // platform into bin/. These are committed: installing RingServ is
+    // downloading one file, with no Zig, no Ring, and no toolchain on
+    // the user's machine (the RingScript convention).
+    const dist_step = b.step("dist", "Cross-compile ringserv for all shipped platforms into bin/");
+    const dist_targets = [_]struct { q: std.Target.Query, name: []const u8 }{
+        .{ .q = .{ .cpu_arch = .x86_64, .os_tag = .windows }, .name = "ringserv-windows-x64.exe" },
+        .{ .q = .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl }, .name = "ringserv-linux-x64" },
+        .{ .q = .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl }, .name = "ringserv-linux-arm64" },
+        .{ .q = .{ .cpu_arch = .x86_64, .os_tag = .macos }, .name = "ringserv-macos-x64" },
+        .{ .q = .{ .cpu_arch = .aarch64, .os_tag = .macos }, .name = "ringserv-macos-arm64" },
+    };
+    for (dist_targets) |t| {
+        const dt = b.resolveTargetQuery(t.q);
+        const d_bridge = b.createModule(.{
+            .root_source_file = b.path("src/bridge.zig"),
+            .target = dt,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+        });
+        addVm(d_bridge, b);
+        const d_metrics = b.createModule(.{
+            .root_source_file = b.path("vendor/metrics/src/metrics.zig"),
+            .target = dt,
+            .optimize = .ReleaseFast,
+        });
+        const d_ws = b.createModule(.{
+            .root_source_file = b.path("vendor/websocket/src/websocket.zig"),
+            .target = dt,
+            .optimize = .ReleaseFast,
+        });
+        const d_httpz = b.createModule(.{
+            .root_source_file = b.path("vendor/httpz/src/httpz.zig"),
+            .target = dt,
+            .optimize = .ReleaseFast,
+        });
+        d_httpz.addImport("metrics", d_metrics);
+        d_httpz.addImport("websocket", d_ws);
+        d_httpz.addImport("build", vendor_opts_mod);
+        d_ws.addImport("build", vendor_opts_mod);
+        const d_main = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = dt,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+        });
+        d_main.addImport("bridge", d_bridge);
+        d_main.addImport("httpz", d_httpz);
+        const e = b.addExecutable(.{ .name = "ringserv", .root_module = d_main });
+        e.stack_size = 8 * 1024 * 1024;
+        const install = b.addInstallFile(e.getEmittedBin(), b.fmt("../bin/{s}", .{t.name}));
+        dist_step.dependOn(&install.step);
+    }
 }

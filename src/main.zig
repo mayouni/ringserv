@@ -5,10 +5,16 @@ const std = @import("std");
 const bridge = @import("bridge");
 const bench = @import("bench.zig");
 const serve = @import("serve.zig");
+const cli = @import("cli.zig");
 
 extern fn fflush(stream: ?*anyopaque) c_int;
 
-const ServDecl = struct { port: u16, workers: u32, database: []const u8 };
+const ServDecl = struct {
+    port: u16,
+    workers: u32,
+    database: []const u8,
+    statics: []const serve.StaticRoute,
+};
 
 /// Ask the (already evaluated) app whether it declared Serv(), and with
 /// what. Answers null for plain programs — `run` then ends as before.
@@ -31,10 +37,23 @@ fn servConfig(arena: std.mem.Allocator) ?ServDecl {
         .string => |s| s,
         else => ":memory:",
     };
+    var statics: std.ArrayList(serve.StaticRoute) = .empty;
+    if (obj.get("static")) |s| {
+        if (s == .array) {
+            for (s.array.items) |entry| {
+                if (entry != .object) continue;
+                const pfx = entry.object.get("prefix") orelse continue;
+                const dir = entry.object.get("dir") orelse continue;
+                if (pfx != .string or dir != .string) continue;
+                statics.append(arena, .{ .prefix = pfx.string, .dir = dir.string }) catch {};
+            }
+        }
+    }
     return .{
         .port = if (port_f >= 1 and port_f <= 65535) @intFromFloat(port_f) else 8080,
         .workers = @intFromFloat(@max(1, @min(64, workers_f))),
         .database = database,
+        .statics = statics.items,
     };
 }
 
@@ -47,12 +66,16 @@ fn jsonNum(v: ?std.json.Value) ?f64 {
 }
 
 const usage =
-    \\ringserv — the Ring language, resident on your server (phase 1)
+    \\ringserv — the Ring language, resident on your server
     \\
-    \\  ringserv run <file.ring>     run a Ring program (stdin feeds `give`)
+    \\  ringserv new <name>          scaffold an app that already runs
+    \\  ringserv dev [app.ring]      serve it, reload on save
+    \\  ringserv test [app.ring]     run tests/ against a scratch database
+    \\  ringserv run <app.ring>      run for real (or run a plain program)
     \\  ringserv eval "<code>"       evaluate Ring code
-    \\  ringserv bench-workers [n]   phase-1 gate: N-worker throughput probe
-    \\  ringserv version             versions of everything inside
+    \\  ringserv where               versions and paths
+    \\  ringserv version             the short version
+    \\  ringserv bench-workers [n]   N-worker throughput probe
     \\
 ;
 
@@ -71,6 +94,20 @@ pub fn main() !u8 {
     if (std.mem.eql(u8, cmd, "version")) {
         std.debug.print("RingServ {s} (Ring 1.27, resident)\n", .{bridge.RINGSERV_VERSION});
         return 0;
+    }
+
+    if (std.mem.eql(u8, cmd, "where")) return cli.where(arena);
+
+    if (std.mem.eql(u8, cmd, "new")) {
+        return cli.new(arena, if (args.len > 2) args[2] else "");
+    }
+
+    if (std.mem.eql(u8, cmd, "test")) {
+        return cli.runTests(arena, if (args.len > 2) args[2] else "app.ring");
+    }
+
+    if (std.mem.eql(u8, cmd, "dev")) {
+        return cli.dev(arena, if (args.len > 2) args[2] else "app.ring");
     }
 
     if (std.mem.eql(u8, cmd, "bench-workers")) {
@@ -133,6 +170,7 @@ pub fn main() !u8 {
             .port = cfg.port,
             .workers = cfg.workers,
             .app_source = code,
+            .statics = cfg.statics,
         });
         return 0;
     }

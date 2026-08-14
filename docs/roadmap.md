@@ -76,15 +76,29 @@ violation at once as a 422.
 **Gate — passed:** 25 CRUD/contract gates
 (`node tests/crud-gates.js`).
 
-## Phase 4 — The CLI
+## Phase 4 — The CLI ✅ (passed 2026-08-14, with one gate held open)
 
-`new`, `dev` (watch + reload + error stream), `run`, `test`,
-`version`, `where`; prebuilt binaries in `bin/`, `zig build dist`
-cross-compilation; the starter scaffold with a RingScript page
-calling a RingServ service — **the first fullstack moment**.
-**Gate:** the scaffold runs on Windows/macOS/Linux from the committed
-binaries with zero installed dependencies; a scripted "new → dev →
-edit → test" session passes on all three.
+`new`, `dev` (watch + restart), `run`, `test`, `version`, `where`;
+static file routes; `zig build dist` cross-compilation; the starter
+scaffold whose page calls its own services — **the first fullstack
+moment**.
+**Gate — passed:** 16 CLI gates (`node tests/cli-gates.js`) drive the
+real developer path — new → test → dev → edit → reload → where —
+including that the scaffold's own tests pass untouched, that a
+failing expectation *fails the run*, that `test` writes no database
+file, that the page and the API both answer, and that saving a file
+reloads the server.
+**Gate — still open:** the scaffold has only been *run* on Windows.
+The other four targets cross-compile cleanly, which is not the same
+as being tested on their platforms. Closing this needs a machine (or
+CI) per platform; see [cli.md](cli.md).
+
+Deviations from the plan, both deliberate and documented in
+[cli.md](cli.md): the scaffold is one `app.ring` with a plain
+HTML+fetch page (not three files and a RingScript page — RingServ
+should not depend on another project's artifacts to scaffold), and
+the dist binaries are **not committed** (~32 MB per build would bloat
+git history permanently; they belong on releases).
 
 ## Phase 5 — check + docs (tree-sitter-ring)
 

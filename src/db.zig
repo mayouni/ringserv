@@ -36,6 +36,7 @@ extern fn ring_list_addstring2(pList: ?*anyopaque, str: [*]const u8, n: c_uint) 
 extern fn ring_list_adddouble(pList: ?*anyopaque, n: f64) void;
 extern fn ring_vm_api_retlist(p: ?*anyopaque, pList: ?*anyopaque) void;
 extern fn ring_vm_api_getlist(p: ?*anyopaque, n: c_int) ?*anyopaque;
+extern fn rs_bind_text(stmt: ?*c.sqlite3_stmt, idx: c_int, s: [*]const u8, n: c_int) c_int;
 extern fn rs_list_getsize(pList: ?*anyopaque) c_int;
 extern fn rs_list_isstring(pList: ?*anyopaque, n: c_int) c_int;
 extern fn rs_list_getstring(pList: ?*anyopaque, n: c_int) ?[*:0]const u8;
@@ -123,7 +124,7 @@ fn bindArgs(p: ?*anyopaque, stmt: ?*c.sqlite3_stmt) void {
             if (rs_list_isstring(list, i) != 0) {
                 const s = rs_list_getstring(list, i) orelse "";
                 const len: usize = @intCast(rs_list_getstringsize(list, i));
-                _ = c.sqlite3_bind_text(stmt, i, s, @intCast(len), c.SQLITE_TRANSIENT);
+                _ = rs_bind_text(stmt, i, s, @intCast(len));
             } else if (rs_list_isnumber(list, i) != 0) {
                 _ = c.sqlite3_bind_double(stmt, i, rs_list_getdouble(list, i));
             } else {
@@ -137,7 +138,7 @@ fn bindArgs(p: ?*anyopaque, stmt: ?*c.sqlite3_stmt) void {
         const idx = i - 1;
         if (ring_vm_api_isstring(p, i) != 0) {
             const s = argText(p, i);
-            _ = c.sqlite3_bind_text(stmt, idx, s.ptr, @intCast(s.len), c.SQLITE_TRANSIENT);
+            _ = rs_bind_text(stmt, idx, s.ptr, @intCast(s.len));
         } else if (ring_vm_api_isnumber(p, i) != 0) {
             _ = c.sqlite3_bind_double(stmt, idx, ring_vm_api_getnumber(p, i));
         } else {
@@ -323,6 +324,11 @@ pub fn columnsHook(p: ?*anyopaque) callconv(.c) void {
         if (t) |txt| ring_list_addstring2(out, txt, @intCast(n));
     }
     ring_vm_api_retlist(p, out);
+}
+
+/// The vendored SQLite's version, for `ringserv where`.
+pub fn versionString() []const u8 {
+    return std.mem.span(c.sqlite3_libversion());
 }
 
 /// Ring: __db_path() — the database the app asked for, for diagnostics.

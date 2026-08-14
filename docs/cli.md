@@ -7,32 +7,48 @@ Ring.*
 
 ## The commands
 
-### `ringserv new <name>`
+### `ringserv new <name>` ✅
 
-Scaffolds a working fullstack skeleton — not an empty folder:
+Scaffolds a working application — not an empty folder:
 
 ```
 myapp/
-├── app.ring          a running service (hello.greet) with a contract
-├── topology.ring     everything :server — the simplest truth
-├── data.ring         schema declarations (become SQLite tables)
+├── app.ring          services, :data schema and contracts, in one file
 ├── public/
-│   └── index.html    a RingScript page already calling hello.greet
+│   └── index.html    a page that calls them
 └── tests/
-    └── hello.ring    a passing test against the service
+    └── app.ring      ten expectations that already pass
 ```
 
 The scaffold runs immediately: `cd myapp && ringserv dev` answers on
-:8080 with a page that round-trips a service call. First success in
-under a minute — the RingScript starter-kit bar.
+:8080 with a page that round-trips a service call, and
+`ringserv test` is green before you have written a line. First
+success in under a minute — the RingScript starter-kit bar.
 
-### `ringserv dev`
+It refuses to write into an existing folder: a scaffold that can
+overwrite work is a scaffold nobody trusts.
 
-The daily loop: serve the app, watch the files, reload on change
-(a fresh Ring state per reload — residency is for production, honesty
-is for development), stream trapped errors to the console with real
-line numbers. Serves `public/` and the RingScript runtime files so the
-fullstack loop needs no second tool.
+**Two notes on what the scaffold contains.** The declaration lives in
+one `app.ring` (services, `:data`, `Contract()`) rather than three
+files — for an application this size, three files is ceremony;
+splitting is a choice the developer makes when it starts to pay.
+And the page is plain HTML + `fetch`, not a RingScript page: shipping
+RingScript's runtime here would make RingServ depend on another
+project's artifacts, and the whole client is one wrapper function
+anyway. The page carries a comment showing the two-file upgrade to
+Ring-in-the-browser.
+
+### `ringserv dev` ✅
+
+The daily loop: serve the app, watch its `.ring` files, restart on
+change. A *supervisor over a child `run`*, deliberately — a reload
+gets a genuinely fresh VM and a genuinely fresh database connection,
+so what you see after saving is what a cold start would give you.
+Residency is for production; honesty is for development.
+
+Static files declared as `[ :static, "/", "public/" ]` are served by
+the Zig core directly (a file is a file; the VM has no business in
+that path), with traversal refused outright rather than normalized.
 
 ### `ringserv run app.ring`
 
@@ -51,12 +67,30 @@ Static analysis via the vendored tree-sitter-ring grammar:
 Exit code is CI-ready. `check` is a linter, not a second compiler —
 runtime truth stays with the VM.
 
-### `ringserv test`
+### `ringserv test` ✅
 
-Runs the app's `tests/` against a scratch server on an ephemeral port
-with a scratch database: each test file declares calls and expected
-envelopes. Contract conformance cases (valid payloads must pass,
-each declared violation must 422) are generated automatically.
+Runs every `tests/*.ring` against the app **in process**: `Ask()`
+goes straight through the dispatcher, so services, contracts, generic
+actions and the database are all exercised without a port, a client,
+or a flake. (The HTTP layer is covered by this repository's own
+gates, not by every application's tests.) The vocabulary is five
+words:
+
+```ring
+aReply = Ask(:notes, :create, [ :title = "first" ])
+ExpectOk("creates a note", aReply)
+Expect("with a title", aReply[:data][:title], "first")
+ExpectCode("refuses empties", aReply, 1)
+ExpectStatus("...with a 422", 422)
+```
+
+The database is forced to `:memory:` whatever the app declares —
+tests must never touch real data, and that is not the test author's
+job to remember. Files run in sorted order (a run that shuffles
+itself cannot be compared to the last one), and the exit code is
+CI-ready.
+
+*(`Ask`, not `Call`: `call` is a Ring keyword.)*
 
 ### `ringserv docs`
 
@@ -68,15 +102,35 @@ a URL archaeology.
 
 ### `ringserv build`
 
-Produces the deployable: the `ringserv` binary plus the app baked
-into a `dist/` folder — later, optionally, a single self-contained
-executable with the app embedded (the `@embedFile` trick RingScript
-uses for ringlib, applied to the whole app).
+Not yet built. Deployment today is already small — copy the binary
+and the app folder, run `ringserv run app.ring` — so this command
+waits until it earns its place (a single self-contained executable
+with the app embedded, the `@embedFile` trick applied to the whole
+app).
 
-### `ringserv version` / `ringserv where`
+### `ringserv version` / `ringserv where` ✅
 
-The RingScript conventions, kept: print versions (RingServ, Ring,
-SQLite), print the paths that matter.
+The RingScript conventions, kept: `version` prints the short line,
+`where` prints the versions compiled in (RingServ, Ring VM, SQLite)
+and the paths that matter.
+
+### `zig build dist` — the shipped binaries
+
+Cross-compiles the CLI for **windows-x64, linux-x64, linux-arm64
+(both musl-static), macos-x64 and macos-arm64** into `bin/`.
+
+**These are not committed**, deviating from the original plan. Each
+build is ~32 MB across five targets — RingScript could commit its
+artifacts because a static file server is 40 KB, but a binary
+carrying the Ring VM, SQLite and an HTTP core is 2.5–12 MB, and
+committing that on every release would bloat git history
+permanently. They belong on releases instead; the install story
+("download one file, run it") is unchanged.
+
+Honest status: **only the Windows binary has been run.** The other
+four cross-compile cleanly from one machine, which is not the same as
+being tested on their platforms — the roadmap's cross-platform gate
+stays open until they are.
 
 ## Design rules
 

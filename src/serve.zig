@@ -13,11 +13,16 @@ const bridge = @import("bridge");
 
 const alloc = std.heap.c_allocator;
 
+pub const StaticRoute = struct { prefix: []const u8, dir: []const u8 };
+
 pub const Config = struct {
     port: u16,
     workers: u32,
     app_source: [:0]const u8,
+    statics: []const StaticRoute = &.{},
 };
+
+var g_statics: []const StaticRoute = &.{};
 
 const Job = struct {
     body: []const u8,
@@ -164,10 +169,73 @@ fn getHealth(req: *httpz.Request, res: *httpz.Response) !void {
     res.body = "{\"code\":0,\"message\":\"OK\",\"data\":{\"up\":true}}";
 }
 
+fn mimeFor(p: []const u8) httpz.ContentType {
+    const dot = std.mem.lastIndexOfScalar(u8, p, '.') orelse return .BINARY;
+    const ext = p[dot + 1 ..];
+    if (std.ascii.eqlIgnoreCase(ext, "html") or std.ascii.eqlIgnoreCase(ext, "htm")) return .HTML;
+    if (std.ascii.eqlIgnoreCase(ext, "css")) return .CSS;
+    if (std.ascii.eqlIgnoreCase(ext, "js") or std.ascii.eqlIgnoreCase(ext, "mjs")) return .JS;
+    if (std.ascii.eqlIgnoreCase(ext, "json")) return .JSON;
+    if (std.ascii.eqlIgnoreCase(ext, "svg")) return .SVG;
+    if (std.ascii.eqlIgnoreCase(ext, "png")) return .PNG;
+    if (std.ascii.eqlIgnoreCase(ext, "jpg") or std.ascii.eqlIgnoreCase(ext, "jpeg")) return .JPG;
+    if (std.ascii.eqlIgnoreCase(ext, "gif")) return .GIF;
+    if (std.ascii.eqlIgnoreCase(ext, "ico")) return .ICO;
+    if (std.ascii.eqlIgnoreCase(ext, "wasm")) return .WASM;
+    if (std.ascii.eqlIgnoreCase(ext, "txt") or std.ascii.eqlIgnoreCase(ext, "ring")) return .TEXT;
+    return .BINARY;
+}
+
+/// Static files declared as [ :static, prefix, dir ]. Files are files:
+/// the VM has no business in this path, so Zig serves them directly.
+fn serveStatic(req: *httpz.Request, res: *httpz.Response) !void {
+    const url = req.url.path;
+    for (g_statics) |route| {
+        if (!std.mem.startsWith(u8, url, route.prefix)) continue;
+        var rel = url[route.prefix.len..];
+        while (rel.len > 0 and (rel[0] == '/' or rel[0] == '\\')) rel = rel[1..];
+        if (rel.len == 0) rel = "index.html";
+
+        // Refuse traversal outright rather than trying to normalize it:
+        // any "..", any absolute path, any backslash, and the request is
+        // simply not served. Cheap, total, and impossible to get subtly
+        // wrong.
+        if (std.mem.indexOf(u8, rel, "..") != null or
+            std.mem.indexOfScalar(u8, rel, '\\') != null or
+            std.mem.indexOfScalar(u8, rel, ':') != null or
+            rel[0] == '/')
+        {
+            res.status = 403;
+            res.body = "forbidden";
+            return;
+        }
+
+        const full = try std.fs.path.join(res.arena, &.{ route.dir, rel });
+        const file = std.fs.cwd().openFile(full, .{}) catch continue;
+        defer file.close();
+        const stat = file.stat() catch continue;
+        if (stat.kind == .directory) continue;
+        if (stat.size > 64 * 1024 * 1024) {
+            res.status = 413;
+            res.body = "file too large";
+            return;
+        }
+        const bytes = file.readToEndAlloc(res.arena, 64 * 1024 * 1024) catch continue;
+        res.status = 200;
+        res.content_type = mimeFor(rel);
+        res.body = bytes;
+        return;
+    }
+    res.status = 404;
+    res.content_type = .TEXT;
+    res.body = "not found";
+}
+
 // --------------------------------------------------------------- entry
 
 pub fn start(config: Config) !void {
     g_app_source = config.app_source;
+    g_statics = config.statics;
 
     var i: u32 = 0;
     while (i < config.workers) : (i += 1) {
@@ -187,6 +255,11 @@ pub fn start(config: Config) !void {
     var router = try server.router(.{});
     router.post("/api/v1", postApiV1, .{});
     router.get("/health", getHealth, .{});
+    if (g_statics.len > 0) {
+        // Both: "/*" does not match the bare root.
+        router.get("/", serveStatic, .{});
+        router.get("/*", serveStatic, .{});
+    }
 
     std.debug.print(
         "RingServ {s} — serving on http://127.0.0.1:{d}/api/v1  ({d} workers)\n",
