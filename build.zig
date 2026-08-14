@@ -79,14 +79,31 @@ const stub_cflags = [_][]const u8{
     "-fno-sanitize=undefined",
 };
 
+// SQLite, vendored as the amalgamation (vendor/VENDOR.md records the
+// version). Defines chosen for a server: one connection per worker
+// thread, never shared, so THREADSAFE=2 (serialized per connection) is
+// both correct and faster than the default full mutexing.
+const sqlite_cflags = [_][]const u8{
+    "-DSQLITE_THREADSAFE=2",
+    "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
+    "-DSQLITE_ENABLE_FTS5",
+    "-DSQLITE_ENABLE_JSON1",
+    "-DSQLITE_OMIT_DEPRECATED",
+    "-DSQLITE_OMIT_LOAD_EXTENSION", // no dlopen surface in the server
+    "-DSQLITE_DQS=0", // double-quoted strings are errors, not fallbacks
+    "-fno-sanitize=undefined",
+};
+
 fn addVm(mod: *std.Build.Module, b: *std.Build) void {
     mod.addIncludePath(b.path("ringvm/include"));
+    mod.addIncludePath(b.path("vendor/sqlite"));
     mod.addCSourceFiles(.{ .files = &vm_sources, .flags = &vm_cflags });
     mod.addCSourceFiles(.{
         .files = &vm_hot_sources,
         .flags = &(vm_cflags ++ [_][]const u8{"-O2"}),
     });
     mod.addCSourceFiles(.{ .files = &.{ "src/native_stubs.c", "src/rs_oop.c" }, .flags = &stub_cflags });
+    mod.addCSourceFiles(.{ .files = &.{"vendor/sqlite/sqlite3.c"}, .flags = &sqlite_cflags });
 }
 
 pub fn build(b: *std.Build) void {

@@ -8,7 +8,7 @@ const serve = @import("serve.zig");
 
 extern fn fflush(stream: ?*anyopaque) c_int;
 
-const ServDecl = struct { port: u16, workers: u32 };
+const ServDecl = struct { port: u16, workers: u32, database: []const u8 };
 
 /// Ask the (already evaluated) app whether it declared Serv(), and with
 /// what. Answers null for plain programs — `run` then ends as before.
@@ -27,9 +27,14 @@ fn servConfig(arena: std.mem.Allocator) ?ServDecl {
         const cpus: f64 = @floatFromInt(std.Thread.getCpuCount() catch 4);
         workers_f = @min(4, @max(1, cpus / 2));
     }
+    const database = switch (obj.get("database") orelse std.json.Value{ .string = ":memory:" }) {
+        .string => |s| s,
+        else => ":memory:",
+    };
     return .{
         .port = if (port_f >= 1 and port_f <= 65535) @intFromFloat(port_f) else 8080,
         .workers = @intFromFloat(@max(1, @min(64, workers_f))),
+        .database = database,
     };
 }
 
@@ -118,6 +123,12 @@ pub fn main() !u8 {
 
         // If the program declared Serv(), the run continues as a server.
         const cfg = servConfig(arena) orelse return 0;
+        // Configure the database BEFORE any worker starts: each worker
+        // opens its own connection to this path, which is read-only from
+        // then on (no lock needed, per db.zig).
+        const db_path = try arena.dupe(u8, cfg.database);
+        bridge.db.setDisplayPath(db_path);
+        try bridge.db.configure(db_path);
         try serve.start(.{
             .port = cfg.port,
             .workers = cfg.workers,

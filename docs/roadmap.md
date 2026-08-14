@@ -38,14 +38,36 @@ flat at 47.8 MB to the decimal). Architecture as designed: httpz
 threads behind a queue, the bridge state threadlocal — HTTP threads
 never touch the VM. The full N-hour soak remains a phase-8 gate.
 
-## Phase 3 — Data: SQLite + ZQL + contracts
+## Phase 3 — Data: SQLite + query surface + contracts
 
-Vendor the SQLite amalgamation; `data.ring` schema declarations;
-embed `stzZql` targeting SQLite; generic table services; `Contract()`
-with runtime validation (422 envelopes).
-**Gate:** ZQL parity suite — the same queries against the browser
-stzZql and the server one agree; contract conformance generation
-works; generic services covered end-to-end.
+**Split deliberately.** Part 1 (the substrate) is done; part 2 waits
+on one decision.
+
+### Part 1 — SQLite + the schema layer ✅ (passed 2026-08-14)
+
+Vendor the SQLite amalgamation; `Data()` schema declarations; one
+connection per worker with WAL; `__db_exec`/`__db_query` primitives
+raising trappable Ring errors.
+**Gate — passed:** 18 schema gates (`node tests/data-gates.js`) —
+declared tables/columns with automatic `id`, 40 concurrent writes
+across 4 workers, cross-worker visibility, SQL errors as clean 500
+envelopes, **persistence across restart**, idempotent re-declaration,
+shared in-memory database. Details in [DATA.md](DATA.md).
+
+### Part 2 — the query surface, generic services, contracts (blocked)
+
+Embed the query engine; generic table services (`table = "notes"` →
+list/get/create/update/delete); `Contract()` with runtime validation
+(422 envelopes).
+**Blocked on:** the ZQL naming decision (issue #1) — Zing's ZQL is a
+closed-verb language in which `insert` is unparseable by design,
+while this repository's examples show `Zql("insert into …")`.
+Building a surface under a contested name would fix the collision in
+code. Decide first: pin to the canonical grammar (and give writes
+another door), or name RingServ's own surface.
+**Gate (unchanged):** query parity — the same queries against the
+browser engine and the server one agree; contract conformance
+generation; generic services end-to-end.
 
 ## Phase 4 — The CLI
 

@@ -147,8 +147,13 @@ RingServ is **under construction, phase-gated**. Phases 1 and 2 are
   N VM workers behind httpz — 16 service gates, 200-case fuzz, and
   a 3,000-request soak with flat memory.
 
-Phase 3 (SQLite + ZQL + contracts) is next. The example above is
-real today.
+- **Phase 3, part 1** — the data substrate: SQLite vendored, `Data()`
+  schema declarations, one connection per worker with WAL, data that
+  survives restarts — 18 schema gates ([docs/DATA.md](docs/DATA.md)).
+
+Phase 3's remaining half — the developer-facing query surface,
+generic table services, and `Contract()` — is deliberately paused on
+the ZQL naming decision (issue #1). The example above is real today.
 
 - [docs/vision.md](docs/vision.md) — why RingServ exists, and the two-player model
 - [docs/architecture.md](docs/architecture.md) — the planned layers, Zig/Ring seams

@@ -119,10 +119,21 @@ func __rs_serv_config aIgnored
 		return [ :serv = 0, :port = 0, :workers = 0 ]
 	ok
 	return [
-		:serv    = 1,
-		:port    = RsDeclGet(aRsServDecl, "port", 8080),
-		:workers = RsDeclGet(aRsServDecl, "workers", 0)
+		:serv     = 1,
+		:port     = RsDeclGet(aRsServDecl, "port", 8080),
+		:workers  = RsDeclGet(aRsServDecl, "workers", 0),
+		:database = RsDeclGet(aRsServDecl, "database", ":memory:")
 	]
+
+# The Zig core calls this in every worker after the app is evaluated:
+# a worker's own connection must see the schema too, and CREATE TABLE
+# IF NOT EXISTS makes the repeat free.
+func __rs_data_apply aIgnored
+	aData = RsDeclGet(aRsServDecl, "data", [])
+	if len(aData) = 0
+		return 0
+	ok
+	return RsSchemaApply(aData)
 
 # --------------------------------------------------------------- helpers
 

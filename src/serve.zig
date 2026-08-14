@@ -112,6 +112,12 @@ fn workerMain(id: u32) void {
         return;
     }
     const rc = bridge.rs_eval(g_app_source);
+    // The app's RingServ() ran in THIS worker, so its :data declaration
+    // is materialized against this worker's own connection. Idempotent
+    // by construction (CREATE TABLE IF NOT EXISTS), so N workers racing
+    // to create the same tables is safe — and the first one to win also
+    // creates the file.
+    _ = bridge.rs_call("__rs_data_apply", "0");
     if (rc != 0) {
         // The main thread already validated the app, so this is unexpected —
         // keep serving (dispatch will answer with clean 500 envelopes), but

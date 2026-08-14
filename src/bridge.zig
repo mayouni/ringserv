@@ -17,6 +17,7 @@
 //!   rs_set_echo(b)                also stream output to C stdout (CLI mode)
 
 const std = @import("std");
+pub const db = @import("db.zig");
 
 const alloc = std.heap.c_allocator;
 
@@ -181,6 +182,7 @@ const EmbeddedFile = struct { name: []const u8, data: []const u8 };
 const embedded_files = [_]EmbeddedFile{
     .{ .name = "ringlib/json.ring", .data = @embedFile("ringlib/json.ring") },
     .{ .name = "ringlib/serv.ring", .data = @embedFile("ringlib/serv.ring") },
+    .{ .name = "ringlib/data.ring", .data = @embedFile("ringlib/data.ring") },
 };
 
 fn baseName(path: []const u8) []const u8 {
@@ -313,6 +315,8 @@ const see_shim = "func ringvm_see cData ring_vm_see(cData)";
 const json_ring_src = @embedFile("ringlib/json.ring");
 /// servlib — the service model (Serv, __dispatch, Reply), pure Ring.
 const serv_ring_src = @embedFile("ringlib/serv.ring");
+/// datalib — the schema layer (Data(), introspection), pure Ring.
+const data_ring_src = @embedFile("ringlib/data.ring");
 
 /// Every eval runs through this wrapper: errors land in rs_reporterror and
 /// the resident state survives. Line numbers are real thanks to the two
@@ -332,9 +336,14 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "ringvm_give", &giveHook);
     ring_vm_funcregister2(st, "rs_notemain", &mainFoundHook);
     ring_vm_funcregister2(st, "__rs_status", &httpStatusHook);
+    ring_vm_funcregister2(st, "__db_exec", &db.execHook);
+    ring_vm_funcregister2(st, "__db_query", &db.queryHook);
+    ring_vm_funcregister2(st, "__db_columns", &db.columnsHook);
+    ring_vm_funcregister2(st, "__db_path", &db.pathHook);
     ring_state_runcode(st, see_shim);
     ring_state_runcode(st, json_ring_src);
     ring_state_runcode(st, serv_ring_src);
+    ring_state_runcode(st, data_ring_src);
     g_state = st;
     return 0;
 }
