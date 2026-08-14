@@ -170,7 +170,9 @@ RingServ is **under construction, phase-gated**. Phases 1 and 2 are
 
 Phase 6 (topology + sync) is next — and gated on the family's C3
 Placement Contract per `ALIGNMENT.md`. Everything above is real today
-— **134 gates across nine suites**, all runnable with one command:
+— **134 gates across eleven suites**, including Ring's own ~470 samples
+and ~500 documentation snippets compared byte-for-byte against native
+`ring.exe` — all runnable with one command:
 
 ```bash
 zig build gates -- --full

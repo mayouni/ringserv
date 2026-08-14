@@ -37,6 +37,13 @@ const suites = [
 if (full) {
     suites.push({ name: "soak (3k requests)", node: "soak-lite.js", args: ["3000"] });
     suites.push({ name: "native oracle     ", node: "oracle.js" });
+    suites.push({ name: "wide sweep (samples)", node: "sweep.js" });
+    // The documentation corpus is generated on demand; run it only when
+    // it has been extracted (node tests/extract-doc-snippets.js).
+    if (fs.existsSync(path.join(here, "doc-snippets"))) {
+        suites.push({ name: "wide sweep (docs)  ", node: "sweep.js",
+            args: ["--root=tests/doc-snippets", "--dirs=."] });
+    }
 }
 
 const results = [];

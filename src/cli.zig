@@ -218,9 +218,31 @@ pub fn where(arena: std.mem.Allocator) !u8 {
 
 // -------------------------------------------------------------- helpers
 
-fn readFileZ(arena: std.mem.Allocator, path: []const u8) ![:0]const u8 {
+/// Read a Ring source file the way the native interpreter does.
+///
+/// Native `ring` normalizes CRLF to LF as it reads, so a multi-line
+/// string literal in a Windows-saved file contains bare newlines. We
+/// passed the raw bytes and a literal came out two characters longer per
+/// line — found by the wide sample sweep, invisible to every hand-written
+/// gate. Every path that loads a .ring file goes through here.
+pub fn readSourceZ(arena: std.mem.Allocator, path: []const u8) ![:0]const u8 {
     const f = try std.fs.cwd().openFile(path, .{});
     defer f.close();
     const src = try f.readToEndAlloc(arena, 64 * 1024 * 1024);
-    return try arena.dupeZ(u8, src);
+    return normalizeZ(arena, src);
+}
+
+pub fn normalizeZ(arena: std.mem.Allocator, src: []const u8) ![:0]const u8 {
+    if (std.mem.indexOf(u8, src, "\r\n") == null) return arena.dupeZ(u8, src);
+    var out = try std.ArrayList(u8).initCapacity(arena, src.len);
+    var i: usize = 0;
+    while (i < src.len) : (i += 1) {
+        if (src[i] == '\r' and i + 1 < src.len and src[i + 1] == '\n') continue;
+        out.appendAssumeCapacity(src[i]);
+    }
+    return out.toOwnedSliceSentinel(arena, 0);
+}
+
+fn readFileZ(arena: std.mem.Allocator, path: []const u8) ![:0]const u8 {
+    return readSourceZ(arena, path);
 }

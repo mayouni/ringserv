@@ -147,7 +147,8 @@ pub fn main() !u8 {
             };
             defer f.close();
             const src = try f.readToEndAlloc(arena, 64 * 1024 * 1024);
-            break :blk try arena.dupeZ(u8, src);
+            // Native ring normalizes CRLF as it reads; so must we.
+            break :blk try cli.normalizeZ(arena, src);
         } else try arena.dupeZ(u8, args[2]);
 
         // `give` reads stdin LAZILY, one line per request, only when the

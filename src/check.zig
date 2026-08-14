@@ -102,7 +102,7 @@ pub fn catalogOf(arena: std.mem.Allocator, app_path: []const u8) !?Catalog {
     const f = std.fs.cwd().openFile(app_path, .{}) catch return null;
     defer f.close();
     const src = try f.readToEndAlloc(arena, 64 * 1024 * 1024);
-    const src_z = try arena.dupeZ(u8, src);
+    const src_z = try @import("cli.zig").normalizeZ(arena, src);
 
     try bridge.db.configure(":memory:");
     bridge.db.setDisplayPath(":memory:");

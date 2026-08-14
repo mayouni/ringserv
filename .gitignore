@@ -8,3 +8,5 @@ zig-out/
 # attached to releases — NOT committed (32 MB per build would bloat
 # git history permanently; see docs/cli.md).
 bin/
+tests/doc-snippets/
+tests/sweep-failures.json
