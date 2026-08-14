@@ -35,6 +35,13 @@ extern fn ring_list_newlist(pList: ?*anyopaque) ?*anyopaque;
 extern fn ring_list_addstring2(pList: ?*anyopaque, str: [*]const u8, n: c_uint) void;
 extern fn ring_list_adddouble(pList: ?*anyopaque, n: f64) void;
 extern fn ring_vm_api_retlist(p: ?*anyopaque, pList: ?*anyopaque) void;
+extern fn ring_vm_api_getlist(p: ?*anyopaque, n: c_int) ?*anyopaque;
+extern fn rs_list_getsize(pList: ?*anyopaque) c_int;
+extern fn rs_list_isstring(pList: ?*anyopaque, n: c_int) c_int;
+extern fn rs_list_getstring(pList: ?*anyopaque, n: c_int) ?[*:0]const u8;
+extern fn rs_list_getstringsize(pList: ?*anyopaque, n: c_int) c_int;
+extern fn rs_list_isnumber(pList: ?*anyopaque, n: c_int) c_int;
+extern fn rs_list_getdouble(pList: ?*anyopaque, n: c_int) f64;
 
 /// This worker's connection. Opened lazily on first use, closed never —
 /// a worker lives as long as the process.
@@ -101,10 +108,30 @@ fn argText(p: ?*anyopaque, n: c_int) []const u8 {
     return s[0..@intCast(ring_vm_api_getstringsize(p, n))];
 }
 
-/// Bind Ring arguments 2..N to statement parameters 1..N-1. Strings bind
-/// as text, numbers as doubles — Ring has no other scalar.
+/// Bind statement parameters. Two shapes are accepted, because Ring has
+/// no variadic user functions: a LIST as argument 2 (what the Ring-level
+/// Data* API passes — `DataQuery(sql, [a, b])`), or arguments 2..N
+/// directly (convenient from a C-hook call site). Strings bind as text,
+/// numbers as doubles; anything else binds NULL.
 fn bindArgs(p: ?*anyopaque, stmt: ?*c.sqlite3_stmt) void {
     const count = ring_vm_api_paracount(p);
+    if (count == 2 and ring_vm_api_islist(p, 2) != 0) {
+        const list = ring_vm_api_getlist(p, 2);
+        const n = rs_list_getsize(list);
+        var i: c_int = 1;
+        while (i <= n) : (i += 1) {
+            if (rs_list_isstring(list, i) != 0) {
+                const s = rs_list_getstring(list, i) orelse "";
+                const len: usize = @intCast(rs_list_getstringsize(list, i));
+                _ = c.sqlite3_bind_text(stmt, i, s, @intCast(len), c.SQLITE_TRANSIENT);
+            } else if (rs_list_isnumber(list, i) != 0) {
+                _ = c.sqlite3_bind_double(stmt, i, rs_list_getdouble(list, i));
+            } else {
+                _ = c.sqlite3_bind_null(stmt, i);
+            }
+        }
+        return;
+    }
     var i: c_int = 2;
     while (i <= count) : (i += 1) {
         const idx = i - 1;
@@ -201,6 +228,73 @@ pub fn queryHook(p: ?*anyopaque) callconv(.c) void {
         }
     }
     ring_vm_api_retlist(p, out);
+}
+
+/// Ring: __db_rows(cSql, aParams) — like __db_query, but each row is a
+/// column-keyed hash ([[name, value], …]) rather than a positional list.
+/// This is what services return, because JSON objects are what clients
+/// want; positional rows stay available for internal use.
+pub fn rowsHook(p: ?*anyopaque) callconv(.c) void {
+    const db = openIfNeeded(p) orelse return;
+    const sql = argText(p, 1);
+    if (sql.len == 0) {
+        ring_vm_error(p, "__db_rows: empty statement");
+        return;
+    }
+    const sql_z = alloc.dupeZ(u8, sql) catch {
+        ring_vm_error(p, "__db_rows: out of memory");
+        return;
+    };
+    defer alloc.free(sql_z);
+
+    var stmt: ?*c.sqlite3_stmt = null;
+    if (c.sqlite3_prepare_v2(db, sql_z.ptr, -1, &stmt, null) != c.SQLITE_OK) {
+        fail(p, db, "sql error");
+        return;
+    }
+    defer _ = c.sqlite3_finalize(stmt);
+    bindArgs(p, stmt);
+
+    const out = ring_vm_api_newlist(p);
+    while (true) {
+        const rc = c.sqlite3_step(stmt);
+        if (rc == c.SQLITE_DONE) break;
+        if (rc != c.SQLITE_ROW) {
+            fail(p, db, "sql error");
+            return;
+        }
+        const row = ring_list_newlist(out);
+        const ncols = c.sqlite3_column_count(stmt);
+        var col: c_int = 0;
+        while (col < ncols) : (col += 1) {
+            // Each cell is a [name, value] pair — Ring reads that as a hash.
+            const pair = ring_list_newlist(row);
+            const name = c.sqlite3_column_name(stmt, col);
+            if (name) |nm| {
+                ring_list_addstring2(pair, nm, @intCast(std.mem.len(nm)));
+            } else {
+                ring_list_addstring2(pair, "?", 1);
+            }
+            switch (c.sqlite3_column_type(stmt, col)) {
+                c.SQLITE_INTEGER, c.SQLITE_FLOAT => ring_list_adddouble(pair, c.sqlite3_column_double(stmt, col)),
+                c.SQLITE_NULL => ring_list_addstring2(pair, "", 0),
+                else => {
+                    const t = c.sqlite3_column_text(stmt, col);
+                    const n = c.sqlite3_column_bytes(stmt, col);
+                    if (t) |txt| ring_list_addstring2(pair, txt, @intCast(n)) else ring_list_addstring2(pair, "", 0);
+                },
+            }
+        }
+    }
+    ring_vm_api_retlist(p, out);
+}
+
+/// Ring: __db_insertid() — rowid of the last insert on THIS worker's
+/// connection (which is why it is meaningful at all: no other thread
+/// shares it).
+pub fn insertIdHook(p: ?*anyopaque) callconv(.c) void {
+    const db = openIfNeeded(p) orelse return;
+    ring_vm_api_retnumber(p, @floatFromInt(c.sqlite3_last_insert_rowid(db)));
 }
 
 /// Ring: __db_columns(cTable) — column names of a table, for the schema

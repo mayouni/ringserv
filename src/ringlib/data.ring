@@ -109,6 +109,38 @@ func RsJoin aList, cSep
 	next
 	return cOut
 
+# --------------------------------------------------- the query surface
+#
+# RingServ speaks SQL over SQLite — the engine's own language, which
+# every Ring developer can already read, and which commits this server
+# to no framework's dialect. Higher-level query languages (Softanza's
+# ZQL among them) are LAYERS: pure-Ring libraries an application loads,
+# compiling down to these two calls. Nothing in this core knows them.
+#
+# Parameters are always bound, never interpolated: aParams is a list,
+# because Ring has no variadic user functions.
+
+func DataQuery cSql, aParams
+	if not islist(aParams) aParams = [ aParams ] ok
+	return __db_rows(cSql, aParams)
+
+func DataExec cSql, aParams
+	if not islist(aParams) aParams = [ aParams ] ok
+	return __db_exec(cSql, aParams)
+
+# The single scalar of a single-row, single-column query — count(*),
+# max(id), and friends. Returns pDefault when there is no row.
+func DataValue cSql, aParams, pDefault
+	if not islist(aParams) aParams = [ aParams ] ok
+	aRows = __db_query(cSql, aParams)
+	if len(aRows) = 0 or len(aRows[1]) = 0
+		return pDefault
+	ok
+	return aRows[1][1]
+
+func DataInsertId
+	return __db_insertid()
+
 # ------------------------------------------------- introspection helpers
 
 func DataTables

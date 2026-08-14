@@ -33,7 +33,8 @@ binary.** Inside the binary:
   WebSocket/SSE, timers and scheduled jobs, file watching, static
   files, the SQLite engine, the sync log;
 - a **pure-Ring service library** (`servlib`) owning what Ring is best
-  at: the service model, contracts and validation, ZQL, the response
+  at: the service model, contracts and validation, the schema and
+  query surface, the response
   envelopes, the developer-facing seam;
 - the **CLI** that unifies it all: scaffold, dev loop, check, test,
   docs, build.
@@ -47,8 +48,15 @@ between them.*
 - **Not a router with middleware soup.** The primary paradigm is
   services (see [services.md](services.md)); path routing exists as a
   secondary mode for the cases that genuinely need URLs.
-- **Not an ORM.** Data access is ZQL over embedded SQLite — a query
-  language, not a hydration machine.
+- **Not an ORM.** Data access is plain SQL over embedded SQLite — a
+  query language, not a hydration machine.
+- **Not a home for a framework's dialect.** RingServ is a *general*
+  Ring application server: its core speaks the engine's own SQL and
+  commits to no framework's query language. Softanza's ZQL and any
+  other higher-level surface are **layers** — pure-Ring libraries an
+  application loads, compiling to `DataQuery`/`DataExec`. The
+  dependency points one way: a framework may stand on this floor;
+  this floor stands on no framework.
 - **Not a template engine.** Pages are RingScript's job; RingServ
   serves data (and static files). Server-rendered HTML can come later
   if real projects demand it.
@@ -70,7 +78,7 @@ two sides of the wire**:
 | Ring VM | wasm32-wasi, resident | native, resident |
 | Host seam | `Platform()` / `Page()` | `RingServ()` / `Reply()` |
 | Call shape | `ring.call(name, json)` | `service` + `action` + `payload` |
-| Data | ZQL over synced local store | ZQL over SQLite |
+| Data | synced local store | SQL over SQLite |
 | Guest language | Ring is a guest in JS | JS is a guest in Ring (planned) |
 | Delivered as | two files to host | one binary to run |
 

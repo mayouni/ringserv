@@ -13,7 +13,7 @@ makes [Ring](https://ring-lang.github.io/) resident in the browser,
 RingServ makes Ring resident on the server: a single static binary,
 built by Zig, that serves HTTP by web standards, runs your services
 written in beautiful declarative Ring, stores data in embedded SQLite
-queried in ZQL, and syncs with local-first RingScript pages — with **no
+queried in plain SQL, and syncs with local-first RingScript pages — with **no
 dependency beyond the binary itself**. No Apache, no Node, no runtime
 to install, nothing to configure.
 
@@ -85,11 +85,12 @@ application.
 4. **Local-first by declaration.** The topology can place data
    `:local`, `:server`, or both with `:sync` — from a 99 % offline
    application that syncs on reconnection, to a thin client, and every
-   scenario between. ZQL is the shared query language: it already runs
-   in the browser (RingScript embeds `stzZql`), and it runs on the
-   server over SQLite. The sync protocol is deliberately boring:
+   scenario between. The sync protocol is deliberately boring:
    HTTP-shaped logs on the read path, idempotent mutation queues on
-   the write path.
+   the write path. Data on the server is SQLite, queried in plain SQL
+   — RingServ is a *general* Ring application server, so its core
+   commits to no framework's query dialect; richer languages
+   (Softanza's ZQL among them) ride on top as ordinary Ring libraries.
 
 5. **Governed, testable Ring.** Ring's declarative style carries typed
    service *contracts* — validated at the door at runtime, checked
@@ -147,13 +148,15 @@ RingServ is **under construction, phase-gated**. Phases 1 and 2 are
   N VM workers behind httpz — 16 service gates, 200-case fuzz, and
   a 3,000-request soak with flat memory.
 
-- **Phase 3, part 1** — the data substrate: SQLite vendored, `Data()`
-  schema declarations, one connection per worker with WAL, data that
-  survives restarts — 18 schema gates ([docs/DATA.md](docs/DATA.md)).
+- **Phase 3** — data: SQLite vendored, `Data()` schema declarations,
+  one connection per worker with WAL, a plain-SQL query surface
+  (`DataQuery`/`DataExec`), generic table services (`table = "notes"`
+  → list/get/create/update/delete), and `Contract()` validation with
+  422 envelopes — 18 schema gates + 25 CRUD/contract gates
+  ([docs/DATA.md](docs/DATA.md)).
 
-Phase 3's remaining half — the developer-facing query surface,
-generic table services, and `Contract()` — is deliberately paused on
-the ZQL naming decision (issue #1). The example above is real today.
+Phase 4 (the CLI: `new` / `dev` / `test`) is next. Everything above
+is real today.
 
 - [docs/vision.md](docs/vision.md) — why RingServ exists, and the two-player model
 - [docs/architecture.md](docs/architecture.md) — the planned layers, Zig/Ring seams

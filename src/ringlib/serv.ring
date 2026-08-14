@@ -80,6 +80,14 @@ func __dispatch aReq
 
 	aReq2 = [ :service = cService, :action = cAction, :payload = pPayload ]
 
+	# Contracts are enforced at the door: the action never sees a
+	# payload that violates its declaration (docs/services.md §5).
+	cViolation = RsContractCheck(cService, cAction, pPayload)
+	if cViolation != ""
+		__rs_status(422)
+		return [ :code = 1, :message = cViolation, :data = "" ]
+	ok
+
 	# Class form: an object whose <action>Action methods are reachable —
 	# the Action suffix rule (docs/services.md §3). The method name is
 	# built from a validated name, then reached through eval in local
@@ -103,6 +111,16 @@ func __dispatch aReq
 	# stores a func value as its generated name — a string).
 	pHandler = RsDeclGet(pSvc, cAction, "")
 	if not isstring(pHandler) or pHandler = ""
+		# No explicit handler — a declared :table may still answer this
+		# action generically. Explicit always wins: the lookup above
+		# ran first, so overriding is just defining the action.
+		if RsHasGeneric(pSvc, cAction)
+			try
+				return RsRunGeneric(pSvc, aReq2)
+			catch
+				return RsFailed(cCatchError)
+			done
+		ok
 		return RsRefuse(404, "unknown action: " + cService + "." + cAction)
 	ok
 	try

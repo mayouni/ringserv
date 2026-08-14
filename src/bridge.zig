@@ -315,8 +315,11 @@ const see_shim = "func ringvm_see cData ring_vm_see(cData)";
 const json_ring_src = @embedFile("ringlib/json.ring");
 /// servlib — the service model (Serv, __dispatch, Reply), pure Ring.
 const serv_ring_src = @embedFile("ringlib/serv.ring");
-/// datalib — the schema layer (Data(), introspection), pure Ring.
+/// datalib — the schema layer and the SQL query surface, pure Ring.
 const data_ring_src = @embedFile("ringlib/data.ring");
+/// Generic table services and contract validation, pure Ring.
+const generic_ring_src = @embedFile("ringlib/generic.ring");
+const contract_ring_src = @embedFile("ringlib/contract.ring");
 
 /// Every eval runs through this wrapper: errors land in rs_reporterror and
 /// the resident state survives. Line numbers are real thanks to the two
@@ -338,12 +341,16 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__rs_status", &httpStatusHook);
     ring_vm_funcregister2(st, "__db_exec", &db.execHook);
     ring_vm_funcregister2(st, "__db_query", &db.queryHook);
+    ring_vm_funcregister2(st, "__db_rows", &db.rowsHook);
+    ring_vm_funcregister2(st, "__db_insertid", &db.insertIdHook);
     ring_vm_funcregister2(st, "__db_columns", &db.columnsHook);
     ring_vm_funcregister2(st, "__db_path", &db.pathHook);
     ring_state_runcode(st, see_shim);
     ring_state_runcode(st, json_ring_src);
     ring_state_runcode(st, serv_ring_src);
     ring_state_runcode(st, data_ring_src);
+    ring_state_runcode(st, generic_ring_src);
+    ring_state_runcode(st, contract_ring_src);
     g_state = st;
     return 0;
 }

@@ -9,9 +9,13 @@ The blueprint, in reading order:
 3. **[topology.md](topology.md)** — declared placement (`:local` /
    `:server` / `:both`) and the local-first sync protocol.
 4. **[architecture.md](architecture.md)** — the planned layers: Zig
-   core, resident Ring VM bridge, SQLite + ZQL, vendored substrate.
+   core, resident Ring VM bridge, SQLite + SQL, vendored substrate.
 5. **[cli.md](cli.md)** — every `ringserv` command and its reasoning.
 6. **[landscape.md](landscape.md)** — the study behind the design:
    Pionia, Hono, WinterTC/ECMA-429, local-first sync, Ring's existing
    backends, the Zig substrate.
 7. **[roadmap.md](roadmap.md)** — phases 0–8, each with its gate.
+
+Built and gated so far: **[WORKERS.md](WORKERS.md)** (the N-worker
+concurrency model, measured) and **[DATA.md](DATA.md)** (the data
+layer, and why RingServ's core carries no framework's query dialect).

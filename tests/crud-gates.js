@@ -1,0 +1,140 @@
+/*
+** Phase-3 part-2 gates: generic table services and contract validation.
+**
+** Usage: node tests/crud-gates.js
+*/
+const { spawn } = require("child_process");
+const path = require("path");
+
+const RINGSERV = path.join(__dirname, "..", "zig-out", "bin",
+    process.platform === "win32" ? "ringserv.exe" : "ringserv");
+const FIXTURE = path.join(__dirname, "fixtures", "crud-app.ring");
+const BASE = "http://127.0.0.1:8095";
+
+let passed = 0, failed = 0;
+function check(name, cond, detail) {
+    if (cond) { passed++; console.log("PASS  " + name); }
+    else { failed++; console.log("FAIL  " + name + (detail ? "  — " + detail : "")); }
+}
+
+async function call(service, action, payload) {
+    const res = await fetch(BASE + "/api/v1", {
+        method: "POST",
+        body: JSON.stringify({ service, action, payload: payload || {} }),
+    });
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch {}
+    return { status: res.status, text, json };
+}
+
+(async () => {
+    const server = spawn(RINGSERV, ["run", FIXTURE], {
+        stdio: ["ignore", "ignore", "pipe"],
+        env: { ...process.env, RINGSERV_TEST_DB: ":memory:" },
+    });
+    let died = false;
+    server.on("exit", () => { died = true; });
+    try {
+        const t0 = Date.now();
+        let up = false;
+        while (Date.now() - t0 < 25000) {
+            try { if ((await fetch(BASE + "/health")).status === 200) { up = true; break; } } catch {}
+            await new Promise(r => setTimeout(r, 200));
+        }
+        check("server comes up", up);
+
+        // ---------------------------------------------- generic CRUD
+        let r = await call("notes", "create", { title: "first", weight: 5, body: "hello" });
+        check("generic create returns an id", r.status === 200 && r.json.code === 0 &&
+            typeof r.json.data.id === "number", r.text);
+        const id = r.json && r.json.data ? r.json.data.id : 0;
+
+        r = await call("notes", "get", { id });
+        check("generic get returns the row as an object", r.status === 200 &&
+            r.json.data.title === "first" && r.json.data.weight === 5, r.text);
+
+        r = await call("notes", "update", { id, title: "renamed" });
+        check("generic update reports the change", r.status === 200 &&
+            r.json.data.changed === 1, r.text);
+
+        r = await call("notes", "get", { id });
+        check("update persisted", r.json && r.json.data.title === "renamed", r.text);
+
+        await call("notes", "create", { title: "second", weight: 10 });
+        await call("notes", "create", { title: "third", weight: 15 });
+        r = await call("notes", "list", {});
+        check("generic list returns all rows", r.status === 200 &&
+            r.json.data.count === 3 && Array.isArray(r.json.data.rows), r.text);
+
+        r = await call("notes", "list", { limit: 2 });
+        check("list honors limit", r.json && r.json.data.count === 2, r.text);
+        r = await call("notes", "list", { limit: 2, offset: 2 });
+        check("list honors offset", r.json && r.json.data.count === 1, r.text);
+
+        r = await call("notes", "list", { filter: { weight: 10 } });
+        check("list honors equality filters", r.json && r.json.data.count === 1 &&
+            r.json.data.rows[0].title === "second", r.text);
+
+        r = await call("notes", "list", { filter: { nosuchcolumn: 1 } });
+        check("unknown filter column is dropped, not injected",
+            r.status === 200 && r.json.data.count === 3, r.text);
+
+        r = await call("notes", "delete", { id });
+        check("generic delete works", r.status === 200 && r.json.data.deleted === 1, r.text);
+        r = await call("notes", "get", { id });
+        check("deleted row is gone (404)", r.status === 404, r.text);
+
+        r = await call("notes", "update", { id: 9999, title: "ghost" });
+        check("update of a missing row is 404", r.status === 404, r.text);
+        r = await call("notes", "delete", { id: 9999 });
+        check("delete of a missing row is 404", r.status === 404, r.text);
+
+        // ------------------------------------- restriction and override
+        r = await call("tags", "create", { label: "ring" });
+        check("explicit action overrides the generic one", r.status === 200 &&
+            r.json.data.shouted === 1, r.text);
+        r = await call("tags", "list", {});
+        check("override actually ran (label upper-cased)", r.json &&
+            r.json.data.rows[0].label === "RING", r.text);
+        r = await call("tags", "delete", { id: 1 });
+        check("actions not in :actions are unreachable (404)", r.status === 404, r.text);
+
+        // ------------------------------------------------- contracts
+        r = await call("notes", "create", { weight: 5 });
+        check("missing required field is 422", r.status === 422 &&
+            /title is required/.test(r.json.message), r.text);
+
+        r = await call("notes", "create", { title: 12345 });
+        check("wrong type is 422", r.status === 422 &&
+            /title must be a string/.test(r.json.message), r.text);
+
+        r = await call("notes", "create", { title: "x".repeat(50) });
+        check("maxlen violation is 422", r.status === 422 &&
+            /at most 20 characters/.test(r.json.message), r.text);
+
+        r = await call("notes", "create", { title: "ok", weight: 500 });
+        check("numeric max violation is 422", r.status === 422 &&
+            /at most 100/.test(r.json.message), r.text);
+
+        r = await call("notes", "create", { weight: -5 });
+        check("all violations are reported at once", r.status === 422 &&
+            /title is required/.test(r.json.message) &&
+            /at least 0/.test(r.json.message), r.text);
+
+        r = await call("notes", "get", { id: "not-a-number" });
+        check("contract governs generic actions too", r.status === 422, r.text);
+
+        r = await call("notes", "create", { title: "valid", weight: 1 });
+        check("a valid payload passes the contract", r.status === 200 &&
+            r.json.code === 0, r.text);
+
+        check("server never died", !died);
+    } finally {
+        server.kill();
+    }
+    console.log(failed === 0
+        ? "\nAll " + passed + " CRUD/contract gates passed."
+        : "\n" + failed + " gate(s) FAILED (" + passed + " passed).");
+    process.exit(failed ? 1 : 0);
+})().catch(e => { console.error("harness crashed:", e); process.exit(1); });

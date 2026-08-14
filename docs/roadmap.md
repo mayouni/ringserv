@@ -54,20 +54,27 @@ across 4 workers, cross-worker visibility, SQL errors as clean 500
 envelopes, **persistence across restart**, idempotent re-declaration,
 shared in-memory database. Details in [DATA.md](DATA.md).
 
-### Part 2 — the query surface, generic services, contracts (blocked)
+### Part 2 — query surface, generic services, contracts ✅ (passed 2026-08-14)
 
-Embed the query engine; generic table services (`table = "notes"` →
-list/get/create/update/delete); `Contract()` with runtime validation
-(422 envelopes).
-**Blocked on:** the ZQL naming decision (issue #1) — Zing's ZQL is a
-closed-verb language in which `insert` is unparseable by design,
-while this repository's examples show `Zql("insert into …")`.
-Building a surface under a contested name would fix the collision in
-code. Decide first: pin to the canonical grammar (and give writes
-another door), or name RingServ's own surface.
-**Gate (unchanged):** query parity — the same queries against the
-browser engine and the server one agree; contract conformance
-generation; generic services end-to-end.
+**The naming question resolved by removal, not arbitration.** RingServ
+is a general Ring application server, so its core carries no
+framework's query dialect: it speaks the engine's own SQL through
+`DataQuery` / `DataExec` / `DataValue` / `DataInsertId` (bound
+parameters, column-keyed rows). Softanza's ZQL — and any other
+higher-level surface — is a **layer**: a pure-Ring library an
+application loads, compiling down to those calls. The collision in
+issue #1 therefore has nothing left to collide with, and the
+dependency points the right way.
+
+Also built: **generic table services** (`table = "notes"` →
+list/get/create/update/delete, with paging, equality filters,
+`:actions` restriction, explicit override, and column names matched
+against the live schema so a payload key can never reach statement
+text) and **`Contract()`** validation (types, required, min/max,
+maxlen/minlen, `:of`) enforced before dispatch, reporting *every*
+violation at once as a 422.
+**Gate — passed:** 25 CRUD/contract gates
+(`node tests/crud-gates.js`).
 
 ## Phase 4 — The CLI
 

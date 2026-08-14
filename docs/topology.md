@@ -85,10 +85,14 @@ respectable one):
   mutations. Conflicts resolve by re-execution against fresh state —
   the authority is the server-run action, not a merge heuristic.
 
-**ZQL binds the two sides.** The page queries its synced store in
-ZQL (via `stzZql`, already shipping in RingScript); the server
-queries SQLite in ZQL. One data language, one service language, one
-call seam — the whole stack in Ring.
+**The call seam binds the two sides.** The page queries its synced
+store with whatever its runtime provides; the server queries SQLite
+in SQL. The *shared* vocabulary is the service call and the shape —
+not a query dialect, because RingServ's core deliberately has none
+(see [vision.md](vision.md)). A stack that wants one query language
+across page and server gets it by loading the same pure-Ring query
+library on both sides — that is a framework's promise to make, and
+Softanza is where it belongs.
 
 ## 4. What the server must implement (and nothing more)
 

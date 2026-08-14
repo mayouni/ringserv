@@ -36,8 +36,9 @@ RingScript division of labor, transposed to the server:
   established (patches only when unavoidable, marked in place,
   documented, contributed upstream).
 - **Ring** owns everything the developer touches: the service model,
-  contracts, ZQL, envelopes — as `servlib`, pure Ring embedded in the
-  binary exactly as RingScript embeds `ringlib`.
+  contracts, the schema and query surface, envelopes — as `servlib`,
+  pure Ring embedded in the binary exactly as RingScript embeds
+  `ringlib`.
 
 ## 2. The bridge — RingScript's, matured
 
@@ -82,16 +83,24 @@ in order of preference:
 TLS is deferred to a phase of its own (reverse proxies cover the gap
 meanwhile — the honest thing is to say so, not to ship weak TLS).
 
-## 4. Data: SQLite + ZQL + the sync log
+## 4. Data: SQLite + SQL + the sync log
 
 - **SQLite vendored as the amalgamation** — public domain, one `.c`
-  file, compiles cleanly with `zig cc`; accessed from Zig via a thin
-  wrapper (zqlite.zig-style, or hand-rolled — it is a small surface).
-- **ZQL is the developer's query language.** RingScript already
-  embeds `stzZql` (pure Ring) in the browser; RingServ embeds the same
-  engine, targeting SQLite instead of the in-page store. One query
-  language, both sides of the wire — this is the data half of the
-  two-player model.
+  file, compiles cleanly with `zig cc`; hand-wrapped in `src/db.zig`
+  (a small surface), one connection per worker in WAL mode.
+- **The query language is SQL** — the engine's own, which every Ring
+  developer can already read. `Data()` declares the schema;
+  `DataQuery` / `DataExec` / `DataValue` / `DataInsertId` run
+  statements with bound parameters and column-keyed rows. See
+  [DATA.md](DATA.md).
+- **No framework dialect in the core.** RingServ is a *general* Ring
+  application server, so it commits to no framework's query language.
+  Higher-level languages — Softanza's ZQL among them — are **layers**:
+  pure-Ring libraries an application loads, compiling down to these
+  same calls. That keeps the dependency pointing the right way (a
+  framework may depend on this floor; this floor depends on no
+  framework) and keeps RingServ usable by a Ring developer who has
+  never heard of Softanza.
 - **The sync log is a table**, not a technology: an append-only oplog
   with monotonic offsets per *shape* (a declared subset of data —
   ElectricSQL's vocabulary). The Zig core serves it over plain HTTP
@@ -143,12 +152,12 @@ ringserv/
 │   ├── db.zig                SQLite embedding + the sync log
 │   ├── jsguest.zig           quickjs-ng embedding        (phase 6)
 │   ├── check/                tree-sitter-ring analysis   (phase 5)
-│   └── servlib/              pure Ring, embedded in the binary
-│       ├── serv.ring         RingServ() — the app declaration seam
-│       ├── service.ring      dispatch, envelopes, generic table services
+│   └── ringlib/              pure Ring, embedded in the binary
+│       ├── serv.ring         RingServ(), dispatch, envelopes
+│       ├── data.ring         Data() schema + the SQL query surface
+│       ├── generic.ring      generic table services
 │       ├── contract.ring     typed contracts + validation
-│       ├── json.ring         shared with RingScript
-│       └── stzZql.ring       shared with RingScript
+│       └── json.ring         shared with RingScript
 ├── ringvm/                   vendored Ring 1.27 (src + include)
 ├── vendor/                   sqlite, http.zig, tree-sitter(+ring), quickjs-ng
 ├── examples/
@@ -164,7 +173,7 @@ ringserv/
 | One Ring entry point (`__dispatch`) | keeps the whole service model in readable Ring |
 | Services stateless, state in SQLite | enables N-worker concurrency without VM thread-safety |
 | Fetch-shaped internals | ECMA-429 legibility; adapters stay thin |
-| SQLite amalgamation, ZQL on top | zero-dep data with the same query language as the browser side |
+| SQLite amalgamation, plain SQL on top | zero-dep data in the engine's own language; no framework dialect in a general server |
 | Sync = HTTP log + mutation queue | boring, cacheable, reimplementable — see landscape.md |
 | tree-sitter for `check`, VM for truth | a linter may approximate; a runtime may not |
 | Everything vendored, nothing fetched | `build.zig.zon`-free, like RingScript: the repo is the supply chain |

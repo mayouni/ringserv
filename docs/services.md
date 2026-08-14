@@ -51,11 +51,12 @@ RingServ([
         :orders = [
             :place = func oReq {
                 oOrder = oReq[:payload]
-                nId = Zql("insert into orders values ?", oOrder)
-                return Reply(:ok, [ :id = nId ])
+                DataExec("insert into orders (customer, total) values (?, ?)",
+                         [ oOrder[:customer], oOrder[:total] ])
+                return Reply(:ok, [ :id = DataInsertId() ])
             },
             :list = func oReq {
-                return Reply(:ok, Zql("select from orders"))
+                return Reply(:ok, DataQuery("select * from orders", []))
             }
         ]
     ]
@@ -82,7 +83,9 @@ class OrdersService from Service
         if not StockAvailable(oOrder)
             return Reply(:fail, [ :reason = "out-of-stock" ])
         ok
-        nId = Zql("insert into orders values ?", oOrder)
+        DataExec("insert into orders (customer, total) values (?, ?)",
+                 [ oOrder[:customer], oOrder[:total] ])
+        nId = DataInsertId()
         Notify(:orders, :placed, nId)
         return Reply(:ok, [ :id = nId ])
 
@@ -96,11 +99,21 @@ class OrdersService from Service
 Pionia's `UniversalGenericService` (itself a descendant of Django
 REST's generic views) is the single biggest lesson: most services are
 CRUD over one table. In RingServ, `table = "orders"` alone gives a
-service `list`, `get`, `create`, `update`, `delete` actions, run
-through ZQL, honoring the contract (§5) if one is declared, with
-pagination when the payload carries `limit`/`offset`. Override any
-action by defining it; restrict the set with
+service `list`, `get`, `create`, `update`, `delete`, honoring the
+contract (§5) if one is declared, with paging when the payload carries
+`limit`/`offset` and equality filters under `filter`. Override any
+action by defining it — explicit always wins; restrict the set with
 `actions = [ :list, :get ]`.
+
+```ring
+:orders = [ :table = "orders" ]                       # all five
+:tags   = [ :table = "tags", :actions = [ :list ] ]   # read-only
+```
+
+**Column names never come from the request.** Payload keys are matched
+against the live schema and anything unknown is dropped, so a key can
+never reach the statement text; values always travel as bound
+parameters.
 
 ## 5. Contracts — typed, declarative, governed
 

@@ -18,7 +18,7 @@ RingServ([
         # because it is heavy and needs the whole dataset.
         :report = [
             :build = func oReq {
-                aNotes = Zql("select from notes")
+                aNotes = DataQuery("select * from notes", [])
                 aByTag = []
                 for oNote in aNotes
                     for cTag in oNote[:tags]

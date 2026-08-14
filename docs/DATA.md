@@ -1,9 +1,29 @@
-# The data layer — what exists after phase 3 (part 1)
+# The data layer
 
-*Phase 3 is split deliberately. The schema layer and the SQLite
-substrate are built and gated; the developer-facing **query surface**
-is not, because its name and grammar are an open family question
-(issue #1). This page records exactly where the line is.*
+*Phase 3, complete: the SQLite substrate, the schema seam, the query
+surface, generic table services, and contracts. 43 gates
+(`tests/data-gates.js` 18, `tests/crud-gates.js` 25).*
+
+## The decision that shaped this layer
+
+RingServ's core speaks **plain SQL over SQLite** and carries **no
+framework's query dialect** — not even a family one.
+
+The reasoning, recorded because it will be asked again: RingServ is a
+*general* Ring application server. A developer who has never heard of
+Softanza must be able to use all of it. Embedding Softanza's ZQL would
+have inverted the family's dependency direction — the floor depending
+on a framework's grammar, versioning, and extraction schedule — and
+that was not theoretical: this phase was blocked for exactly that
+reason until the coupling was removed. Two projects in one family
+already disagreeing about what "ZQL" means was the evidence that it is
+a framework concept, not an infrastructure one.
+
+So higher-level query languages are **layers**: pure-Ring libraries an
+application loads, compiling down to `DataQuery`/`DataExec`. Softanza
+can still promise one query language across page and server — that
+promise is simply Softanza's to make, where it belongs, rather than
+RingServ pretending to be Softanza-specific.
 
 ## What is built
 
@@ -66,31 +86,60 @@ both raising **trappable Ring errors** carrying SQLite's own message.
 A bad statement is therefore a clean 500 envelope and a living server
 — gated.
 
-## What is NOT built, and why
+## The query surface
 
-The **query surface** a developer writes — the `Zql(...)` of the
-blueprint's examples — is deliberately absent. Issue #1 established
-that "ZQL" already names a *different* language in Zing (a closed verb
-set: `DEFINE ENTITY | NORM | FLOW` plus `SELECT`, where `insert` is
-unparseable by design), while `docs/services.md` shows
-`Zql("insert into orders values ?")`. Building a surface under a
-contested name would make the collision permanent in code rather than
-just in documentation.
+```ring
+aRows = DataQuery("select id, title from notes where weight > ?", [ 10 ])
+DataExec("insert into notes (title, weight) values (?, ?)", [ cTitle, nW ])
+nId   = DataInsertId()
+nHowMany = DataValue("select count(*) from notes", [], 0)
+```
 
-So phase 3 stops at the substrate, and the surface waits for one
-decision (RingServ's to make, per the issue):
+Parameters are a **list**, always bound, never interpolated — Ring has
+no variadic user functions, so an explicit list is the honest shape.
+`DataQuery` returns **column-keyed rows** (`[{"id":1,"title":"a"}]`),
+because services emit JSON objects; the positional form stays
+available internally.
 
-1. **Same language** — pin to the canonical StzZql grammar and give
-   writes a different door (generic table services, or an explicit
-   `Data`-side API). The `Zql("insert …")` examples in
-   `docs/services.md` then get corrected.
-2. **Different languages** — RingServ names its own surface (e.g.
-   `Query()` / `Data()`), and "ZQL" belongs to Zing and Softanza.
+## Generic table services
 
-Also still ahead in phase 3: **generic table services** (`table =
-"notes"` → list/get/create/update/delete) and **`Contract()`**
-validation with 422 envelopes. Both are written against the query
-surface, so both wait on the same decision.
+Declaring a table is enough:
+
+```ring
+:notes = [ :table = "notes" ]                          # all five actions
+:tags  = [ :table = "tags", :actions = [ :list, :get ] ]
+:tags  = [ :table = "tags", :create = func aReq { … } ] # explicit wins
+```
+
+`list` (with `limit`/`offset` paging and equality `filter`), `get`,
+`create`, `update`, `delete`. **Column names never come from the
+request**: payload keys are matched against the live schema and
+unknown ones are dropped, so a key cannot reach the statement text;
+values always travel as bound parameters. Missing rows are 404s, not
+empty successes.
+
+## Contracts
+
+```ring
+Contract(:notes, [
+    :create = [
+        :in = [
+            :title  = [ :type = :string, :required = true, :maxlen = 20 ],
+            :weight = [ :type = :number, :min = 0, :max = 100 ]
+        ],
+        :out = [ :id = :number ]
+    ]
+])
+```
+
+Enforced **before dispatch**, so they govern generic actions too, and
+the action never sees a violating payload. Every failure is reported
+at once (a client fixing one field per round-trip is a bad afternoon),
+as a **422** envelope. Supported: `:type` (string/number/int/list/
+bool), `:required`, `:min`/`:max` (number value or list length),
+`:maxlen`/`:minlen`, `:of` (element type). `:out` is declared for the
+docs and the static checker but **not** enforced at runtime — a server
+should not refuse to answer because its own reply drifted.
 
 ## Gates (`node tests/data-gates.js` — 18, all passing)
 
@@ -102,3 +151,13 @@ survives it · server never dies · restart against an existing file ·
 **data persists across restart** · re-running `Data()` is idempotent ·
 writes continue after restart · in-memory comes up · in-memory writes
 · all workers share one in-memory database.
+
+## Gates (`node tests/crud-gates.js` — 25, all passing)
+
+Generic create/get/update/delete/list · update and delete persist ·
+paging by limit and offset · equality filters · **unknown filter
+columns dropped rather than injected** · missing rows are 404 ·
+`:actions` restriction · explicit override wins and actually runs ·
+required · wrong type · maxlen · numeric max · **all violations
+reported at once** · contracts govern generic actions · valid payloads
+pass · server never dies.

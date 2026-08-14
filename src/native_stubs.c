@@ -99,6 +99,35 @@ void rs_echo_write(const unsigned char *pData, size_t nLen) {
 	fwrite(pData, 1, nLen, stdout);
 }
 
+/*
+** List accessors as real functions. Ring exposes these as MACROS
+** (rlist.h), which Zig cannot link against, so db.zig calls these thin
+** wrappers instead. Same semantics, one call deep.
+*/
+int rs_list_getsize(List *pList) {
+	return (int)ring_list_getsize(pList);
+}
+
+int rs_list_isstring(List *pList, int nIndex) {
+	return ring_list_isstring(pList, nIndex);
+}
+
+const char *rs_list_getstring(List *pList, int nIndex) {
+	return ring_list_getstring(pList, nIndex);
+}
+
+int rs_list_getstringsize(List *pList, int nIndex) {
+	return (int)ring_list_getstringsize(pList, nIndex);
+}
+
+int rs_list_isnumber(List *pList, int nIndex) {
+	return ring_list_isnumber(pList, nIndex);
+}
+
+double rs_list_getdouble(List *pList, int nIndex) {
+	return ring_list_getdouble(pList, nIndex);
+}
+
 /* 1 if the VM already auto-called main() (lCallMainFunction is a bitfield —
 ** not addressable from Zig). */
 unsigned int rs_vm_maincalled(void *pPointer) {
