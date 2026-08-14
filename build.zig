@@ -181,8 +181,17 @@ pub fn build(b: *std.Build) void {
     gates_mod.addImport("bridge", bridge_mod);
     const gates = b.addTest(.{ .root_module = gates_mod });
     const run_gates = b.addRunArtifact(gates);
-    const test_step = b.step("test", "Run the phase-1 gates");
+    const test_step = b.step("test", "Run the bridge gates (in-process)");
     test_step.dependOn(&run_gates.step);
+
+    // `zig build gates` — every suite, one command. Six suites are easy
+    // to run five of, and phase 5 adds more.
+    const all = b.addSystemCommand(&.{ "node", "tests/all.js" });
+    all.setCwd(b.path("."));
+    if (b.args) |args| all.addArgs(args);
+    all.step.dependOn(b.getInstallStep());
+    const gates_step = b.step("gates", "Run EVERY gate suite (add -- --full for soak + oracle)");
+    gates_step.dependOn(&all.step);
 
     // `zig build dist` — cross-compile the CLI for every shipped
     // platform into bin/. These are committed: installing RingServ is

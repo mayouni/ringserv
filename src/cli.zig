@@ -85,7 +85,7 @@ pub fn runTests(arena: std.mem.Allocator, app_path: []const u8) !u8 {
     bridge.db.setDisplayPath(":memory:");
     bridge.rs_set_echo(1);
     if (bridge.rs_init() != 0) {
-        std.debug.print("ringserv test: VM init failed\n", .{});
+        std.debug.print("ringserv test: runtime init failed: {s}\n", .{bridge.rs_init_error()});
         return 1;
     }
     if (bridge.rs_eval(app_src) != 0) {

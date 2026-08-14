@@ -16,6 +16,8 @@ The blueprint, in reading order:
    backends, the Zig substrate.
 7. **[roadmap.md](roadmap.md)** — phases 0–8, each with its gate.
 
-Built and gated so far: **[WORKERS.md](WORKERS.md)** (the N-worker
-concurrency model, measured) and **[DATA.md](DATA.md)** (the data
-layer, and why RingServ's core carries no framework's query dialect).
+Built and gated so far: **[GATES.md](GATES.md)** (every suite, one
+command, and what is still thin), **[WORKERS.md](WORKERS.md)** (the
+N-worker concurrency model, measured) and **[DATA.md](DATA.md)** (the
+data layer, and why RingServ's core carries no framework's query
+dialect).

@@ -336,8 +336,64 @@ const eval_shim = "try eval(rs_getcode()) catch rs_reporterror(cCatchError) done
 
 // ---------------------------------------------------------------- exports
 
+/// True when the VM has a user-defined function of this (lowercase)
+/// name. Asked through the VM's own isfunction(), captured by a hook —
+/// the same machinery the auto-main pass uses.
+threadlocal var g_probe_found: bool = false;
+
+fn probeHook(p: ?*anyopaque) callconv(.c) void {
+    g_probe_found = ring_vm_api_isnumber(p, 1) != 0 and ring_vm_api_getnumber(p, 1) != 0;
+}
+
+fn functionExists(st: ?*RingState, name: []const u8) bool {
+    var buf: [160]u8 = undefined;
+    const code = std.fmt.bufPrintZ(&buf, "__rs_probe(isfunction(\"{s}\"))", .{name}) catch return false;
+    g_probe_found = false;
+    ring_state_runcode(st, code);
+    return g_probe_found;
+}
+
+/// Exposed so the gates can prove the detector DISCRIMINATES — a load
+/// check that cannot fail is decoration.
+pub fn probeFunction(name: []const u8) bool {
+    if (g_state == null) return false;
+    return functionExists(g_state, name);
+}
+
+/// The embedded pure-Ring library, in load order, each paired with a
+/// function it MUST define. Verified after loading (see rs_init).
+const RingLibFile = struct { name: []const u8, src: [:0]const u8, provides: []const u8 };
+
+const ringlib_files = [_]RingLibFile{
+    .{ .name = "json.ring", .src = json_ring_src, .provides = "jsonencode" },
+    .{ .name = "serv.ring", .src = serv_ring_src, .provides = "__dispatch" },
+    .{ .name = "data.ring", .src = data_ring_src, .provides = "dataquery" },
+    .{ .name = "generic.ring", .src = generic_ring_src, .provides = "rsrungeneric" },
+    .{ .name = "contract.ring", .src = contract_ring_src, .provides = "rscontractcheck" },
+    .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask" },
+};
+
+/// Non-empty when rs_init could not build a usable state — the name of
+/// the ringlib file whose functions did not appear.
+var g_init_error: [128]u8 = undefined;
+var g_init_error_len: usize = 0;
+
+/// The reason rs_init failed, or "" — so a caller can say WHICH part of
+/// the runtime is broken instead of failing mysteriously later.
+pub export fn rs_init_error() [*:0]const u8 {
+    if (g_init_error_len == 0) return "";
+    g_init_error[g_init_error_len] = 0;
+    return @ptrCast(&g_init_error);
+}
+
+fn setInitError(comptime fmt: []const u8, args: anytype) void {
+    const s = std.fmt.bufPrint(g_init_error[0 .. g_init_error.len - 1], fmt, args) catch "init failed";
+    g_init_error_len = s.len;
+}
+
 pub export fn rs_init() i32 {
     if (g_state != null) return 0;
+    g_init_error_len = 0;
     const st = ring_state_init() orelse return -1;
     ring_vm_funcregister2(st, "ring_vm_see", &seeHook);
     ring_vm_funcregister2(st, "rs_getcode", &getCodeHook);
@@ -354,13 +410,25 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__db_insertid", &db.insertIdHook);
     ring_vm_funcregister2(st, "__db_columns", &db.columnsHook);
     ring_vm_funcregister2(st, "__db_path", &db.pathHook);
+    ring_vm_funcregister2(st, "__rs_probe", &probeHook);
     ring_state_runcode(st, see_shim);
-    ring_state_runcode(st, json_ring_src);
-    ring_state_runcode(st, serv_ring_src);
-    ring_state_runcode(st, data_ring_src);
-    ring_state_runcode(st, generic_ring_src);
-    ring_state_runcode(st, contract_ring_src);
-    ring_state_runcode(st, testing_ring_src);
+
+    // Load the embedded library, and PROVE each file loaded.
+    //
+    // ring_state_runcode does not report failure: a ringlib file with a
+    // syntax error simply does not define its functions, and everything
+    // downstream misbehaves far from the cause. That is not theoretical —
+    // `func Call` (call is a Ring keyword) failed exactly this way and was
+    // caught only because an unrelated command broke. So after each file,
+    // ask the VM whether the function it promises actually exists.
+    for (ringlib_files) |f| {
+        ring_state_runcode(st, f.src);
+        if (!functionExists(st, f.provides)) {
+            setInitError("ringlib/{s} failed to load (no {s})", .{ f.name, f.provides });
+            _ = ring_state_delete(st);
+            return -2;
+        }
+    }
     g_state = st;
     return 0;
 }

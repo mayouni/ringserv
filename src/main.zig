@@ -147,7 +147,7 @@ pub fn main() !u8 {
 
         bridge.rs_set_echo(1);
         if (bridge.rs_init() != 0) {
-            std.debug.print("ringserv: VM init failed\n", .{});
+            std.debug.print("ringserv: runtime init failed: {s}\n", .{bridge.rs_init_error()});
             return 1;
         }
         const rc = bridge.rs_eval(code);

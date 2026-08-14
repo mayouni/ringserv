@@ -113,7 +113,7 @@ fn serveJob(job: *Job) void {
 fn workerMain(id: u32) void {
     bridge.rs_set_echo(0);
     if (bridge.rs_init() != 0) {
-        std.debug.print("ringserv: worker {d}: VM init failed\n", .{id});
+        std.debug.print("ringserv: worker {d}: runtime init failed: {s}\n", .{ id, bridge.rs_init_error() });
         return;
     }
     const rc = bridge.rs_eval(g_app_source);

@@ -17,6 +17,11 @@ RingServ([
 		# All five generic actions, nothing written.
 		:notes = [ :table = "notes" ],
 
+		# A service that only exists to be governed by contracts.
+		:rules = [
+			:check = func aReq { return Reply(:ok, [ :seen = 1 ]) }
+		],
+
 		# Restricted set + an override: create is ours, list/get generic,
 		# update/delete not offered at all.
 		:tags = [
@@ -44,5 +49,19 @@ Contract(:notes, [
 	],
 	:get = [
 		:in = [ :id = [ :type = :number, :required = true ] ]
+	]
+])
+
+# Every remaining rule the validator implements, so none ships untested:
+# :of (element type), :int, :bool, :minlen.
+Contract(:rules, [
+	:check = [
+		:in = [
+			:scores = [ :type = :list, :of = :number ],
+			:count  = [ :type = :int ],
+			:flag   = [ :type = :bool ],
+			:code   = [ :type = :string, :minlen = 3 ],
+			:tags   = [ :type = :list, :min = 1, :max = 3 ]
+		]
 	]
 ])

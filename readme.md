@@ -163,7 +163,15 @@ RingServ is **under construction, phase-gated**. Phases 1 and 2 are
   cross-compiles five platforms — 16 CLI gates.
 
 Phase 5 (`check` and `docs`, via tree-sitter-ring) is next.
-Everything above is real today: **87 gates** across six suites.
+Everything above is real today — **113 gates across eight suites**,
+all runnable with one command:
+
+```bash
+zig build gates -- --full
+```
+
+See [docs/GATES.md](docs/GATES.md) for what each suite defends, and
+for an honest list of what is still thin.
 
 - [docs/vision.md](docs/vision.md) — why RingServ exists, and the two-player model
 - [docs/architecture.md](docs/architecture.md) — the planned layers, Zig/Ring seams

@@ -129,6 +129,45 @@ async function call(service, action, payload) {
         check("a valid payload passes the contract", r.status === 200 &&
             r.json.code === 0, r.text);
 
+        // ------------------------- the rules that shipped without gates
+        // :of, :int, :bool, :minlen were implemented and never exercised.
+        r = await call("rules", "check", { scores: [1, 2, 3] });
+        check(":of accepts a list of the right element type", r.status === 200, r.text);
+        r = await call("rules", "check", { scores: [1, "two", 3] });
+        check(":of rejects a wrong element type", r.status === 422 &&
+            /scores item must be a number/.test(r.json.message), r.text);
+
+        r = await call("rules", "check", { count: 7 });
+        check(":int accepts a whole number", r.status === 200, r.text);
+        r = await call("rules", "check", { count: 7.5 });
+        check(":int rejects a fraction", r.status === 422 &&
+            /count must be a whole number/.test(r.json.message), r.text);
+
+        r = await call("rules", "check", { flag: 1 });
+        check(":bool accepts 1", r.status === 200, r.text);
+        r = await call("rules", "check", { flag: 0 });
+        check(":bool accepts 0", r.status === 200, r.text);
+        r = await call("rules", "check", { flag: 5 });
+        check(":bool rejects other numbers", r.status === 422 &&
+            /flag must be true or false/.test(r.json.message), r.text);
+
+        r = await call("rules", "check", { code: "abc" });
+        check(":minlen accepts a long-enough string", r.status === 200, r.text);
+        r = await call("rules", "check", { code: "ab" });
+        check(":minlen rejects a short string", r.status === 422 &&
+            /at least 3 characters/.test(r.json.message), r.text);
+
+        r = await call("rules", "check", { tags: ["a", "b"] });
+        check(":min/:max measure list LENGTH, not value", r.status === 200, r.text);
+        r = await call("rules", "check", { tags: [] });
+        check("an empty list violates :min", r.status === 422, r.text);
+        r = await call("rules", "check", { tags: ["a", "b", "c", "d"] });
+        check("an over-long list violates :max", r.status === 422, r.text);
+
+        r = await call("rules", "check", {});
+        check("nothing is required, so an empty payload passes",
+            r.status === 200, r.text);
+
         check("server never died", !died);
     } finally {
         server.kill();

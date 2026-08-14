@@ -115,3 +115,50 @@ test "gate: embedded ringlib json survives reset" {
     const out = try evalOk("see JsonEncode([1,2,3])");
     try std.testing.expect(out.len > 0);
 }
+
+// ---------------------------------------------------------------------
+// Load integrity — the class of bug that hid `func Call` (call is a Ring
+// keyword, so testing.ring silently defined nothing and rs_init said OK).
+// ring_state_runcode reports no failure, so the runtime must prove for
+// itself that every embedded file actually defined what it promises.
+
+test "gate: rs_init reports no error on a healthy runtime" {
+    try fresh();
+    try std.testing.expectEqualStrings("", std.mem.span(bridge.rs_init_error()));
+}
+
+test "gate: every embedded ringlib file is loaded and callable" {
+    try fresh();
+    // One live call per file — not merely isfunction(), which a stub
+    // would also satisfy. If a file failed to compile, these raise.
+    try std.testing.expectEqualStrings("[1,2]", try evalOk("see JsonEncode([1,2])"));
+    _ = try evalOk("aRs = __dispatch([ :service = \"x\", :action = \"y\", :payload = [] ])");
+    try std.testing.expectEqualStrings("1", try evalOk("see len(__dispatch([]))>0"));
+    _ = try evalOk("Data([ :probe = [ :a = :string ] ])");
+    try std.testing.expectEqualStrings("1", try evalOk("see len(DataQuery(\"select 1\", []))"));
+    try std.testing.expectEqualStrings("1", try evalOk("see RsHasGeneric([ :table = \"probe\" ], \"list\")"));
+    try std.testing.expectEqualStrings("", try evalOk("see RsContractCheck(\"nope\", \"nope\", [])"));
+    _ = try evalOk("aRs = Ask(:x, :y, [])");
+}
+
+test "gate: the region-terminator counter does not grow on plain evals" {
+    try fresh();
+    // A long-lived server evaluates constantly; the class list must not
+    // grow for code that opens no declaration region.
+    const before = try std.testing.allocator.dupe(u8, try evalOk("see len(ringvm_classeslist())"));
+    defer std.testing.allocator.free(before);
+    var i: usize = 0;
+    while (i < 200) : (i += 1) _ = try evalOk("nRs = 1 + 1");
+    try std.testing.expectEqualStrings(before, try evalOk("see len(ringvm_classeslist())"));
+}
+
+test "gate: the load detector discriminates present from absent" {
+    try fresh();
+    // Every file's sentinel is really there...
+    for ([_][]const u8{ "jsonencode", "__dispatch", "dataquery", "rsrungeneric", "rscontractcheck", "ask" }) |name| {
+        try std.testing.expect(bridge.probeFunction(name));
+    }
+    // ...and the check would notice if one were not. Without this, a
+    // detector that always answered "yes" would look identical.
+    try std.testing.expect(!bridge.probeFunction("rs_no_such_function_xyz"));
+}
