@@ -122,3 +122,60 @@ the leaderboard pass went 1162 → 96 ms and 19,758 → 277 ms. Cost is one
 n-pointer allocation on the first random access, repaid on the second.
 Held by the full oracle battery — ~850 programs still byte-exact — since
 this is the VM's most-used accessor.
+
+> ### Read this before trusting the paragraph above — added 2026-08-15
+>
+> **This exact change was proposed upstream as the second half of
+> [#1642](https://github.com/ring-lang/ring/pull/1642) and rejected**, and
+> the rejection measured out correct. RingScript carried the same patch,
+> re-measured it, and **withdrew it**; RingServ still has it, at
+> `ringvm/src/rlist.c:322`.
+>
+> Mahmoud's objection: building the array has a cost, and a program that
+> *mixes* adding and reading creates and destroys it repeatedly. Two builds
+> differing in nothing but this change came out **1.7–2.3× slower on mixed
+> add/read**.
+>
+> **And the reassurance in the last sentence above is the trap.** The
+> ~850-program byte-exact oracle was green *with the patch in place* —
+> because none of those programs does mixed add/read at scale. **A
+> correctness corpus is silent about performance, and silence reads like
+> approval.**
+>
+> This does not automatically make the patch wrong *here*. RingServ serves
+> data tables, and a build-once-then-read-many workload is the favourable
+> case — the one where the patch wins. But that has never been measured on
+> RingServ's own workload, and the numbers above only measure the half that
+> flatters it.
+>
+> **What this needs:** an A/B on two RingServ builds differing only in this
+> patch, over a request mix that *appends while reading* — not another
+> read-only pass. If the mixed case regresses, the supported answer is the
+> one already in the language: `ringvm_genarray(aList)`, called explicitly
+> at the point where a list stops being mutated. That is what RingScript
+> does now.
+>
+> Full reasoning and Mahmoud's exact words: **RingUpstream**,
+> [`REGISTER.md`](https://github.com/mayouni/ringupstream) Part 6.
+
+---
+
+# Upstream fixes to pick up at the next vendor swap
+
+Bugs fixed in Ring **after 1.27** that this vendored tree still has. These
+are **not** patches to re-apply — they arrive for free with a newer Ring.
+Six of them, verified against Ring's commit log on 2026-08-15. Worth
+scheduling as **one** swap rather than six errands:
+
+| fix | landed as | what the vendored 1.27 still does |
+|---|---|---|
+| `private` inside `eval()` | [`7acf95bf`](https://github.com/ring-lang/ring/commit/7acf95bf) | crashes — currently covered by patch 3 above |
+| `strtod`/errno on musl | [`4014382a`](https://github.com/ring-lang/ring/commit/4014382a) | misparses at the edges — currently covered by patch 4 above |
+| `memcpy()` zero-byte source | [`8675fe3a`](https://github.com/ring-lang/ring/commit/8675fe3a) | aborts the process |
+| empty `catch` stack slot | [`cda2ecf0`](https://github.com/ring-lang/ring/commit/cda2ecf0) | leaks one slot per caught raise; `R4` at ~1003 |
+| name folding in four lookups | [`b6aea3d5`](https://github.com/ring-lang/ring/commit/b6aea3d5) | `varptr("nTotal")` raises `R6`; `ring_state_findvar` silently misses |
+| operator overloading with a list element | [`05dc3f49`](https://github.com/ring-lang/ring/commit/05dc3f49) | `o1 + a[1]` reads a type-confused pointer and the process dies silently |
+
+Patches **3 and 4 can be dropped** at the swap — they are now upstream. The
+`sort()` fix in patch 7 was **merged** as the accepted half of #1642 and can
+be dropped too.
