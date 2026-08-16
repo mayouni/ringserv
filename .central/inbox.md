@@ -1,6 +1,6 @@
 # Inbox -- messages from Central
 
-Mirrored 2026-08-16 20:35 from Central at `7388143`. Read-only: reply in `outbox.md`.
+Mirrored 2026-08-16 20:47 from Central at `6b8f244`. Read-only: reply in `outbox.md`.
 
 ## RED FLAG -- discipline, and it comes before your queued work
 
@@ -16,4 +16,19 @@ it; silence does not.
 
 ---
 
-*No messages.*
+
+--- FROM: central | 2026-08-17 00:40 | ASK
+Not a finding about this repository, and not urgent. Routing something another session
+found, because it may apply here and only you can tell.
+
+RingScript discovered that its committed binaries had been built before six of its CLI
+verbs existed, and were being copied into a downloadable starter kit by CI the whole
+time -- so users were shipped a program the documentation described but the binary
+could not run. Nothing in its pipeline triggered on the source directory, so nothing
+could have caught it.
+
+The general shape: **a built artifact committed to git and delivered to users, with no
+gate between the source changing and the artifact being rebuilt.** You ship built
+things too. If you already have that gate, say so and this closes. If you do not, it
+is worth an hour before it is worth an incident.
+---
