@@ -118,12 +118,22 @@ from an AST would be a second, weaker opinion. Details and the honest
 limits (including one gate recording a construct the young grammar
 does *not* catch) in [CHECK.md](CHECK.md).
 
-## Phase 6 — Topology + sync
+## Phase 6 — Topology + sync — UNBLOCKED
 
-`Topology()` compilation of the call seam (`:local` / `:server` /
-`:both`); shape logs in SQLite; `GET /sync/shape` with long-poll/SSE;
-`POST /sync/push` with per-client exactly-once; RingScript-side store
-integration.
+Its gate was C3, and **C3 was ratified v1.0 on 2026-08-12**; RingServ
+adopted it on 2026-08-17 (ALIGNMENT.md, [topology.md](topology.md) §5).
+
+`Topology()` compilation of the call seam (`:site` = `:local` /
+`:server` / `:device`, with `:authority`); shape logs in SQLite;
+`GET /sync/shape` with long-poll/SSE; `POST /sync/push` with per-client
+exactly-once; RingScript-side store integration. Two obligations come
+from the contract rather than from this roadmap:
+
+- `Topology()` **emits** `zing.json` for an app that is part of a Zing
+  solution — the builder authors, the manifest ships and is judged.
+  A standalone RingServ app may keep the Ring surface alone.
+- the convergence oracle gains a **placement case**: a service moved
+  between `:local` and `:server` between runs must converge identically.
 **Gate:** the convergence oracle (topology.md §5): N clients, random
 offline interleavings, hostile disconnections — single final state,
 every mutation exactly once. Plus the one-word-move gate: switching a

@@ -114,7 +114,12 @@ pub fn main() !u8 {
     }
 
     if (std.mem.eql(u8, cmd, "check")) {
-        return check.check(arena, if (args.len > 2) args[2] else "app.ring");
+        var app: []const u8 = "app.ring";
+        var as_json = false;
+        for (args[2..]) |a| {
+            if (std.mem.eql(u8, a, "--json")) as_json = true else app = a;
+        }
+        return check.checkMode(arena, app, as_json);
     }
 
     if (std.mem.eql(u8, cmd, "docs")) {

@@ -19,20 +19,25 @@ Topology([
     ],
 
     :services = [
-        :notes  = :local,      # runs in the page (RingScript wasm VM)
-        :tags   = :both,       # local for reads, server is authority
-        :report = :server,     # heavy work stays on RingServ
-        :users  = :server
+        :notes  = [ :site = :local ],                        # runs in the page
+        :tags   = [ :site = :local, :authority = :server ],  # predict here, decide there
+        :report = [ :site = :server ],                       # heavy work stays on RingServ
+        :users  = [ :site = :server ]
     ]
 ])
 ```
+
+These are **C3's** names, not RingServ's private ones — see
+"Adopting the contract" below for what changed and why.
 
 - `:local` — the service's Ring code ships to the page and runs in
   RingScript against the local store. The server may never see a call.
 - `:server` — `serv.call("report.build", …)` from the page becomes a
   wire call to `/api/v1`; the page carries no implementation.
-- `:both` — the code runs locally against synced data; the server
-  runs the same code as the authority on writes.
+- `:site = :local, :authority = :server` — the code runs locally
+  against synced data, and the server runs the same code as the
+  authority on writes. This was one word, `:both`, until C3; see below
+  for why two fields are the better shape.
 
 The seam is uniform: **`serv.call("service.action", payload)`
 everywhere**. The topology compiles the seam — it decides, per
@@ -46,7 +51,7 @@ decision, not a refactor.
 |---|---|
 | 99 % offline, sync on reconnect | all data `:local :sync=:onreconnect`, all services `:local` |
 | Classic SPA + API | all data `:server`, all services `:server` |
-| Instant reads, safe writes | data `:local :sync=:live`, services `:both` |
+| Instant reads, safe writes | data `:local :sync=:live`, services `:site=:local :authority=:server` |
 | Heavy compute offloaded | everything local except `:report = :server` |
 
 ## 3. The sync protocol — deliberately boring
@@ -77,7 +82,7 @@ respectable one):
   a mutation *is a service call*; the model needs no second
   vocabulary.
 - On reconnection the queue is POSTed in order; the server executes
-  each action **authoritatively** (contracts enforced, `:both`
+  each action **authoritatively** (contracts enforced, locally-predicted
   services re-run server-side), records `last_mutation_id` per client
   for exactly-once, and the results flow back to the client *through
   the shape log* — there is no second response channel to reconcile.
@@ -106,7 +111,81 @@ Softanza is where it belongs.
    explicitly out of scope until an authoritative-server model proves
    insufficient for real applications.)
 
-## 5. Verification
+## 5. Adopting the contract — what changed, and what RingServ answered
+
+`Topology()` is the **germ** of the family's Placement Contract
+([C3](https://github.com/mayouni/softanza/blob/main/contracts/placement.md),
+ratified v1.0 on 2026-08-12): the contract generalized what this file
+had, so RingServ is a co-author rather than an adopter. C3's checklist
+asked this repository five questions. Answered here, in order.
+
+**1. `:both` → `site` + `authority`. Adopted.** The contract decomposed
+RingServ's fifth value into `site: local` plus `authority: server`, on
+the ground that `:both` describes a *relationship* between two
+placements rather than a third place. That is right, and the
+decomposition is faithful: `:both` always meant exactly "predict here,
+decide there", with the second half hidden inside the word.
+
+The recorded cost was that "a one-word deployment change becomes two
+fields" (§8.2). Measured against this file, that cost does not
+materialise: moving a service between page and server is still one word
+— `:site` — and the second field appears only when an application wants
+an authority, which is a second decision it was always making silently.
+**RingServ does not ask for a fifth value.**
+
+**2. The two-surface split. Adopted, with one boundary recorded.**
+`Topology()` is the **builder** — Ring, authored by hand; `zing.json` is
+the **artifact** — what ships and what any court reads. RingServ gives
+up only the claim that `topology.ring` is what ships, and the polyglot
+argument for it is sound: a Zig court or a Zen frontend cannot read Ring,
+and deployment truth they cannot read is deployment truth they cannot
+check.
+
+The boundary, recorded rather than resisted: **RingServ is a general
+Ring application server**, usable by someone who has never heard of Zing.
+Emitting a manifest is therefore something a RingServ app *may* do, not
+something it *must* do. For an application that is part of a Zing
+solution, `zing.json` is the artifact and the contract governs. For a
+standalone RingServ application, `Topology()` may remain the only
+surface — and then RingServ is the only consumer, which is precisely the
+case §6 grants was "right when RingServ was the only reader". The
+two-surface doctrine is adopted for the family case; it is not adopted
+as a requirement that every RingServ app join the family.
+
+**3. The authority mechanic. Confirmed as contract language.** §2.2 took
+it from this file and it is exact: the server **re-executes** the action;
+it does not merge a result. Since 2026-08-17 that is also how the write
+path is built — every write goes through one connection and the action
+runs there ([WRITES.md](WRITES.md)), so "the authority is the server-run
+action" is now a property of the implementation, not only of the design.
+
+**4. Pin StzZql. Not applicable — RingServ is not a StzZql consumer.**
+Settled on 2026-08-14 by removal: this core carries no framework query
+dialect and speaks plain SQL over SQLite ([DATA.md](DATA.md)). There is
+no grammar here to pin. Reported upward, because `stzzql`'s README still
+lists RingServ among its expected consumers.
+
+**5. A placement case in the convergence oracle. Owed, and scheduled.**
+A service moved between `:local` and `:server` between runs must
+converge identically — that is a phase-6 gate, recorded in
+[roadmap.md](roadmap.md) rather than claimed here.
+
+### `:device` and `:shadow` are the contract's, not a bilateral deal
+
+MicroRing's `interplay.md` describes the device story as an agreement
+between that repository and this one. It is not — not since C3 was
+ratified on 2026-08-12: `:device` is one of the contract's four
+sites and `:shadow` stays a **data-store mode** under `data.store`,
+which is where MicroRing's own example put it. RingServ implements the
+server half **from the contract**. If MicroRing's session decides
+otherwise for `:shadow` (§8.3 leaves that to it), the contract changes
+and this file follows it — not the other way round.
+
+That correction belongs in MicroRing's file too, and this session did
+not make it: never edit a sibling repository. It is routed to Central
+instead, for MicroRing's own session to apply.
+
+## 6. Verification
 
 The sync suite is a **convergence oracle**: N simulated clients apply
 random interleavings of offline mutations, connections drop and

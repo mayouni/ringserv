@@ -25,12 +25,24 @@ const ts = @cImport({
 
 extern fn tree_sitter_ring() ?*const ts.TSLanguage;
 
+/// A refusal, in the family's shape.
+///
+/// C2 — the Diagnostic Contract — fixes one envelope for every court in the
+/// family: `{code, severity, message, span{file,line,col}, cites[],
+/// language}`. A programmer who learns one refusal format has learned them
+/// all. `check` speaks it from `--json`; the plain output stays human,
+/// because a person reading a terminal is not a court.
 pub const Finding = struct {
     file: []const u8,
     line: usize,
     col: usize,
     message: []const u8,
+    /// C2 `code` — stable, greppable, and never renamed once shipped.
+    code: []const u8,
+    /// C2 `cites` — what the reader should go and read.
+    cites: []const []const u8 = &.{},
     /// Findings that must fail the command; notes that merely inform.
+    /// Maps to C2 `severity`: error / warning.
     hard: bool = true,
 };
 
@@ -78,6 +90,7 @@ fn syntaxOfFile(
                 .line = start.row + 1,
                 .col = start.column + 1,
                 .message = msg,
+                .code = if (is_missing) "RS_SYNTAX_MISSING" else "RS_SYNTAX_ERROR",
             });
             continue; // do not descend further into a reported error
         }
@@ -136,6 +149,65 @@ fn arr(v: ?std.json.Value) []std.json.Value {
 // -------------------------------------------------------------- check
 
 pub fn check(arena: std.mem.Allocator, app_path: []const u8) !u8 {
+    return checkMode(arena, app_path, false);
+}
+
+/// Emit the findings as C2 v1.0 envelopes:
+/// `{code, severity, message, span{file,line,col}, cites[], language}`.
+///
+/// One per finding, so any court in the family can read a RingServ refusal
+/// without knowing anything about RingServ. The plain output stays human —
+/// a person reading a terminal is not a court.
+fn reportC2(items: []const Finding) u8 {
+    var buf: [8192]u8 = undefined;
+    var w = std.fs.File.stdout().writer(&buf);
+    const out = &w.interface;
+    var hard: usize = 0;
+
+    out.print("[", .{}) catch {};
+    for (items, 0..) |f, i| {
+        if (f.hard) hard += 1;
+        if (i > 0) out.print(",", .{}) catch {};
+        out.print("\n  {{\"code\":\"{s}\",\"severity\":\"{s}\",\"message\":", .{
+            f.code,
+            if (f.hard) "error" else "warning",
+        }) catch {};
+        writeJsonString(out, f.message);
+        out.print(",\"span\":{{\"file\":", .{}) catch {};
+        writeJsonString(out, f.file);
+        out.print(",\"line\":{d},\"col\":{d}}},\"cites\":[", .{ f.line, f.col }) catch {};
+        for (f.cites, 0..) |c, j| {
+            if (j > 0) out.print(",", .{}) catch {};
+            writeJsonString(out, c);
+        }
+        out.print("],\"language\":\"ringserv\"}}", .{}) catch {};
+    }
+    out.print("\n]\n", .{}) catch {};
+    out.flush() catch {};
+    return if (hard == 0) 0 else 1;
+}
+
+fn writeJsonString(out: anytype, s: []const u8) void {
+    out.print("\"", .{}) catch return;
+    for (s) |ch| switch (ch) {
+        '"' => out.print("\\\"", .{}) catch return,
+        '\\' => out.print("\\\\", .{}) catch return,
+        '\n' => out.print("\\n", .{}) catch return,
+        '\r' => out.print("\\r", .{}) catch return,
+        '\t' => out.print("\\t", .{}) catch return,
+        else => {
+            if (ch < 0x20) {
+                out.print("\\u{x:0>4}", .{ch}) catch return;
+            } else {
+                out.print("{c}", .{ch}) catch return;
+            }
+        },
+    };
+    out.print("\"", .{}) catch return;
+}
+
+
+pub fn checkMode(arena: std.mem.Allocator, app_path: []const u8, as_json: bool) !u8 {
     var findings: std.ArrayList(Finding) = .empty;
     var grammar_ok = true;
 
@@ -162,7 +234,7 @@ pub fn check(arena: std.mem.Allocator, app_path: []const u8) !u8 {
         if (try catalogOf(arena, app_path)) |cat| {
             const obj = switch (cat.parsed.value) {
                 .object => |o| o,
-                else => return reportFindings(findings.items, grammar_ok),
+                else => return if (as_json) reportC2(findings.items) else reportFindings(findings.items, grammar_ok),
             };
             const services = arr(obj.get("services"));
             services_seen = services.len;
@@ -203,6 +275,8 @@ pub fn check(arena: std.mem.Allocator, app_path: []const u8) !u8 {
                         .col = 0,
                         .message = try std.fmt.allocPrint(arena,
                             "Contract(:{s}) names a service that is not declared", .{cs}),
+                        .code = "RS_CONTRACT_UNKNOWN_SERVICE",
+                        .cites = &.{"docs/services.md#5"},
                     });
                 } else if (!act_found) {
                     try findings.append(arena, .{
@@ -212,6 +286,8 @@ pub fn check(arena: std.mem.Allocator, app_path: []const u8) !u8 {
                         .message = try std.fmt.allocPrint(arena,
                             "Contract(:{s}) declares action `{s}`, which the service does not answer",
                             .{ cs, ca }),
+                        .code = "RS_CONTRACT_UNKNOWN_ACTION",
+                        .cites = &.{"docs/services.md#5"},
                     });
                 }
             }
@@ -233,6 +309,8 @@ pub fn check(arena: std.mem.Allocator, app_path: []const u8) !u8 {
                         .col = 0,
                         .message = try std.fmt.allocPrint(arena,
                             "service `{s}` declares no actions and no table — it can never answer", .{name}),
+                        .code = "RS_SERVICE_UNANSWERABLE",
+                        .cites = &.{"docs/services.md#2"},
                     });
                 }
                 for (actions) |a| {
@@ -254,6 +332,8 @@ pub fn check(arena: std.mem.Allocator, app_path: []const u8) !u8 {
                             .hard = false,
                             .message = try std.fmt.allocPrint(arena,
                                 "note: {s}.{s} has no Contract — its payload is unchecked", .{ name, act }),
+                            .code = "RS_ACTION_UNCONTRACTED",
+                            .cites = &.{"docs/services.md#5"},
                         });
                     }
                 }
@@ -264,10 +344,12 @@ pub fn check(arena: std.mem.Allocator, app_path: []const u8) !u8 {
                 .line = 0,
                 .col = 0,
                 .message = "the application could not be evaluated (see `ringserv run`)",
+                .code = "RS_APP_UNEVALUABLE",
             });
         }
     }
 
+    if (as_json) return reportC2(findings.items);
     return reportFindings(findings.items, grammar_ok);
 }
 

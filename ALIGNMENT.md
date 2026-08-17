@@ -1,50 +1,105 @@
 # Alignment — RingServ against the Softanza reference design
 
-**Reference**: `softanza/REFERENCE_DESIGN.md` v0.1 (draft, unratified) · 2026-08-08
-**Status**: obligations-if-ratified. Written from outside; this repository's own
-process decides.
+**Reference**: `softanza/REFERENCE_DESIGN.md` **v1.4** · **C3 ratified v1.0,
+2026-08-12**
+**This revision**: 2026-08-17, by RingServ's session (prompt 07, placement half)
+**Status**: **obligations in force**, not obligations-if-ratified
 
-## Where RingServ sits in the reference design
+> The previous revision of this file was written on 2026-08-08 against a *draft,
+> unratified* v0.1, when RingServ had shipped nothing. Five phases have landed
+> since and the contract was ratified. Everything below is stated against the
+> tree as it actually is.
 
-The lean server placement — and, unusually, an *author* of one horizontal contract:
-`Topology()` is the germ the **Placement Contract (C3)** generalizes. RingServ
-co-authors C3 rather than merely adopting it.
+## Where RingServ sits
 
-## What changes here
+The **lean server placement** — and the **germ** of C3: `Topology()` is what the
+Placement Contract generalized, so RingServ co-authored it rather than adopting
+it. Being the germ carries one duty the other co-authors do not have: when a
+claim in the contract is RingServ-shaped, only this repository can say whether
+the generalization was intended.
 
-1. **C3, co-authored.** RingServ's placement vocabulary (`:local` / `:server` /
-   `:both`, and the `:device` / `:shadow` extensions MicroRing designed against it)
-   aligns with the family contract's names and semantics. The server half of the device
-   story becomes something RingServ *implements from the contract* rather than a claim
-   another roadmap makes about it — which resolves the one-way-dependency finding
-   already raised in this repository's issue tracker.
-2. **The ZQL question resolves structurally (decision 6.1).** When StzZql gets its
-   canonical home, RingServ becomes a pinned consumer of the grammar and its fixtures.
-   The documentation's `Zql("insert into orders values ?")` examples then either
-   conform to the pinned grammar or the surface is renamed — the collision ends by
-   pinning, not by negotiation. This supersedes the bilateral framing of the open
-   review issue.
-3. **C5, host half.** RingServ authenticates callers and issues signed principal
-   assertions in the same format as `stzAppServer` (co-authored with stzlib and Zing),
-   so `ACTOR:` binds identically whichever host the manifest declares.
-4. **C2** — the Phase 5 `check` speaks the family diagnostic envelope from its first
-   refusal.
+## What has been delivered
+
+| | |
+|---|---|
+| Phase 1 | resident native Ring VM · 18 bridge gates · oracle byte-exact |
+| Phase 2 | services on `POST /api/v1` · both service forms · fuzz · flat-memory soak |
+| Phase 3 | SQLite, `Data()` schema, plain-SQL query surface, generic services, `Contract()` |
+| Phase 4 | the CLI: `new` · `dev` · `test` · `where` · static routes · cross-compiled dist |
+| Phase 5 | `check` and `docs` — syntax from tree-sitter, structure from the VM |
+| Since | C JSON codec (byte-identical to the pure reference), one-writer connection, VM swapped to patched Ring |
+
+**12 gate suites green**, one command: `zig build gates -- --full`.
+
+## The six horizontal contracts, as they stand here
+
+### C3 — Placement · **adopted, this session**
+
+Answered in [docs/topology.md §5](docs/topology.md), decision by decision:
+
+- **`:both` decomposed into `site` + `authority` — adopted.** The recorded cost
+  (§8.2, "a one-word change becomes two fields") does not materialise: moving a
+  service is still one word, and the second field names a decision the
+  application was already making silently. RingServ does not ask for a fifth
+  value.
+- **The two-surface split — adopted**, with one boundary recorded: RingServ is a
+  *general* Ring application server, so emitting `zing.json` is something an app
+  **may** do, not something it must. Family app: the manifest ships and the
+  contract governs. Standalone app: `Topology()` may remain the only surface.
+- **The authority mechanic — confirmed** as contract language, and since
+  2026-08-17 it is also how the write path is built ([WRITES.md](docs/WRITES.md)).
+- **StzZql pin — not applicable.** RingServ is not a StzZql consumer.
+- **Placement case in the convergence oracle — owed**, scheduled as a phase-6
+  gate.
+
+### C2 — Diagnostic · **adopted, this session**
+
+`ringserv check --json` emits one C2 v1.0 envelope per finding —
+`{code, severity, message, span{file,line,col}, cites[], language}` with
+`language: "ringserv"`. Six stable codes: `RS_SYNTAX_ERROR`,
+`RS_SYNTAX_MISSING`, `RS_CONTRACT_UNKNOWN_SERVICE`,
+`RS_CONTRACT_UNKNOWN_ACTION`, `RS_SERVICE_UNANSWERABLE`,
+`RS_ACTION_UNCONTRACTED` (warning) and `RS_APP_UNEVALUABLE`.
+
+Prompt 07 asked for this *before* `check` was built; `check` shipped in phase 5
+on 2026-08-14, so this was a retrofit rather than a birth. It cost one output
+mode, which is the cheap version of that mistake, but the prompt was right that
+earlier would have been cheaper still.
+
+### C5 — Actor · **open, and not closed here**
+
+RingServ must authenticate callers and issue signed principal assertions in the
+same format as `stzAppServer`, so `ACTOR:` binds identically whichever host a
+manifest declares. That work is co-authored and rides with Zing's Bedrock
+revision (prompt 10). **Pending — recorded so it is not silently forgotten.**
+
+### C1 · C4 · C6 — nothing owed here yet
+
+No obligation has been stated against RingServ for the world, evolution or
+commons contracts. If one arrives, it arrives through the mailbox.
 
 ## What must not change
 
-The service envelope (`{service, action, payload}` → uniform reply) — the projection
-spec already maps Zing flows onto it and it is the best-shaped seam in the family. The
-phase ordering, except the one gate below.
+The **service envelope** — `{service, action, payload}` → uniform
+`{code, message, data}`. Zing's projection spec maps its flows onto it, and it
+is the best-shaped seam in the family. Phase ordering also stands.
 
-## Order and gates
+## Phase 6 is unblocked
 
-**Phase 6 (Topology + sync) does not start before C3 is ratified** — it is the phase
-C3 rewrites if it comes second. Phases 1–5 proceed untouched; item 2 lands whenever the
-extraction happens; item 3 follows C3.
+Its gate was C3, and **C3 was ratified on 2026-08-12**. The previous revision of
+this file held phase 6 until ratification; that hold is lifted. What phase 6 now
+owes the contract, beyond its own design: the placement case in the convergence
+oracle, and — for an app that is part of a Zing solution — `Topology()` emitting
+`zing.json` rather than being read directly.
 
-## Honest boundaries
+## Findings routed upward, not fixed here
 
-This file supersedes part of the earlier review issue (the ZQL collision's *resolution
-path*), not its facts. C3 is co-authored: if RingServ's topology semantics resist the
-generalization, that finding goes back to the reference design before either side
-builds.
+Never edit a sibling repository. These went to Central:
+
+1. **`stzzql`'s README lists RingServ among its expected consumers.** RingServ is
+   not one, by a decision taken on 2026-08-14. That README is wrong and is not
+   this session's to correct.
+2. **C3 §2.1's two disputed claims are RingServ-shaped and describe an unbuilt
+   design** — answered as the germ; see the memo of 2026-08-17.
+3. **MicroRing's `interplay.md` still calls the device story bilateral.** It is
+   the contract's now. MicroRing's own session applies that.
