@@ -36,6 +36,7 @@ const suites = [
 
 if (full) {
     suites.push({ name: "soak (3k requests)", node: "soak-lite.js", args: ["3000"] });
+    suites.push({ name: "soak (data layer) ", node: "soak-data.js", args: ["2000"] });
     suites.push({ name: "native oracle     ", node: "oracle.js" });
     suites.push({ name: "wide sweep (samples)", node: "sweep.js" });
     // The documentation corpus is generated on demand; run it only when

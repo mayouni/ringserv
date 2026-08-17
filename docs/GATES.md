@@ -21,6 +21,7 @@ none stops the others: a full picture beats an early exit.
 | **check + docs** (21) | seeded defects: syntax shapes, contracts naming things that do not exist, services that can never answer — each must be NAMED and fail; plus the clean scaffold staying silent |
 | **CLI gates** (16) | new → test → dev → edit → reload → where, including that a failing expectation *fails the run* |
 | **soak** (`--full`) | 3,000 requests with flat memory |
+| **soak — data layer** (`--full`) | sustained mixed CRUD on a file database: connections, prepared statements, WAL, and the per-cell allocation path — flat memory, bounded WAL, an exact final row count, and survival across a restart |
 | **native oracle** (`--full`) | the 24 shared playground examples, byte-identical to native `ring.exe` |
 | **wide sweep — samples** (`--full`) | **249 of Ring's own sample programs** byte-identical, 62 more required to run cleanly |
 | **wide sweep — docs** (`--full`) | the same, over ~500 snippets extracted from Ring's documentation |
@@ -70,11 +71,40 @@ listed in `tests/sweep.js` with its reason — chiefly Ring's
 fails the sweep**, and an entry that stops diverging is announced so
 the list cannot rot into excuses nobody rechecks.
 
+## What the data soak measured
+
+`tests/soak-data.js` runs a mixed CRUD workload against a **file**
+database, so it exercises what `soak-lite` never touches: a connection
+per worker, a prepared statement per call, the WAL, and a Ring list
+allocated per row *per cell* on every read. It also keeps score, so a
+run that leaked nothing but corrupted a row still fails.
+
+Result over 2,000 operations on 2,000 seeded rows: **RSS flat at
+~70 MB** (69.9 → 70.1), WAL checkpointed and bounded, the final row
+count exactly right, and every row present after a restart.
+
+**It also found where the time goes**, which no gate had measured
+before:
+
+| operation | cost |
+|---|---|
+| `get` by id | 1.5 ms |
+| `list` with `limit 50` | 5.5 ms |
+| `create` | 12.5 ms |
+| `list` of 2,000 rows | **163 ms** |
+
+Isolating that last one: querying SQLite *and* building the 2,000
+column-keyed rows costs **17 ms**; encoding them to JSON costs
+**113 ms** — about 87 % of the response. The cause is known and was
+deferred deliberately: RingServ uses the **pure-Ring** JSON codec,
+where RingScript ships a C codec (`rs_json.c`) held byte-identical to
+it precisely for this reason. Vendoring that codec is the obvious
+next optimization, and it is not yet done.
+
 ## What is still thin (honest list)
 
-- **Soak has no data layer.** The flat-memory evidence predates
-  SQLite; connections and prepared statements are a resource class
-  with no endurance evidence yet.
+- **Large responses are JSON-bound**, as measured above — a known
+  cost with a known fix, not a mystery.
 - **Ports are hardcoded** (8080/8093/8094/8095), so a leftover
   process breaks a run, and suites cannot run in parallel.
 - **`dev`'s child can outlive its parent** when the parent is killed
