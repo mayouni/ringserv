@@ -69,25 +69,56 @@ and answering from a different database. Every number in this document
 comes from repeated runs with p50/p90 reported, a verified row count,
 and a confirmed-dead previous process.
 
-## What to do about it
+## The fix, and what it bought
 
-Not done yet, and deliberately not decided in passing — the fix is a
-real design change:
+**Writes now share a single dedicated connection** — many readers, one
+writer, SQLite's own recommended server shape. Reads keep their
+per-worker connections and their parallelism; only writes travel
+through the shared one, behind a mutex. `docs/WORKERS.md` is unchanged:
+this decides which *connection* a write uses, not which thread runs it.
 
-**Give writes a single dedicated connection.** Many readers, one
-writer is SQLite's own recommended server shape. Reads keep their
-per-worker connections and their parallelism; writes queue onto one
-connection, which removes the multi-connection commit cost entirely.
-The worker model in `docs/WORKERS.md` stays as it is — this changes
-only which connection a write travels on.
+Which statements are writes comes from **SQLite itself**
+(`sqlite3_stmt_readonly` after preparing), not from reading the SQL
+text, so a write hidden in a CTE or fired by a trigger cannot be
+mistaken for a read. A write pays one extra prepare to move to the
+writer; that is the price of not guessing.
 
-Cheaper partial measures, if that proves awkward:
+In process, worker count the only variable:
 
-- Batch related writes into one explicit transaction where an action
-  performs several — worth ~100× on that path, per the table above.
-- Nothing here argues for `synchronous=OFF`; the cost is not the
-  flush, and durability should not be traded for a problem this is
-  not.
+| | before | after |
+|---|---:|---:|
+| insert, 1 worker | 0.07 ms | 0.13 – 0.19 ms |
+| insert, 3 workers | **4.5 – 6.2 ms** | **0.15 – 0.16 ms** |
+
+Over HTTP, on a verified 2,000-row database:
+
+| operation | before | after |
+|---|---:|---:|
+| empty request | 0.89 ms | 0.63 ms |
+| `get` by id | 1.19 ms | 0.69 ms |
+| **`create`** | **10.13 ms** | **0.78 ms** |
+| `list` with `limit 50` | 1.44 ms | 1.11 ms |
+
+The single-worker case is slightly *slower* — 0.07 ms to ~0.15 ms —
+because every write now pays a mutex and a second prepare. That is the
+honest cost of the routing, and it buys the 3-worker case a 30×
+improvement, so it is the right trade for a server. Nothing was gained
+by trading away durability: `synchronous` is untouched, because the
+cost was never the flush.
+
+### The hazard it introduced, and the gate that holds it
+
+A shared writer makes `sqlite3_last_insert_rowid` a property of the
+*connection* rather than of the caller. Two workers inserting at once
+would each read whichever insert landed last, and a service would hand
+a client **somebody else's id** — a data-correctness bug, not a
+performance one. `db.zig` captures the rowid into thread-local state
+under the same lock that performed the insert, making the pair atomic.
+
+Three gates in `tests/crud-gates.js` hold it: 60 concurrent creates all
+succeed, every returned id is distinct, and **each id names the row it
+created**. A fourth checks that a write through the writer connection
+is visible to a reader connection immediately.
 
 ## Reproducing it
 

@@ -1,11 +1,19 @@
 //! db.zig — the SQLite layer.
 //!
-//! The concurrency model follows WORKERS.md: each VM worker thread owns a
-//! private RingState, and here it also owns a private SQLite connection to
-//! the same database file. SQLite in WAL mode is built for exactly this —
-//! concurrent readers with one writer at a time — so no connection is ever
-//! shared between threads (SQLITE_THREADSAFE=2 enforces it at the library
-//! level: serialized per connection, never across).
+//! MANY READERS, ONE WRITER. Each VM worker thread owns a private
+//! RingState (WORKERS.md) and a private SQLite READ connection; every
+//! write in the process goes through a single shared write connection
+//! behind a mutex.
+//!
+//! That split is a measurement, not a preference. With a connection per
+//! worker, each commit cost 4.5–6.2 ms once three connections held the
+//! file open, against 0.07 ms with one — SQLite's WAL commit coordinates
+//! through the shared-memory index, and the cost grows with the number
+//! of attached connections (docs/WRITES.md). Reads keep their own
+//! connections and their parallelism, because reads never paid it.
+//!
+//! SQLITE_THREADSAFE=2 means a single connection must not be touched by
+//! two threads at once, which is exactly what the write mutex enforces.
 //!
 //! Every entry point answers Ring, never the process: a failed statement
 //! raises a trappable Ring error carrying SQLite's own message, so a bad
@@ -44,9 +52,28 @@ extern fn rs_list_getstringsize(pList: ?*anyopaque, n: c_int) c_int;
 extern fn rs_list_isnumber(pList: ?*anyopaque, n: c_int) c_int;
 extern fn rs_list_getdouble(pList: ?*anyopaque, n: c_int) f64;
 
-/// This worker's connection. Opened lazily on first use, closed never —
-/// a worker lives as long as the process.
+/// This worker's READ connection. Opened lazily on first use, closed
+/// never — a worker lives as long as the process.
 threadlocal var g_db: ?*c.sqlite3 = null;
+
+/// The single WRITE connection, shared by every worker and guarded by
+/// the mutex below. Many readers, one writer is SQLite's own recommended
+/// server shape, and here it is not a preference but a measurement:
+/// a per-worker commit cost 4.5–6.2 ms with three connections open on
+/// the file and 0.07 ms with one (docs/WRITES.md). Reads keep their own
+/// connections and their parallelism; only writes come through here.
+var g_write_db: ?*c.sqlite3 = null;
+var g_write_mutex: std.Thread.Mutex = .{};
+
+/// The rowid of the last insert THIS worker made, captured while the
+/// write mutex was still held.
+///
+/// This is load-bearing. With a shared writer, `sqlite3_last_insert_rowid`
+/// is a property of the connection, not of the caller — so two workers
+/// inserting concurrently would each read whichever insert landed last,
+/// and a service would hand a client somebody else's id. Capturing it
+/// under the same lock that performed the insert makes the pair atomic.
+threadlocal var g_last_insert_id: i64 = 0;
 /// The database path, set once at boot by the main thread before workers
 /// start (read-only afterwards, so no lock is needed).
 var g_path: [:0]const u8 = ":memory:";
@@ -77,8 +104,10 @@ pub fn setDisplayPath(path: []const u8) void {
     g_display_path = path;
 }
 
-fn openIfNeeded(p: ?*anyopaque) ?*c.sqlite3 {
-    if (g_db) |db| return db;
+/// Open one connection to the configured database, with this server's
+/// pragmas applied. Used for both the per-worker readers and the one
+/// writer, so they cannot drift apart.
+fn openConn(p: ?*anyopaque) ?*c.sqlite3 {
     // A program that never declared a database still gets one: the
     // shared in-memory default, configured on first touch.
     if (!g_configured) configure(":memory:") catch {
@@ -92,15 +121,76 @@ fn openIfNeeded(p: ?*anyopaque) ?*c.sqlite3 {
         if (db) |d| _ = c.sqlite3_close(d);
         return null;
     }
-    // WAL: concurrent readers alongside a writer — the whole reason N
+    // WAL: concurrent readers alongside the writer — the whole reason N
     // workers can share one file. Meaningless for :memory:, harmless there.
     if (!g_is_memory) _ = c.sqlite3_exec(db, "PRAGMA journal_mode=WAL;", null, null, null);
     _ = c.sqlite3_exec(db, "PRAGMA foreign_keys=ON;", null, null, null);
-    // Writers queue rather than fail instantly when another worker holds
-    // the write lock. 5s is long for a request and short for a deadlock.
+    // Writers queue rather than fail instantly when another connection
+    // holds the write lock. 5s is long for a request, short for a deadlock.
     _ = c.sqlite3_busy_timeout(db, 5000);
+    return db;
+}
+
+/// This worker's read connection.
+fn openIfNeeded(p: ?*anyopaque) ?*c.sqlite3 {
+    if (g_db) |db| return db;
+    const db = openConn(p) orelse return null;
     g_db = db;
     return db;
+}
+
+/// The shared write connection. THE CALLER MUST HOLD g_write_mutex.
+fn writerLocked(p: ?*anyopaque) ?*c.sqlite3 {
+    if (g_write_db) |db| return db;
+    const db = openConn(p) orelse return null;
+    g_write_db = db;
+    return db;
+}
+
+/// A prepared statement plus the connection it belongs to. When `is_write`
+/// is set the write mutex is HELD and `release` must be called.
+const Routed = struct {
+    stmt: ?*c.sqlite3_stmt,
+    db: ?*c.sqlite3,
+    is_write: bool,
+
+    fn release(self: Routed) void {
+        _ = c.sqlite3_finalize(self.stmt);
+        if (self.is_write) g_write_mutex.unlock();
+    }
+};
+
+/// Prepare a statement on the right connection.
+///
+/// Which one it is comes from SQLite itself — `sqlite3_stmt_readonly`
+/// after preparing — rather than from inspecting the SQL text, so a
+/// write hidden inside a CTE or a trigger cannot be mistaken for a read.
+/// A write costs one extra prepare (microseconds) to move to the writer;
+/// that is the price of not guessing.
+fn prepareRouted(p: ?*anyopaque, sql: [:0]const u8) ?Routed {
+    const rdb = openIfNeeded(p) orelse return null;
+    var stmt: ?*c.sqlite3_stmt = null;
+    if (c.sqlite3_prepare_v2(rdb, sql.ptr, -1, &stmt, null) != c.SQLITE_OK) {
+        fail(p, rdb, "sql error");
+        return null;
+    }
+    if (c.sqlite3_stmt_readonly(stmt) != 0) {
+        return .{ .stmt = stmt, .db = rdb, .is_write = false };
+    }
+
+    _ = c.sqlite3_finalize(stmt);
+    g_write_mutex.lock();
+    const wdb = writerLocked(p) orelse {
+        g_write_mutex.unlock();
+        return null;
+    };
+    var wstmt: ?*c.sqlite3_stmt = null;
+    if (c.sqlite3_prepare_v2(wdb, sql.ptr, -1, &wstmt, null) != c.SQLITE_OK) {
+        fail(p, wdb, "sql error");
+        g_write_mutex.unlock();
+        return null;
+    }
+    return .{ .stmt = wstmt, .db = wdb, .is_write = true };
 }
 
 fn argText(p: ?*anyopaque, n: c_int) []const u8 {
@@ -153,9 +243,8 @@ fn fail(p: ?*anyopaque, db: ?*c.sqlite3, what: []const u8) void {
     ring_vm_error(p, msg);
 }
 
-/// Ring: __db_exec(cSql, ...) — run a statement, return rows changed.
+/// Ring: __db_exec(cSql, aParams) — run a statement, return rows changed.
 pub fn execHook(p: ?*anyopaque) callconv(.c) void {
-    const db = openIfNeeded(p) orelse return;
     const sql = argText(p, 1);
     if (sql.len == 0) {
         ring_vm_error(p, "__db_exec: empty statement");
@@ -167,25 +256,23 @@ pub fn execHook(p: ?*anyopaque) callconv(.c) void {
     };
     defer alloc.free(sql_z);
 
-    var stmt: ?*c.sqlite3_stmt = null;
-    if (c.sqlite3_prepare_v2(db, sql_z.ptr, -1, &stmt, null) != c.SQLITE_OK) {
-        fail(p, db, "sql error");
-        return;
-    }
-    defer _ = c.sqlite3_finalize(stmt);
-    bindArgs(p, stmt);
-    const rc = c.sqlite3_step(stmt);
+    const r = prepareRouted(p, sql_z) orelse return;
+    defer r.release();
+    bindArgs(p, r.stmt);
+    const rc = c.sqlite3_step(r.stmt);
     if (rc != c.SQLITE_DONE and rc != c.SQLITE_ROW) {
-        fail(p, db, "sql error");
+        fail(p, r.db, "sql error");
         return;
     }
-    ring_vm_api_retnumber(p, @floatFromInt(c.sqlite3_changes(db)));
+    // Both of these are properties of the CONNECTION, so they must be
+    // read before the write lock is released — see g_last_insert_id.
+    if (r.is_write) g_last_insert_id = c.sqlite3_last_insert_rowid(r.db);
+    ring_vm_api_retnumber(p, @floatFromInt(c.sqlite3_changes(r.db)));
 }
 
 /// Ring: __db_query(cSql, ...) — return a list of row lists. Each cell is
 /// a Ring string or number; NULL becomes "".
 pub fn queryHook(p: ?*anyopaque) callconv(.c) void {
-    const db = openIfNeeded(p) orelse return;
     const sql = argText(p, 1);
     if (sql.len == 0) {
         ring_vm_error(p, "__db_query: empty statement");
@@ -197,12 +284,10 @@ pub fn queryHook(p: ?*anyopaque) callconv(.c) void {
     };
     defer alloc.free(sql_z);
 
-    var stmt: ?*c.sqlite3_stmt = null;
-    if (c.sqlite3_prepare_v2(db, sql_z.ptr, -1, &stmt, null) != c.SQLITE_OK) {
-        fail(p, db, "sql error");
-        return;
-    }
-    defer _ = c.sqlite3_finalize(stmt);
+    const r = prepareRouted(p, sql_z) orelse return;
+    defer r.release();
+    const stmt = r.stmt;
+    const db = r.db;
     bindArgs(p, stmt);
 
     const out = ring_vm_api_newlist(p);
@@ -236,7 +321,6 @@ pub fn queryHook(p: ?*anyopaque) callconv(.c) void {
 /// This is what services return, because JSON objects are what clients
 /// want; positional rows stay available for internal use.
 pub fn rowsHook(p: ?*anyopaque) callconv(.c) void {
-    const db = openIfNeeded(p) orelse return;
     const sql = argText(p, 1);
     if (sql.len == 0) {
         ring_vm_error(p, "__db_rows: empty statement");
@@ -248,12 +332,10 @@ pub fn rowsHook(p: ?*anyopaque) callconv(.c) void {
     };
     defer alloc.free(sql_z);
 
-    var stmt: ?*c.sqlite3_stmt = null;
-    if (c.sqlite3_prepare_v2(db, sql_z.ptr, -1, &stmt, null) != c.SQLITE_OK) {
-        fail(p, db, "sql error");
-        return;
-    }
-    defer _ = c.sqlite3_finalize(stmt);
+    const r = prepareRouted(p, sql_z) orelse return;
+    defer r.release();
+    const stmt = r.stmt;
+    const db = r.db;
     bindArgs(p, stmt);
 
     const out = ring_vm_api_newlist(p);
@@ -290,12 +372,12 @@ pub fn rowsHook(p: ?*anyopaque) callconv(.c) void {
     ring_vm_api_retlist(p, out);
 }
 
-/// Ring: __db_insertid() — rowid of the last insert on THIS worker's
-/// connection (which is why it is meaningful at all: no other thread
-/// shares it).
+/// Ring: __db_insertid() — the rowid of the last insert THIS worker
+/// made. Read from the value captured under the write lock, never from
+/// the shared connection: asking the connection now could return an
+/// insert another worker made in the meantime.
 pub fn insertIdHook(p: ?*anyopaque) callconv(.c) void {
-    const db = openIfNeeded(p) orelse return;
-    ring_vm_api_retnumber(p, @floatFromInt(c.sqlite3_last_insert_rowid(db)));
+    ring_vm_api_retnumber(p, @floatFromInt(g_last_insert_id));
 }
 
 /// Ring: __db_columns(cTable) — column names of a table, for the schema

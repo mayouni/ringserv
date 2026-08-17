@@ -16,7 +16,7 @@ none stops the others: a full picture beats an early exit.
 | **bridge gates** (18, in process) | residency, trapped errors with real line numbers, reset, the region terminator, `give`, `rs_call`, filesystem `load`, **load integrity**, and the **C JSON codec held byte-identical to the pure-Ring reference** |
 | **service gates** (16 + 200-body fuzz) | dispatch in both forms, envelopes, 404/400/500, Action-suffix privacy, 24-way parallelism, survival |
 | **schema gates** (18) | declared tables and columns, automatic `id`, 40 concurrent writes across workers, cross-worker visibility, persistence across restart, idempotent re-declaration, shared in-memory database |
-| **CRUD + contracts** (38) | every generic action, paging, filters, `:actions`, overrides, and **every validation rule the validator implements** |
+| **CRUD + contracts** (42) | every generic action, paging, filters, `:actions`, overrides, **every validation rule the validator implements**, and — since writes share one connection — that 60 concurrent creates return 60 distinct ids, each naming the row it created |
 | **data fuzz** (9, 400 payloads) | the payload-key **SQL boundary**, hostile shapes, and proof the database is untouched afterwards |
 | **check + docs** (21) | seeded defects: syntax shapes, contracts naming things that do not exist, services that can never answer — each must be NAMED and fail; plus the clean scaffold staying silent |
 | **CLI gates** (16) | new → test → dev → edit → reload → where, including that a failing expectation *fails the run* |
@@ -117,11 +117,10 @@ approximate.
 
 ## What is still thin (honest list)
 
-- **Writes cost ~10 ms because every one is its own WAL commit, and a
-  commit gets ~70× dearer once several worker connections hold the
-  file open** — measured, reproduced, and written up in
-  [WRITES.md](WRITES.md). The fix (one dedicated writer connection,
-  SQLite's own recommended server shape) is **not done**.
+- ~~Writes cost ~10 ms~~ — **fixed**: writes now share one dedicated
+  connection (many readers, one writer), taking `create` from 10.13 ms
+  to 0.78 ms over HTTP. See [WRITES.md](WRITES.md), including the
+  rowid hazard the change introduced and the three gates that hold it.
 - **Micro-benchmarks here need repeated runs**, not one 20-operation
   average: the same work measured between 0.8 ms and 12.9 ms across
   runs before the conditions were controlled. WRITES.md records that

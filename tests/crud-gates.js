@@ -168,6 +168,33 @@ async function call(service, action, payload) {
         check("nothing is required, so an empty payload passes",
             r.status === 200, r.text);
 
+        // ------------------- the hazard the single writer connection made
+        // Writes share ONE connection now, so sqlite3_last_insert_rowid is
+        // a property of that connection rather than of the caller: two
+        // workers inserting at once would each read whichever insert landed
+        // last, and a client would be handed somebody else's id. db.zig
+        // captures the rowid under the same lock that did the insert; this
+        // is the gate that proves it.
+        const conc = await Promise.all(
+            Array.from({ length: 60 }, (_, i) => call("notes", "create", { title: "conc" + i })));
+        const ids = conc.map(x => x.json && x.json.data && x.json.data.id);
+        check("60 concurrent creates all succeed",
+            conc.every(x => x.status === 200 && x.json.code === 0));
+        check("...and every returned id is distinct",
+            new Set(ids).size === 60, "got " + new Set(ids).size + " distinct of 60");
+        check("...and each id names the row it created",
+            (await Promise.all(conc.map((x, i) =>
+                call("notes", "get", { id: x.json.data.id })
+                    .then(g => g.json && g.json.data && g.json.data.title === "conc" + i))))
+                .every(Boolean));
+
+        // Writes go through a different connection than reads now, so a
+        // reader must still see a write the instant it commits.
+        const w = await call("notes", "create", { title: "visible-immediately" });
+        const back = await call("notes", "get", { id: w.json.data.id });
+        check("a write is visible to a reader connection at once",
+            back.status === 200 && back.json.data.title === "visible-immediately", back.text);
+
         check("server never died", !died);
     } finally {
         server.kill();
