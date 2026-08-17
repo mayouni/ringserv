@@ -90,7 +90,7 @@ before — and the finding was acted on.
 |---|---|---|
 | `get` by id | 1.5 ms | 1.3 ms |
 | `list` with `limit 50` | 5.5 ms | 1.8 ms |
-| `create` | 12.5 ms | 11.5 ms |
+| `create` | 12.5 ms | 11.5 ms (see [WRITES.md](WRITES.md) — it is the commit, not the codec) |
 | `list` of 2,000 rows | **163 ms** | **28 ms** |
 
 Isolating that last one showed the cause: querying SQLite *and*
@@ -117,9 +117,15 @@ approximate.
 
 ## What is still thin (honest list)
 
-- **`create` is unchanged at ~11 ms**, and now dominates the write
-  path. Nothing has looked at why; it is a measurement waiting to be
-  made, not a known cost.
+- **Writes cost ~10 ms because every one is its own WAL commit, and a
+  commit gets ~70× dearer once several worker connections hold the
+  file open** — measured, reproduced, and written up in
+  [WRITES.md](WRITES.md). The fix (one dedicated writer connection,
+  SQLite's own recommended server shape) is **not done**.
+- **Micro-benchmarks here need repeated runs**, not one 20-operation
+  average: the same work measured between 0.8 ms and 12.9 ms across
+  runs before the conditions were controlled. WRITES.md records that
+  mistake too, because the numbers it corrects were mine.
 - **Ports are hardcoded** (8080/8093/8094/8095), so a leftover
   process breaks a run, and suites cannot run in parallel.
 - **`dev`'s child can outlive its parent** when the parent is killed
