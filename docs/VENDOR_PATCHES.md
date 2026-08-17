@@ -221,6 +221,62 @@ flag and this table is reproducible by anyone who doubts it.
 
 ---
 
+# The 2026-08-17 VM swap
+
+The vendored tree is now **Ring master `8a89cc00c2`** — the same tree
+RingScript swapped to on 08-16, taken wholesale, because RingServ's
+`ringvm/` came from RingScript's and the two are byte-identical again.
+`version()` still reports **1.27**, on RingScript's reasoning: master is
+1.27 plus fixes with no features, and the version a user tests against
+matters more than the commit the source came from.
+
+**Local patches: 7 → 4.** Three left with the swap:
+
+| patch | why it went |
+|---|---|
+| `private` inside `eval()` (stmt.c) | landed upstream — the fix in the tree is our logic, minus our comment |
+| `strtod`/errno on musl (vmexpr.c) | landed upstream |
+| the #1642 random-access accessor (rlist.c ×3) | rejected upstream, withdrawn by RingScript, and **[measured indifferent for RingServ](#the-ab-run-2026-08-17)** — keeping it would mean hand-porting a rejected change onto a new file at every future swap, for a benefit our own workload cannot detect |
+
+The four that remain are the ones the bridge depends on: the
+computed-goto dispatch loop (vm.c), the error-line capture (vmerror.c),
+`ICO_NEWLINE` kept in eval'd bytecode (vmeval.c), and the object-cache
+hooks (vmoop.c).
+
+An application that *does* want random-access-after-sort has the
+supported route the language already provides: `ringvm_genarray(aList)`,
+called where a list stops being mutated. That is what RingScript does.
+
+## What the swap broke, and what caught it
+
+**Taking a file wholesale silently reverted a RingServ-only edit.**
+`rs_error_line` in `vmerror.c` is `_Thread_local` here — RingServ runs N
+worker threads, so a shared global would let one worker's failing line
+overwrite another's. RingScript has no such need and its file declares a
+plain global; copying it over dropped the qualifier.
+
+The failure mode was quiet and would have been easy to shrug at:
+`bridge.zig` declares the symbol `extern threadlocal`, so Zig read a
+thread-local slot that C never wrote and **every error reported
+`line 0`** — no link error, no crash, just a runtime that had lost its
+line numbers. The phase-1 gate *"errors carry real line numbers and the
+state survives"* failed on the first run after the swap, which is the
+entire reason that gate exists.
+
+Both sides are thread-local again, and `vmerror.c` now carries a comment
+saying so, because this is exactly the edit the next swap will drop.
+
+## Verification
+
+- All **12 gate suites** green, including both wide sweeps.
+- Sample sweep unchanged at **249 exact / 62 ran / 0 mismatch**, and the
+  native-failure count did **not** rise — the thing RingScript warned to
+  watch, since our VM now carries fixes the 1.27 oracle lacks.
+- `eval("class q private b = 2")` now runs here and prints its result;
+  **native `ring.exe` 1.27 dies silently on it**, producing no output.
+  That is the swap visibly working, and a live demonstration that the
+  differential oracle is now behind the VM it checks.
+
 # Upstream fixes to pick up at the next vendor swap
 
 Bugs fixed in Ring **after 1.27** that this vendored tree still has. These
@@ -237,6 +293,4 @@ scheduling as **one** swap rather than six errands:
 | name folding in four lookups | [`b6aea3d5`](https://github.com/ring-lang/ring/commit/b6aea3d5) | `varptr("nTotal")` raises `R6`; `ring_state_findvar` silently misses |
 | operator overloading with a list element | [`05dc3f49`](https://github.com/ring-lang/ring/commit/05dc3f49) | `o1 + a[1]` reads a type-confused pointer and the process dies silently |
 
-Patches **3 and 4 can be dropped** at the swap — they are now upstream. The
-`sort()` fix in patch 7 was **merged** as the accepted half of #1642 and can
-be dropped too.
+**Done — all three were dropped by the 2026-08-17 swap above.**

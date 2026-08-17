@@ -220,6 +220,9 @@ for (const dir of DIRS) {
     })(root);
 }
 
+/** Every candidate file this run could have judged, by ledger key. */
+const inScope = new Set(files.map(f => knownKey(path.relative(ROOT, f))));
+
 const tally = { match: 0, ran: 0, mismatch: 0, servfail: 0, nativefail: 0, skip: 0, known: 0 };
 const failures = [];
 const knownSeen = new Set();
@@ -307,7 +310,13 @@ if (!LIST_ONLY) {
     // must not rot into a set of excuses nobody rechecks.
     // Only meaningful against the default corpus: another --root simply
     // does not contain these files.
-    if (!argRoot) for (const k of KNOWN_DIVERGENCES.keys()) {
+    // Judge only entries whose file was actually IN SCOPE this run. The
+    // samples corpus and the documentation corpus are swept separately,
+    // so a `--root` guard was the wrong axis: it still announced the doc
+    // entry as "fixed" on every samples run. Crying wolf is how a checker
+    // teaches people to ignore it.
+    for (const k of KNOWN_DIVERGENCES.keys()) {
+        if (!inScope.has(k)) continue;
         if (!knownSeen.has(k)) console.log("NOTE: known divergence no longer diverges (remove it): " + k);
     }
     if (failures.length) {

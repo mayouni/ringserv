@@ -8,7 +8,14 @@
 **  pVM->nLineNumber to its try-time value before any catch block runs, so
 **  the failing line must be captured here. Re-apply on vendor upgrades.
 */
-_Thread_local unsigned int rs_error_line = 0; /* RINGSERV: thread-local for the N-worker model */
+/*
+**  RINGSERV: thread-local. RingServ runs N worker threads, each with its
+**  own RingState, so a shared global here would let one worker's failing
+**  line overwrite another's between the error and the catch block that
+**  reports it. Re-apply on every vendor swap — taking RingScript's file
+**  wholesale silently reverts it, which is how it was lost once already.
+*/
+_Thread_local unsigned int rs_error_line = 0;
 
 RING_API void ring_vm_error(VM *pVM, const char *cStr) {
 	/* Check if we have active error */

@@ -73,8 +73,9 @@ const vm_cflags = [_][]const u8{
     "-fno-sanitize=undefined",
 };
 
-/// Extra flags appended to every vendored-VM compile. Empty unless an
-/// A/B build option sets it (see -Dno-arraycache below).
+/// Extra flags appended to every vendored-VM compile. Currently empty;
+/// kept as the seam an A/B build option plugs into (the #1642 accessor
+/// A/B used it before that patch left with the 2026-08-17 VM swap).
 var vm_extra_flags: []const []const u8 = &.{};
 
 const stub_cflags = [_][]const u8{
@@ -140,12 +141,6 @@ fn addVm(mod: *std.Build.Module, b: *std.Build) void {
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
 
-    // -Dno-arraycache builds WITHOUT the rejected #1642 accessor patch
-    // (ringvm/src/rlist.c), so the A/B in docs/VENDOR_PATCHES.md compares
-    // two builds differing in nothing else.
-    if (b.option(bool, "no-arraycache", "Build without the #1642 random-access array patch") orelse false) {
-        vm_extra_flags = &.{"-DRING_NO_ARRAYONRANDOMACCESS"};
-    }
     const optimize: std.builtin.OptimizeMode =
         if (b.option(bool, "debug", "Build in Debug mode") orelse false)
             .Debug
