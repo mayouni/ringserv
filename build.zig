@@ -73,6 +73,10 @@ const vm_cflags = [_][]const u8{
     "-fno-sanitize=undefined",
 };
 
+/// Extra flags appended to every vendored-VM compile. Empty unless an
+/// A/B build option sets it (see -Dno-arraycache below).
+var vm_extra_flags: []const []const u8 = &.{};
+
 const stub_cflags = [_][]const u8{
     "-DRING_NODLL=1",
     "-DRING_LIMITEDSYS=1",
@@ -118,11 +122,14 @@ fn addTreeSitter(mod: *std.Build.Module, b: *std.Build) void {
 fn addVm(mod: *std.Build.Module, b: *std.Build) void {
     mod.addIncludePath(b.path("ringvm/include"));
     mod.addIncludePath(b.path("vendor/sqlite"));
-    mod.addCSourceFiles(.{ .files = &vm_sources, .flags = &vm_cflags });
-    mod.addCSourceFiles(.{
-        .files = &vm_hot_sources,
-        .flags = &(vm_cflags ++ [_][]const u8{"-O2"}),
-    });
+    const base = b.allocator.alloc([]const u8, vm_cflags.len + vm_extra_flags.len) catch @panic("oom");
+    @memcpy(base[0..vm_cflags.len], &vm_cflags);
+    @memcpy(base[vm_cflags.len..], vm_extra_flags);
+    const hot = b.allocator.alloc([]const u8, base.len + 1) catch @panic("oom");
+    @memcpy(hot[0..base.len], base);
+    hot[base.len] = "-O2";
+    mod.addCSourceFiles(.{ .files = &vm_sources, .flags = base });
+    mod.addCSourceFiles(.{ .files = &vm_hot_sources, .flags = hot });
     mod.addCSourceFiles(.{
         .files = &.{ "src/native_stubs.c", "src/rs_oop.c", "src/rs_json.c" },
         .flags = &stub_cflags,
@@ -132,6 +139,13 @@ fn addVm(mod: *std.Build.Module, b: *std.Build) void {
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
+
+    // -Dno-arraycache builds WITHOUT the rejected #1642 accessor patch
+    // (ringvm/src/rlist.c), so the A/B in docs/VENDOR_PATCHES.md compares
+    // two builds differing in nothing else.
+    if (b.option(bool, "no-arraycache", "Build without the #1642 random-access array patch") orelse false) {
+        vm_extra_flags = &.{"-DRING_NO_ARRAYONRANDOMACCESS"};
+    }
     const optimize: std.builtin.OptimizeMode =
         if (b.option(bool, "debug", "Build in Debug mode") orelse false)
             .Debug

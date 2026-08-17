@@ -148,15 +148,76 @@ this is the VM's most-used accessor.
 > RingServ's own workload, and the numbers above only measure the half that
 > flatters it.
 >
-> **What this needs:** an A/B on two RingServ builds differing only in this
-> patch, over a request mix that *appends while reading* — not another
-> read-only pass. If the mixed case regresses, the supported answer is the
-> one already in the language: `ringvm_genarray(aList)`, called explicitly
-> at the point where a list stops being mutated. That is what RingScript
-> does now.
->
 > Full reasoning and Mahmoud's exact words: **RingUpstream**,
 > [`REGISTER.md`](https://github.com/mayouni/ringupstream) Part 6.
+
+## The A/B, run 2026-08-17
+
+Two builds differing in **nothing but this patch**
+(`zig build` against `zig build -Dno-arraycache`, the `#ifndef` at
+`ringvm/src/rlist.c:321`), same benchmark file
+(`tests/fixtures/bench-lists.ring`), two runs each. Times in ms.
+
+**Upstream's objection reproduces.** Append and read the *same* list,
+interleaved — every append frees the array, every read rebuilds it:
+
+| n | patch ON | patch OFF | |
+|---:|---:|---:|---|
+| 2,000 | 2 – 3 | 1 | |
+| 10,000 | 68 – 70 | 41 – 43 | **1.65× slower** |
+| 20,000 | 315 – 331 | 144 – 157 | **2.1× slower** |
+
+That lands inside the 1.7–2.3× Mahmoud measured. The rejection was
+right about the cost, and this build has it too.
+
+**The win is real, and larger.** Build once, then read by a permuted
+index — the "sort a table, then walk the rows" shape:
+
+| n | patch ON | patch OFF | |
+|---:|---:|---:|---|
+| 2,000 | 0 | 0 – 1 | |
+| 10,000 | 1 – 2 | 25 – 26 | **~15× faster** |
+| 20,000 | 3 – 4 | 157 – 187 | **~45× faster** |
+
+**And RingServ's own workload cannot tell the difference:**
+
+| measurement | patch ON | patch OFF |
+|---|---:|---:|
+| query + build rows ×10, n=500 | 24 – 25 | 25 – 27 |
+| `JsonEncode` rows ×10, n=500 | 2 | 1 – 2 |
+| walk rows, read a field ×10, n=500 | 1 – 2 | 1 – 2 |
+| query + build rows ×10, n=2000 | 159 – 160 | 160 – 163 |
+| `JsonEncode` rows ×10, n=2000 | 9 | 9 – 11 |
+| walk rows, read a field ×10, n=2000 | 8 | 8 |
+
+Every figure is inside run-to-run noise. The reason is structural: a
+query result is **built by appending and then read sequentially**, which
+the cursor cache already serves, and a row is a 4-item list — far under
+the 64-item threshold that triggers the array at all. RingServ's
+response path never reaches the code this patch changes.
+
+### What the numbers support, and what they do not
+
+They support **keeping** it: the case it wins is ~45× and the case it
+loses is ~2×, and the losing shape (appending to a list while indexing
+*that same list*, at ten thousand items) is rarer in service code than
+"read a query result by index" — which is what an application doing its
+own sorting or aggregation over rows will write. Without the patch that
+application meets a cliff (157 ms against 3 ms at 20,000 rows) with
+nothing in the error to explain it.
+
+They do **not** settle two things, and neither is a measurement:
+
+- **Family consistency.** RingScript, same author and same family,
+  withdrew this patch and now calls `ringvm_genarray(aList)` explicitly
+  where a list stops being mutated. MicroRing carries it too. Three
+  projects disagreeing about a vendor patch is a maintenance fact, not
+  a performance one.
+- **The pending VM swap.** Carrying a rejected-upstream change through
+  a swap is exactly what makes swaps expensive.
+
+The toggle stays in the tree either way, so the decision is one build
+flag and this table is reproducible by anyone who doubts it.
 
 ---
 

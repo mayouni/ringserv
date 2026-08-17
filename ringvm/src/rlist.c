@@ -318,12 +318,21 @@ RING_API Item *ring_list_getitem_gc(void *pState, List *pList, unsigned int nInd
 		**  the second. Small lists keep walking — an allocation would cost
 		**  more than the walk saves.
 		*/
+		/*
+		**  Compiled out by -DRING_NO_ARRAYONRANDOMACCESS, so two builds can
+		**  differ in NOTHING BUT this change. Upstream rejected it (#1642)
+		**  on the ground that mixed add/read rebuilds the array repeatedly;
+		**  the A/B that settles it for RingServ lives in
+		**  docs/VENDOR_PATCHES.md and tests/fixtures/bench-lists.ring.
+		*/
+#ifndef RING_NO_ARRAYONRANDOMACCESS
 		if (lUseListCache && pList->nSize > RING_LIST_ARRAYONRANDOMACCESS) {
 			ring_list_genarray_gc(pState, pList);
 			if (pList->pItemsArray != NULL) {
 				return pList->pItemsArray[nIndex - 1];
 			}
 		}
+#endif
 		if (nIndex < (pList->nSize - nIndex)) {
 			/* Linear Search  From Start */
 			pItems = pList->pFirst;
