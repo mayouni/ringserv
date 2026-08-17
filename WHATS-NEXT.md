@@ -2,7 +2,7 @@
 
 > ## Answer from this file. You need nothing else and no permission.
 >
-> **Written 2026-08-17 09:26, from Central at `9cc317f`.** Central keeps it current: it
+> **Written 2026-08-17 12:54, from Central at `dd2bdb9`.** Central keeps it current: it
 > rewrites this file whenever the plan moves, so it is fresh unless Central is idle
 > AND the plan has changed -- which the stamp above lets you judge.
 >
@@ -39,7 +39,7 @@ The full cross-repository picture, when you actually need it, is in
 
 *Session: RingServ backend session*
 
-RingServ vendors an rlist.c accessor change that ring-lang/ring rejected and RingScript withdrew after measuring it 1.7-2.3x slower on mixed add/read. This repository describes it approvingly and cites an 850-program oracle that was green with the patch in place -- which tests correctness, not the thing that was measured.
+ORDERED SECOND at RingServ's request and Central agreed: the vendored-VM swap may delete the very patch this would measure, so measuring first risks spending an afternoon on a question that does not survive. Run it only if the accessor patch is still present after the swap.
 
 <details><summary>the prompt</summary>
 
@@ -55,11 +55,11 @@ Append a SESSION-LOG line with the numbers.
 
 </details>
 
-### Adopt the placement rules and settle whether RingServ still uses the ZQL grammar
+### Adopt the placement rules -- the ZQL half is already closed
 
 *Session: RingServ backend session*
 
-Four phases have shipped. The two phases this shapes -- the checker and the topology work -- are both still unbuilt, so it costs a document now and a rewrite later.
+HALF DONE by RingServ itself: it settled the ZQL question on 08-14 by REMOVAL -- no framework dialect, plain SQL over SQLite -- and its checker shipped in phase 5, so the queue calling it unbuilt was wrong. Only the placement half remains, and RingScript reports that placement.md 2.1 may be RingServ-shaped rather than universal, which only RingServ can confirm.
 
 <details><summary>the prompt</summary>
 
