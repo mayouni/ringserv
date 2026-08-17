@@ -13,7 +13,7 @@ none stops the others: a full picture beats an early exit.
 
 | Suite | What it defends |
 |---|---|
-| **bridge gates** (16, in process) | residency, trapped errors with real line numbers, reset, the region terminator, `give`, `rs_call`, filesystem `load`, **load integrity** |
+| **bridge gates** (18, in process) | residency, trapped errors with real line numbers, reset, the region terminator, `give`, `rs_call`, filesystem `load`, **load integrity**, and the **C JSON codec held byte-identical to the pure-Ring reference** |
 | **service gates** (16 + 200-body fuzz) | dispatch in both forms, envelopes, 404/400/500, Action-suffix privacy, 24-way parallelism, survival |
 | **schema gates** (18) | declared tables and columns, automatic `id`, 40 concurrent writes across workers, cross-worker visibility, persistence across restart, idempotent re-declaration, shared in-memory database |
 | **CRUD + contracts** (38) | every generic action, paging, filters, `:actions`, overrides, and **every validation rule the validator implements** |
@@ -84,27 +84,42 @@ Result over 2,000 operations on 2,000 seeded rows: **RSS flat at
 count exactly right, and every row present after a restart.
 
 **It also found where the time goes**, which no gate had measured
-before:
+before — and the finding was acted on.
 
-| operation | cost |
-|---|---|
-| `get` by id | 1.5 ms |
-| `list` with `limit 50` | 5.5 ms |
-| `create` | 12.5 ms |
-| `list` of 2,000 rows | **163 ms** |
+| operation | before | after |
+|---|---|---|
+| `get` by id | 1.5 ms | 1.3 ms |
+| `list` with `limit 50` | 5.5 ms | 1.8 ms |
+| `create` | 12.5 ms | 11.5 ms |
+| `list` of 2,000 rows | **163 ms** | **28 ms** |
 
-Isolating that last one: querying SQLite *and* building the 2,000
-column-keyed rows costs **17 ms**; encoding them to JSON costs
-**113 ms** — about 87 % of the response. The cause is known and was
-deferred deliberately: RingServ uses the **pure-Ring** JSON codec,
-where RingScript ships a C codec (`rs_json.c`) held byte-identical to
-it precisely for this reason. Vendoring that codec is the obvious
-next optimization, and it is not yet done.
+Isolating that last one showed the cause: querying SQLite *and*
+building the 2,000 column-keyed rows cost 17 ms, while encoding them
+to JSON cost **113 ms** — about 87 % of the response. RingServ was
+using the **pure-Ring** JSON codec, deliberately, since phase 1.
+
+RingScript had already solved this and held the solution to a hard
+contract, so the fix was to vendor rather than to invent:
+`src/rs_json.c` is now the shipped codec, and `src/ringlib/json.ring`
+stays exactly where it was as **the reference it is held
+byte-identical to** — which is also the implementation native Ring
+runs. Encoding 2,000 rows ten times went from **1,134 ms to 7 ms**.
+
+The contract is enforced, not asserted: two gates load the pure
+reference under renamed entry points and diff the two codecs in one
+VM — 22 decode cases including every malformed shape `json.ring` has
+an opinion about (and the quirks it *tolerates*, like a lone `+`
+parsing as 0, which an imitation would miss), and 11 encode cases
+covering control bytes, deep nesting and number formatting. Error
+texts are compared verbatim, because `json.ring`'s `raise()` messages
+carry 1-based positions the C codec must reproduce rather than
+approximate.
 
 ## What is still thin (honest list)
 
-- **Large responses are JSON-bound**, as measured above — a known
-  cost with a known fix, not a mystery.
+- **`create` is unchanged at ~11 ms**, and now dominates the write
+  path. Nothing has looked at why; it is a measurement waiting to be
+  made, not a known cost.
 - **Ports are hardcoded** (8080/8093/8094/8095), so a leftover
   process breaks a run, and suites cannot run in parallel.
 - **`dev`'s child can outlive its parent** when the parent is killed

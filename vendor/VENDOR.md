@@ -5,3 +5,6 @@ pinned:
 - sqlite: amalgamation 3.53.4 (2026), public domain, from sqlite.org/2026/sqlite-amalgamation-3530400.zip
 - tree-sitter runtime: 277f53f886de938bb686703ce593b36184ef5470 (MIT)
 - tree-sitter-ring: ysdragon @ 946a10c9736251c235e387a063c9a873b105ecdd (2026-08-06, MIT) — days old, pinned; expect churn
+
+vendored from RingScript (same author, same project family), not from a third party:
+- src/rs_json.c: the C JSON codec, held byte-identical to src/ringlib/json.ring by tests/gates.zig

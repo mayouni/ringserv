@@ -123,7 +123,10 @@ fn addVm(mod: *std.Build.Module, b: *std.Build) void {
         .files = &vm_hot_sources,
         .flags = &(vm_cflags ++ [_][]const u8{"-O2"}),
     });
-    mod.addCSourceFiles(.{ .files = &.{ "src/native_stubs.c", "src/rs_oop.c" }, .flags = &stub_cflags });
+    mod.addCSourceFiles(.{
+        .files = &.{ "src/native_stubs.c", "src/rs_oop.c", "src/rs_json.c" },
+        .flags = &stub_cflags,
+    });
     mod.addCSourceFiles(.{ .files = &.{"vendor/sqlite/sqlite3.c"}, .flags = &sqlite_cflags });
 }
 

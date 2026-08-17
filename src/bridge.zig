@@ -77,6 +77,14 @@ extern fn rs_echo_write(pData: [*]const u8, nLen: usize) void;
 // state's class lists and bytecode; both die on reset, so it must too.
 extern fn rs_objcache_clear() void;
 
+// The C JSON codec (src/rs_json.c). Every service reply is encoded on its
+// way out, so this sits on the response path of every request; the data
+// soak measured the pure-Ring codec at 113 ms of a 163 ms 2,000-row reply.
+// ringlib/json.ring stays shipped as the reference it is held
+// byte-identical to — a gate diffs them on every run.
+extern fn rs_jsonencode_hook(p: ?*anyopaque) callconv(.c) void;
+extern fn rs_jsondecode_hook(p: ?*anyopaque) callconv(.c) void;
+
 // ---------------------------------------------------------------- state
 
 threadlocal var g_state: ?*RingState = null;
@@ -314,11 +322,15 @@ fn mainFoundHook(p: ?*anyopaque) callconv(.c) void {
 }
 
 const see_shim = "func ringvm_see cData ring_vm_see(cData)";
-/// The pure-Ring JSON codec — the reference implementation RingScript's C
-/// codec is held byte-identical to. Run straight from the embedded source
-/// at init (no file layer involved); the embedded map above additionally
-/// serves `load "ringlib/json.ring"` from user code.
-const json_ring_src = @embedFile("ringlib/json.ring");
+/// The JSON surface actually loaded: a thin Ring shim over the C codec in
+/// src/rs_json.c. Same names, same contract, same output bytes.
+const json_ring_src = @embedFile("ringlib/json_c.ring");
+
+/// The pure-Ring codec, NOT loaded — it is the reference the C one is held
+/// byte-identical to, and the implementation native Ring uses. Exposed so
+/// the identity gate can load it under renamed entry points and diff the
+/// two; the embedded map above also serves `load "ringlib/json.ring"`.
+pub const json_pure_src = @embedFile("ringlib/json.ring");
 /// servlib — the service model (Serv, __dispatch, Reply), pure Ring.
 const serv_ring_src = @embedFile("ringlib/serv.ring");
 /// datalib — the schema layer and the SQL query surface, pure Ring.
@@ -365,7 +377,7 @@ pub fn probeFunction(name: []const u8) bool {
 const RingLibFile = struct { name: []const u8, src: [:0]const u8, provides: []const u8 };
 
 const ringlib_files = [_]RingLibFile{
-    .{ .name = "json.ring", .src = json_ring_src, .provides = "jsonencode" },
+    .{ .name = "json_c.ring", .src = json_ring_src, .provides = "jsonencode" },
     .{ .name = "serv.ring", .src = serv_ring_src, .provides = "__dispatch" },
     .{ .name = "data.ring", .src = data_ring_src, .provides = "dataquery" },
     .{ .name = "generic.ring", .src = generic_ring_src, .provides = "rsrungeneric" },
@@ -411,6 +423,8 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__db_columns", &db.columnsHook);
     ring_vm_funcregister2(st, "__db_path", &db.pathHook);
     ring_vm_funcregister2(st, "__rs_probe", &probeHook);
+    ring_vm_funcregister2(st, "rs_jsonencode", &rs_jsonencode_hook);
+    ring_vm_funcregister2(st, "rs_jsondecode", &rs_jsondecode_hook);
     ring_state_runcode(st, see_shim);
 
     // Load the embedded library, and PROVE each file loaded.
