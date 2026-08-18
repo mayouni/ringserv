@@ -180,14 +180,16 @@ dialect and speaks plain SQL over SQLite ([DATA.md](DATA.md)). There is
 no grammar here to pin. Reported upward, because `stzzql`'s README still
 lists RingServ among its expected consumers.
 
-**5. A placement case in the convergence oracle. Half paid, 2026-08-18.**
-The one-word-move gate is built and passing: `tests/fixtures/move-app.ring`
-runs under `:site = :server` and under `:site = :local, :authority = :server`
-with **no application code different between them**, and the two runs are
-compared as data — create, get, update, list, delete, an aggregate and a
-contract violation must all answer identically. The remaining half, the same
-move across an *offline interleaving*, waits on the sync protocol and stays
-recorded in [roadmap.md](roadmap.md).
+**5. A placement case in the convergence oracle. Paid in full, 2026-08-18.**
+Twice over. *Online*: `tests/fixtures/move-app.ring` runs under
+`:site = :server` and under `:site = :local, :authority = :server` with **no
+application code different between them**, and the two runs are compared as
+data — create, get, update, list, delete, an aggregate and a contract
+violation must all answer identically. *Offline*: the convergence oracle
+itself runs at both placements, with the same clients, the same seed and
+therefore the same interleaving, and the final states must match. That is
+the harder half, because it is the one where a placement difference would
+actually hide.
 
 ### `:device` and `:shadow` are the contract's, not a bilateral deal
 
@@ -255,7 +257,51 @@ Three rules, all from the contract rather than from taste:
 `topology.ring`, where the vocabulary lives; `check` only carries them out.
 Two places deciding what a bad placement is would eventually disagree.
 
-## 7. Verification
+## 7. What the sync half is, as built
+
+Shipped 2026-08-18. The protocol is the one §3 describes, with three
+decisions the design did not have to make and the implementation did.
+
+**The log is kept by triggers, not by application code.** A log maintained
+by whatever remembers to maintain it is wrong exactly when it matters — a
+hand-written `DataExec`, a cascade, a path nobody has thought of yet. The
+`json_object(...)` is built from the *live* columns, so a table that gains
+one through additive migration logs it without anyone rewriting a trigger.
+
+**Triggers are created before the old generation is dropped, never after.**
+This was found by a gate, not by reasoning. `DROP` then `CREATE` leaves a
+window with no trigger, and every worker re-runs the install at boot while
+the server is *already serving* — `/health` answers as soon as the first
+worker is up. A write landing in another worker's window is a write missing
+from the log forever, which is the quietest corruption a local-first system
+has. So the column set is stamped into the trigger name, the new generation
+is created with `IF NOT EXISTS`, and only then is the stale one dropped.
+
+**Exactly-once is a property of the database, not of the control flow.**
+`__db_write_begin/commit/rollback` hold the single writer for a whole
+transaction, so a mutation's *claim* and its *work* are one commit. Three
+consequences, each gated:
+
+- a duplicate finds the claim taken and does nothing;
+- a **gap is refused** — accepting mutation 5 while 4 has never arrived
+  would strand 4 forever, since it would return, land under the mark, and
+  be discarded as a duplicate it never was;
+- a **refusal rolls back its own claim**, so the client may fix the payload
+  and resend *the same id*. Keeping the claim would turn a validation error
+  into permanent data loss. The rest of that batch is reported
+  `not-attempted` rather than pushed past.
+
+The long poll waits on an **HTTP thread**, not a VM worker: parking a
+worker for twenty seconds would take a share of the server's capacity out
+of service per waiting client. It asks the VM only for the shape's head
+offset, which is one indexed `max()`.
+
+**What is not built:** compaction. The floor table and the `must-refetch`
+control exist and are honoured, so a client below the floor is told the
+truth; nothing yet moves the floor. That is phase 8's, and it is recorded
+rather than implied.
+
+## 8. Verification
 
 The sync suite is a **convergence oracle**: N simulated clients apply
 random interleavings of offline mutations, connections drop and

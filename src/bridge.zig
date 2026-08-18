@@ -342,6 +342,9 @@ const contract_ring_src = @embedFile("ringlib/contract.ring");
 /// serv.ring: it reads that file's declaration to check a topology
 /// against the services that actually exist.
 const topology_ring_src = @embedFile("ringlib/topology.ring");
+/// synclib — the shape log and the mutation queue, pure Ring. Loaded
+/// after topology.ring: a shape IS a synced table in the topology.
+const sync_ring_src = @embedFile("ringlib/sync.ring");
 /// The test vocabulary — Call/Expect/…, used by `ringserv test`.
 const testing_ring_src = @embedFile("ringlib/testing.ring");
 
@@ -387,6 +390,7 @@ const ringlib_files = [_]RingLibFile{
     .{ .name = "generic.ring", .src = generic_ring_src, .provides = "rsrungeneric" },
     .{ .name = "contract.ring", .src = contract_ring_src, .provides = "rscontractcheck" },
     .{ .name = "topology.ring", .src = topology_ring_src, .provides = "__rs_topology" },
+    .{ .name = "sync.ring", .src = sync_ring_src, .provides = "__rs_sync_push" },
     .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask" },
 };
 
@@ -425,6 +429,9 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__db_query", &db.queryHook);
     ring_vm_funcregister2(st, "__db_rows", &db.rowsHook);
     ring_vm_funcregister2(st, "__db_insertid", &db.insertIdHook);
+    ring_vm_funcregister2(st, "__db_write_begin", &db.writeBeginHook);
+    ring_vm_funcregister2(st, "__db_write_commit", &db.writeCommitHook);
+    ring_vm_funcregister2(st, "__db_write_rollback", &db.writeRollbackHook);
     ring_vm_funcregister2(st, "__db_columns", &db.columnsHook);
     ring_vm_funcregister2(st, "__db_path", &db.pathHook);
     ring_vm_funcregister2(st, "__rs_probe", &probeHook);

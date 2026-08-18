@@ -194,7 +194,11 @@ func __rs_data_apply aIgnored
 	if len(aData) = 0
 		return 0
 	ok
-	return RsSchemaApply(aData)
+	nTables = RsSchemaApply(aData)
+	# The shape log rides the same boot step, and for the same reason:
+	# it is schema. Idempotent, so N workers racing to install it is safe.
+	RsSyncApply()
+	return nTables
 
 # --------------------------------------------------------------- helpers
 

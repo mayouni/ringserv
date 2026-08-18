@@ -118,7 +118,7 @@ from an AST would be a second, weaker opinion. Details and the honest
 limits (including one gate recording a construct the young grammar
 does *not* catch) in [CHECK.md](CHECK.md).
 
-## Phase 6 — Topology + sync — placement ✅ (passed 2026-08-18), sync in progress
+## Phase 6 — Topology + sync ✅ (passed 2026-08-18)
 
 Its gate was C3, and **C3 was ratified v1.0 on 2026-08-12**; RingServ
 adopted it on 2026-08-17 (ALIGNMENT.md, [topology.md](topology.md) §5).
@@ -136,20 +136,29 @@ the **one-word move**: the same suite run against `:site = :server` and
 `:site = :local, :authority = :server`, compared as data, with no
 application code different between them.
 
-**Part 2 — sync, still ahead:** shape logs in SQLite;
-`GET /sync/shape` with long-poll/SSE; `POST /sync/push` with per-client
-exactly-once; RingScript-side store integration. Two obligations come
-from the contract rather than from this roadmap:
+**Part 2 — sync ✅ (passed 2026-08-18).** The shape log in SQLite,
+maintained by **triggers** so it is true for every write path;
+`GET /sync/shape` with paging, resume-from-any-offset, `must-refetch`
+honesty and a long poll that waits on an HTTP thread rather than a VM
+worker; `POST /sync/push` with per-client high-water marks. Exactly-once
+is a property of the database, not of the control flow: `__db_write_*`
+holds the single writer for a whole transaction, so a mutation's claim and
+its work are one commit.
+**Gate — passed:** 37 gates (`node tests/sync-gates.js`), of which the
+**convergence oracle** is the point — N clients, random interleavings, a
+third of all pushes retried verbatim as after a dropped response; every
+mutation executed exactly once, and replaying the log from offset zero
+reproduces the server's table.
 
-- ~~`Topology()` **emits** `zing.json`~~ — **done in part 1**, and
-  conditional on solution membership per the ratified §6.
-- the convergence oracle gains a **placement case**: a service moved
-  between `:local` and `:server` must converge identically. Half of this
-  is paid — the one-word move is gated *online*; the offline
-  interleaving of the same move waits on the protocol below.
-**Gate:** the convergence oracle (topology.md §7): N clients, random
-offline interleavings, hostile disconnections — single final state,
-every mutation exactly once.
+Both contract obligations are discharged: the manifest emit landed in part
+1, and the **placement case is paid twice** — the one-word move online, and
+the *same offline interleaving* run at both placements with identical final
+states, which is where a placement difference would actually hide.
+
+Still open, and recorded rather than implied: **compaction**. The floor
+table and the `must-refetch` control exist and are honoured; nothing yet
+moves the floor. Phase 8. RingScript-side store integration is
+RingScript's, and belongs to that repository's plan.
 
 ## Phase 7 — The JS guest
 

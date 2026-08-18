@@ -2,11 +2,11 @@
 
 **Reference**: `softanza/REFERENCE_DESIGN.md` **v1.4** · **C3 ratified v1.0,
 2026-08-12**
-**This revision**: 2026-08-17, by RingServ's session (prompt 07, placement half)
+**This revision**: 2026-08-18, by RingServ's session (phase 6 complete)
 **Status**: **obligations in force**, not obligations-if-ratified
 
-> The previous revision of this file was written on 2026-08-08 against a *draft,
-> unratified* v0.1, when RingServ had shipped nothing. Five phases have landed
+> The revision before last was written on 2026-08-08 against a *draft,
+> unratified* v0.1, when RingServ had shipped nothing. Six phases have landed
 > since and the contract was ratified. Everything below is stated against the
 > tree as it actually is.
 
@@ -27,9 +27,11 @@ the generalization was intended.
 | Phase 3 | SQLite, `Data()` schema, plain-SQL query surface, generic services, `Contract()` |
 | Phase 4 | the CLI: `new` · `dev` · `test` · `where` · static routes · cross-compiled dist |
 | Phase 5 | `check` and `docs` — syntax from tree-sitter, structure from the VM |
-| Since | C JSON codec (byte-identical to the pure reference), one-writer connection, VM swapped to patched Ring |
+| Phase 6 | placement declared, published, enforced, emitted · the sync protocol · the convergence oracle |
+| Since | C JSON codec (byte-identical to the pure reference), one-writer connection, VM swapped to patched Ring, C2 conformance gated |
 
-**12 gate suites green**, one command: `zig build gates -- --full`.
+**10 gate suites green** by default and 14 with `--full`, one command:
+`zig build gates`.
 
 ## The six horizontal contracts, as they stand here
 
@@ -55,8 +57,9 @@ Answered in [docs/topology.md §5](docs/topology.md), decision by decision:
 - **The authority mechanic — confirmed** as contract language, and since
   2026-08-17 it is also how the write path is built ([WRITES.md](docs/WRITES.md)).
 - **StzZql pin — not applicable.** RingServ is not a StzZql consumer.
-- **Placement case in the convergence oracle — owed**, scheduled as a phase-6
-  gate.
+- **Placement case in the convergence oracle — paid, 2026-08-18**, and twice:
+  the one-word move gated *online*, and the same *offline interleaving* run at
+  both placements with identical final states.
 
 ### C2 — Diagnostic · **adopted, this session**
 
@@ -106,7 +109,7 @@ asked three questions. All three have since been answered by work rather than by
 opinion, so the answers live here where they can be checked against the tree.
 
 **1. Is the annex factually right about RingServ?** It was on 2026-08-07 and it is
-not now. It labels RingServ "Phase 0 — a design, not a download"; phases 1–5 have
+not now. It labels RingServ "Phase 0 — a design, not a download"; phases 1–6 have
 shipped, and the two seams the annex depends on are built and gated. It also
 describes the placement vocabulary as `:local` / `:server` / `:both`, and `:both`
 no longer exists — C3 decomposed it into `site` + `authority` (§C3 above). The
@@ -140,13 +143,17 @@ The **service envelope** — `{service, action, payload}` → uniform
 `{code, message, data}`. Zing's projection spec maps its flows onto it, and it
 is the best-shaped seam in the family. Phase ordering also stands.
 
-## Phase 6 is unblocked
+## Phase 6 is done, and both contract obligations with it
 
-Its gate was C3, and **C3 was ratified on 2026-08-12**. The previous revision of
-this file held phase 6 until ratification; that hold is lifted. What phase 6 now
-owes the contract, beyond its own design: the placement case in the convergence
-oracle, and — for an app that is part of a Zing solution — `Topology()` emitting
-`zing.json` rather than being read directly.
+Its gate was C3, ratified 2026-08-12; RingServ adopted it on 08-17 and shipped
+against it on 08-18. The two things phase 6 owed the contract are discharged:
+`Topology()` emits `zing.json` for an app inside a Zing solution and refuses to
+for one that is not, and the convergence oracle's placement case is paid online
+*and* offline.
+
+C3 therefore has a **conforming implementation**, not only signatories. If any
+of the seven placement codes or the manifest shape is wrong against the
+contract, this is the cheapest moment for a co-author to say so.
 
 ## Findings routed upward, not fixed here
 

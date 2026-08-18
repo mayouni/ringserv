@@ -32,6 +32,10 @@ var g_statics: []const StaticRoute = &.{};
 const Job = struct {
     entry: [:0]const u8 = "__dispatch_raw",
     body: []const u8,
+    /// The body is already valid JSON for the entry point's single
+    /// argument, so it must NOT be quoted again. Used where the Zig side
+    /// composes the argument rather than forwarding a request body.
+    raw_arg: bool = false,
     done: std.Thread.ResetEvent = .{},
     status: u16 = 500,
     response: std.ArrayList(u8) = .empty,
@@ -93,7 +97,11 @@ fn serveJob(job: *Job) void {
     // where "not JSON" is a 400 by contract.
     var quoted: std.ArrayList(u8) = .empty;
     defer quoted.deinit(alloc);
-    appendJsonString(&quoted, job.body);
+    if (job.raw_arg) {
+        quoted.appendSlice(alloc, job.body) catch {};
+    } else {
+        appendJsonString(&quoted, job.body);
+    }
     const body_z = alloc.dupeZ(u8, quoted.items) catch {
         job.status = 500;
         job.response.appendSlice(alloc, "{\"code\":1,\"message\":\"out of memory\",\"data\":\"\"}") catch {};
@@ -156,6 +164,68 @@ fn postApiV1(req: *httpz.Request, res: *httpz.Response) !void {
 fn getTopology(req: *httpz.Request, res: *httpz.Response) !void {
     _ = req;
     return runInVm(res, "__rs_topology_public", "0");
+}
+
+/// GET /sync/shape?shape=notes&offset=N&limit=M&live=true
+///
+/// Paged reads from the shape log. `live=true` long-polls: the request
+/// parks HERE, on an HTTP thread, asking the VM only for the shape's head
+/// offset — because parking a VM worker for 20 seconds would take a
+/// twelfth of the server's capacity out of service per waiting client.
+fn getSyncShape(req: *httpz.Request, res: *httpz.Response) !void {
+    const q = try req.query();
+    const shape = q.get("shape") orelse "";
+    const offset = q.get("offset") orelse "0";
+    const limit = q.get("limit") orelse "500";
+    const live = std.mem.eql(u8, q.get("live") orelse "", "true");
+
+    var body: std.ArrayList(u8) = .empty;
+    defer body.deinit(alloc);
+    try body.appendSlice(alloc, "{\"shape\":");
+    appendJsonString(&body, shape);
+    try body.appendSlice(alloc, ",\"offset\":");
+    appendJsonString(&body, offset);
+    try body.appendSlice(alloc, ",\"limit\":");
+    appendJsonString(&body, limit);
+    try body.append(alloc, '}');
+
+    if (live) {
+        // Wait for the head to move past the client's offset. A poll
+        // rather than a condition variable, deliberately: writes arrive
+        // through SQLite triggers on any connection, including a future
+        // second process, so there is no in-process event to wait on that
+        // would still be true tomorrow.
+        const from = std.fmt.parseInt(i64, offset, 10) catch 0;
+        var waited: u32 = 0;
+        while (waited < 20_000) : (waited += 200) {
+            if (try headOf(shape) > from) break;
+            std.Thread.sleep(200 * std.time.ns_per_ms);
+        }
+    }
+    return runInVm(res, "__rs_sync_shape", body.items);
+}
+
+/// The shape's highest offset, asked of a worker. Cheap — one indexed
+/// max() — which is what makes polling for it affordable.
+fn headOf(shape: []const u8) !i64 {
+    var body: std.ArrayList(u8) = .empty;
+    defer body.deinit(alloc);
+    appendJsonString(&body, shape);
+
+    if (g_workers_alive.load(.monotonic) == 0) return 0;
+    var job = Job{ .entry = "__rs_sync_head", .body = body.items, .raw_arg = true };
+    defer job.response.deinit(alloc);
+    enqueue(&job);
+    job.done.timedWait(10 * std.time.ns_per_s) catch return 0;
+    return std.fmt.parseInt(i64, std.mem.trim(u8, job.response.items, " \t\r\n"), 10) catch 0;
+}
+
+fn postSyncPush(req: *httpz.Request, res: *httpz.Response) !void {
+    return runInVm(res, "__rs_sync_push", req.body() orelse "");
+}
+
+fn postSyncState(req: *httpz.Request, res: *httpz.Response) !void {
+    return runInVm(res, "__rs_sync_state", req.body() orelse "");
 }
 
 /// One VM round trip, on the worker pool, with the same timeouts and the
@@ -277,6 +347,9 @@ pub fn start(config: Config) !void {
     router.post("/api/v1", postApiV1, .{});
     router.get("/health", getHealth, .{});
     router.get("/topology", getTopology, .{});
+    router.get("/sync/shape", getSyncShape, .{});
+    router.post("/sync/push", postSyncPush, .{});
+    router.post("/sync/state", postSyncState, .{});
     if (g_statics.len > 0) {
         // Both: "/*" does not match the bare root.
         router.get("/", serveStatic, .{});

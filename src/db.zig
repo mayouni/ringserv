@@ -74,6 +74,23 @@ var g_write_mutex: std.Thread.Mutex = .{};
 /// and a service would hand a client somebody else's id. Capturing it
 /// under the same lock that performed the insert makes the pair atomic.
 threadlocal var g_last_insert_id: i64 = 0;
+
+/// True while THIS worker holds the writer inside an explicit transaction
+/// (`__db_write_begin` … `__db_write_commit`).
+///
+/// Per-statement locking is enough for a single write. It is not enough
+/// for **exactly-once**: claiming a mutation and performing it are two
+/// statements, and another worker slipping between them is precisely the
+/// race the sync push exists to prevent. So a transaction holds the write
+/// mutex for its whole span, and every statement inside it — reads too —
+/// runs on the writer connection, because a transaction that cannot see
+/// its own uncommitted rows is not a transaction.
+///
+/// The hazard this creates is a mutex held across Ring code: an error
+/// between begin and commit would deadlock every writer in the process.
+/// `SyncPush()` therefore wraps the whole span in a Ring `try`, and
+/// rollback is unconditional in the catch.
+threadlocal var g_in_write_txn: bool = false;
 /// The database path, set once at boot by the main thread before workers
 /// start (read-only afterwards, so no lock is needed).
 var g_path: [:0]const u8 = ":memory:";
@@ -152,7 +169,16 @@ fn writerLocked(p: ?*anyopaque) ?*c.sqlite3 {
 const Routed = struct {
     stmt: ?*c.sqlite3_stmt,
     db: ?*c.sqlite3,
+    /// This statement took the write mutex and `release` must give it back.
     is_write: bool,
+    /// This statement ran on the WRITE connection — true both for a lone
+    /// write and for anything inside an explicit transaction. Distinct
+    /// from `is_write` on purpose: a transaction owns the mutex for its
+    /// whole span, so its statements must not unlock it, but they are
+    /// still writer statements and `last_insert_rowid` still belongs to
+    /// them. Conflating the two silently returned id 0 for every insert
+    /// made inside a transaction.
+    on_writer: bool = false,
 
     fn release(self: Routed) void {
         _ = c.sqlite3_finalize(self.stmt);
@@ -168,6 +194,20 @@ const Routed = struct {
 /// A write costs one extra prepare (microseconds) to move to the writer;
 /// that is the price of not guessing.
 fn prepareRouted(p: ?*anyopaque, sql: [:0]const u8) ?Routed {
+    // Inside an explicit transaction the routing question is already
+    // answered: this worker owns the writer, so everything goes there —
+    // and `is_write` stays false so `release` does not unlock a mutex the
+    // transaction still needs.
+    if (g_in_write_txn) {
+        const wdb = writerLocked(p) orelse return null;
+        var tstmt: ?*c.sqlite3_stmt = null;
+        if (c.sqlite3_prepare_v2(wdb, sql.ptr, -1, &tstmt, null) != c.SQLITE_OK) {
+            fail(p, wdb, "sql error");
+            return null;
+        }
+        return .{ .stmt = tstmt, .db = wdb, .is_write = false, .on_writer = true };
+    }
+
     const rdb = openIfNeeded(p) orelse return null;
     var stmt: ?*c.sqlite3_stmt = null;
     if (c.sqlite3_prepare_v2(rdb, sql.ptr, -1, &stmt, null) != c.SQLITE_OK) {
@@ -190,7 +230,7 @@ fn prepareRouted(p: ?*anyopaque, sql: [:0]const u8) ?Routed {
         g_write_mutex.unlock();
         return null;
     }
-    return .{ .stmt = wstmt, .db = wdb, .is_write = true };
+    return .{ .stmt = wstmt, .db = wdb, .is_write = true, .on_writer = true };
 }
 
 fn argText(p: ?*anyopaque, n: c_int) []const u8 {
@@ -266,7 +306,7 @@ pub fn execHook(p: ?*anyopaque) callconv(.c) void {
     }
     // Both of these are properties of the CONNECTION, so they must be
     // read before the write lock is released — see g_last_insert_id.
-    if (r.is_write) g_last_insert_id = c.sqlite3_last_insert_rowid(r.db);
+    if (r.on_writer) g_last_insert_id = c.sqlite3_last_insert_rowid(r.db);
     ring_vm_api_retnumber(p, @floatFromInt(c.sqlite3_changes(r.db)));
 }
 
@@ -370,6 +410,70 @@ pub fn rowsHook(p: ?*anyopaque) callconv(.c) void {
         }
     }
     ring_vm_api_retlist(p, out);
+}
+
+// ------------------------------------------------- explicit transactions
+//
+// Three hooks, and they are the mechanism `exactly-once` rests on. See
+// `g_in_write_txn` above for why per-statement locking is not enough.
+
+/// Ring: __db_write_begin() — take the writer and open a transaction.
+///
+/// BEGIN IMMEDIATE, not the deferred default: the write lock is acquired
+/// now rather than at the first write, so a busy database fails here —
+/// where a caller can retry the whole mutation — instead of halfway
+/// through one.
+pub fn writeBeginHook(p: ?*anyopaque) callconv(.c) void {
+    if (g_in_write_txn) {
+        ring_vm_error(p, "__db_write_begin: already inside a write transaction");
+        return;
+    }
+    g_write_mutex.lock();
+    const wdb = writerLocked(p) orelse {
+        g_write_mutex.unlock();
+        return;
+    };
+    if (c.sqlite3_exec(wdb, "BEGIN IMMEDIATE;", null, null, null) != c.SQLITE_OK) {
+        fail(p, wdb, "cannot begin transaction");
+        g_write_mutex.unlock();
+        return;
+    }
+    g_in_write_txn = true;
+    ring_vm_api_retnumber(p, 1);
+}
+
+fn endWriteTxn(p: ?*anyopaque, sql: [:0]const u8) void {
+    if (!g_in_write_txn) {
+        // Not an error. Rollback is called unconditionally from a catch,
+        // and a catch that fires before the begin succeeded must not
+        // raise a second error on top of the first.
+        ring_vm_api_retnumber(p, 0);
+        return;
+    }
+    // The flag drops and the mutex is released whatever SQLite says: a
+    // transaction that cannot be ended is a reason to stop trusting the
+    // data, never a reason to hold the writer for the rest of the
+    // process's life.
+    const wdb = g_write_db;
+    const rc = if (wdb) |d| c.sqlite3_exec(d, sql.ptr, null, null, null) else c.SQLITE_OK;
+    g_in_write_txn = false;
+    g_write_mutex.unlock();
+    if (rc != c.SQLITE_OK) {
+        fail(p, wdb, "cannot end transaction");
+        return;
+    }
+    ring_vm_api_retnumber(p, 1);
+}
+
+/// Ring: __db_write_commit() — commit and release the writer.
+pub fn writeCommitHook(p: ?*anyopaque) callconv(.c) void {
+    endWriteTxn(p, "COMMIT;");
+}
+
+/// Ring: __db_write_rollback() — discard and release the writer. Safe to
+/// call when no transaction is open, because that is what a catch does.
+pub fn writeRollbackHook(p: ?*anyopaque) callconv(.c) void {
+    endWriteTxn(p, "ROLLBACK;");
 }
 
 /// Ring: __db_insertid() — the rowid of the last insert THIS worker
