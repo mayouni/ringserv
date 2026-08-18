@@ -24,7 +24,13 @@ pub const Config = struct {
 
 var g_statics: []const StaticRoute = &.{};
 
+/// A unit of VM work. `entry` names the Ring function a worker calls;
+/// `body` is its single argument, always handed over as a JSON string so
+/// the decode happens in Ring inside a catch. `__dispatch_raw` is the
+/// service path; `__rs_topology_public` is the placement seam. Adding an
+/// endpoint is adding a Ring function and a route, not a second pipeline.
 const Job = struct {
+    entry: [:0]const u8 = "__dispatch_raw",
     body: []const u8,
     done: std.Thread.ResetEvent = .{},
     status: u16 = 500,
@@ -95,7 +101,7 @@ fn serveJob(job: *Job) void {
     };
     defer alloc.free(body_z);
 
-    const result = std.mem.span(bridge.rs_call("__dispatch_raw", body_z));
+    const result = std.mem.span(bridge.rs_call(job.entry, body_z));
     const err = std.mem.span(bridge.rs_last_error());
     if (err.len != 0) {
         // A servlib-level failure the Ring-side catch nets did not cover —
@@ -140,13 +146,28 @@ fn workerMain(id: u32) void {
 // ------------------------------------------------------------- handlers
 
 fn postApiV1(req: *httpz.Request, res: *httpz.Response) !void {
+    return runInVm(res, "__dispatch_raw", req.body() orelse "");
+}
+
+/// The placement seam a page reads to compile `serv.call`. A GET, because
+/// it is a fact about the deployment rather than a request to do
+/// something — cacheable, proxyable, and answerable before the page has
+/// made a single call.
+fn getTopology(req: *httpz.Request, res: *httpz.Response) !void {
+    _ = req;
+    return runInVm(res, "__rs_topology_public", "0");
+}
+
+/// One VM round trip, on the worker pool, with the same timeouts and the
+/// same liveness check for every endpoint that needs Ring.
+fn runInVm(res: *httpz.Response, entry: [:0]const u8, body: []const u8) !void {
     if (g_workers_alive.load(.monotonic) == 0) {
         res.status = 503;
         res.content_type = .JSON;
         res.body = "{\"code\":1,\"message\":\"no workers available\",\"data\":\"\"}";
         return;
     }
-    var job = Job{ .body = req.body() orelse "" };
+    var job = Job{ .entry = entry, .body = body };
     defer job.response.deinit(alloc);
     enqueue(&job);
     job.done.timedWait(120 * std.time.ns_per_s) catch {
@@ -255,6 +276,7 @@ pub fn start(config: Config) !void {
     var router = try server.router(.{});
     router.post("/api/v1", postApiV1, .{});
     router.get("/health", getHealth, .{});
+    router.get("/topology", getTopology, .{});
     if (g_statics.len > 0) {
         // Both: "/*" does not match the bare root.
         router.get("/", serveStatic, .{});

@@ -139,6 +139,34 @@ pub fn catalogOf(arena: std.mem.Allocator, app_path: []const u8) !?Catalog {
     return .{ .json = owned, .parsed = parsed };
 }
 
+const TopoProblem = struct { code: []const u8, message: []const u8 };
+
+/// The topology's own verdict on itself, asked of the VM that `catalogOf`
+/// already evaluated. Empty for an app with no `Topology()` — silence is
+/// not a problem, and every phase before this one had no topology at all.
+fn topologyProblems(arena: std.mem.Allocator) []const TopoProblem {
+    const raw = std.mem.span(bridge.rs_call("__rs_topology", "0"));
+    if (std.mem.span(bridge.rs_last_error()).len != 0 or raw.len == 0) return &.{};
+    const owned = arena.dupe(u8, raw) catch return &.{};
+    const parsed = std.json.parseFromSlice(std.json.Value, arena, owned, .{}) catch return &.{};
+    const root = switch (parsed.value) {
+        .object => |o| o,
+        else => return &.{},
+    };
+    var out: std.ArrayList(TopoProblem) = .empty;
+    for (arr(root.get("problems"))) |p| {
+        const po = switch (p) {
+            .object => |o| o,
+            else => continue,
+        };
+        const code = str(po.get("code"));
+        const message = str(po.get("message"));
+        if (code.len == 0 or message.len == 0) continue;
+        out.append(arena, .{ .code = code, .message = message }) catch {};
+    }
+    return out.items;
+}
+
 fn str(v: ?std.json.Value) []const u8 {
     const val = v orelse return "";
     return switch (val) {
@@ -351,6 +379,27 @@ pub fn checkMode(arena: std.mem.Allocator, app_path: []const u8, as_json: bool) 
                         });
                     }
                 }
+            }
+            // --- placement, from the same evaluated VM.
+            //
+            // The topology validates itself (topology.ring) because that is
+            // where the vocabulary lives; `check` only carries the verdict
+            // out. Each problem already arrives with its own stable code,
+            // so this loop adds no opinion of its own — which is the point:
+            // two places deciding what a bad placement is would eventually
+            // disagree.
+            for (topologyProblems(arena)) |p| {
+                try findings.append(arena, .{
+                    .file = app_path,
+                    .line = 0,
+                    .col = 0,
+                    .message = p.message,
+                    .code = p.code,
+                    // Defaulting a site or dropping an impossible :sync is a
+                    // repair, not a refusal: the server still runs. Naming a
+                    // service that does not exist is a refusal.
+                    .hard = !std.mem.eql(u8, p.code, "RS_TOPOLOGY_NO_SITE"),
+                });
             }
         } else {
             try findings.append(arena, .{

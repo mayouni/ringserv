@@ -33,6 +33,7 @@ const suites = [
     { name: "CLI gates         ", node: "cli-gates.js" },
     { name: "check + docs      ", node: "check-gates.js" },
     { name: "C2 conformance    ", node: "c2-gates.js" },
+    { name: "placement         ", node: "topology-gates.js" },
 ];
 
 if (full) {

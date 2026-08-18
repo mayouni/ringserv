@@ -7,6 +7,7 @@ const bench = @import("bench.zig");
 const serve = @import("serve.zig");
 const cli = @import("cli.zig");
 const check = @import("check.zig");
+const topology_cmd = @import("topology.zig");
 
 extern fn fflush(stream: ?*anyopaque) c_int;
 
@@ -74,6 +75,7 @@ const usage =
     \\  ringserv test [app.ring]     run tests/ against a scratch database
     \\  ringserv check [app.ring]    syntax + contract agreement, before running
     \\  ringserv docs [--json]       the API catalog, from the declarations
+    \\  ringserv topology [--emit]   the placement map; --emit writes zing.json
     \\  ringserv run <app.ring>      run for real (or run a plain program)
     \\  ringserv eval "<code>"       evaluate Ring code
     \\  ringserv where               versions and paths
@@ -120,6 +122,20 @@ pub fn main() !u8 {
             if (std.mem.eql(u8, a, "--json")) as_json = true else app = a;
         }
         return check.checkMode(arena, app, as_json);
+    }
+
+    if (std.mem.eql(u8, cmd, "topology")) {
+        var app: []const u8 = "app.ring";
+        var do_emit = false;
+        var as_json = false;
+        for (args[2..]) |a| {
+            if (std.mem.eql(u8, a, "--emit")) {
+                do_emit = true;
+            } else if (std.mem.eql(u8, a, "--json")) {
+                as_json = true;
+            } else app = a;
+        }
+        return topology_cmd.topology(arena, app, do_emit, as_json);
     }
 
     if (std.mem.eql(u8, cmd, "docs")) {

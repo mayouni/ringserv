@@ -78,6 +78,23 @@ func __dispatch aReq
 		return RsRefuse(404, "unknown service: " + cService)
 	ok
 
+	# Placement is enforced at the door, next to contracts, and for the
+	# same reason: a deployment declaration that the runtime does not
+	# hold to is a comment. A service the topology puts in the page with
+	# no server authority runs THERE and nowhere else, so answering a
+	# wire call to it would quietly make :local mean "local, mostly".
+	#
+	# 501, not 404: the service exists and this is a truthful statement
+	# about what this host implements. Saying "unknown" would be a lie
+	# with a number in it, and 421 invites HTTP/2 clients to retry.
+	aPlace = RsTopoPlacement(cService)
+	if islist(aPlace) and aPlace[:answerable] = 0
+		return RsRefuse(501, "service `" + cService + "` is placed :site = :" +
+			aPlace[:site] + ", so this server does not run it — call it " +
+			RsTopoWhere(aPlace[:site]) +
+			", or give it :authority = :server to be answered here")
+	ok
+
 	aReq2 = [ :service = cService, :action = cAction, :payload = pPayload ]
 
 	# Contracts are enforced at the door: the action never sees a

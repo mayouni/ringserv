@@ -136,6 +136,13 @@ try {
         ["RS_ACTION_UNCONTRACTED",
             s => s.replace(/Contract\(:hello[\s\S]*?\n\]\)\n/, "")],
         ["RS_APP_UNEVALUABLE", s => "nosuchfunction()\n" + s],
+        // Placement findings ride the same envelope. Prepended, not
+        // appended: in Ring a statement after a func definition belongs
+        // to that function, so a trailing Topology() would be swallowed.
+        ["RS_TOPOLOGY_UNKNOWN_SITE",
+            s => 'Topology([ :app = "c2", :services = [ :hello = [ :site = :orbit ] ] ])\n' + s],
+        ["RS_TOPOLOGY_UNKNOWN_SERVICE",
+            s => 'Topology([ :app = "c2", :services = [ :nosuch = [ :site = :server ] ] ])\n' + s],
     ];
 
     const seen = new Set();

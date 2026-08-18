@@ -180,10 +180,14 @@ dialect and speaks plain SQL over SQLite ([DATA.md](DATA.md)). There is
 no grammar here to pin. Reported upward, because `stzzql`'s README still
 lists RingServ among its expected consumers.
 
-**5. A placement case in the convergence oracle. Owed, and scheduled.**
-A service moved between `:local` and `:server` between runs must
-converge identically — that is a phase-6 gate, recorded in
-[roadmap.md](roadmap.md) rather than claimed here.
+**5. A placement case in the convergence oracle. Half paid, 2026-08-18.**
+The one-word-move gate is built and passing: `tests/fixtures/move-app.ring`
+runs under `:site = :server` and under `:site = :local, :authority = :server`
+with **no application code different between them**, and the two runs are
+compared as data — create, get, update, list, delete, an aggregate and a
+contract violation must all answer identically. The remaining half, the same
+move across an *offline interleaving*, waits on the sync protocol and stays
+recorded in [roadmap.md](roadmap.md).
 
 ### `:device` and `:shadow` are the contract's, not a bilateral deal
 
@@ -200,7 +204,58 @@ That correction belongs in MicroRing's file too, and this session did
 not make it: never edit a sibling repository. It is routed to Central
 instead, for MicroRing's own session to apply.
 
-## 6. Verification
+## 6. What is built, and what the runtime holds to
+
+Shipped 2026-08-18, the placement half of phase 6. The sync half (§3, §4)
+is still design.
+
+**`Topology()` is a declaration, not a compiler.** It stores the map; the
+server publishes and enforces it; the *page* compiles `serv.call` into a
+local dispatch or a fetch by reading it. Putting the compiler on this side
+would put it on the wrong side of the wire.
+
+**`GET /topology`** publishes exactly what a page needs to do that
+compiling — each service's `site`, `authority` and, decisively,
+`answerable` — plus each synced table's `store` and `sync`. It is a GET
+because it states a fact about the deployment rather than asking for work.
+
+**Placement is enforced at the door**, beside contracts and for the same
+reason: a deployment declaration the runtime does not hold to is a comment.
+
+| Declared | A wire call to it |
+|---|---|
+| `:site = :server` | answered |
+| `:site = :local`, `:authority = :server` | **answered** — predicted in the page, decided here |
+| `:site = :local` | **refused, 501** — it runs in the page and nowhere else |
+| `:site = :device` | refused, 501 — routing is phase 7 |
+| not in the topology | answered, as before phase 6 existed |
+
+The refusal is **501, not 404**: the service exists, and this is a truthful
+statement about what this host implements. 404 would be a lie with a number
+in it, and 421 invites HTTP/2 clients to retry. The message names where to
+call it instead *and* the one word that would make it answerable here.
+
+**`ringserv topology`** prints the map; **`--emit`** writes `zing.json`.
+Three rules, all from the contract rather than from taste:
+
+- It emits **only `placement`**. `solution`, `governance` and `targets` are
+  Zing's — a build decision and a deployment decision are different fields
+  (C3 §4.1) — so an existing manifest is *edited*, and a manifest that is
+  not valid JSON is refused rather than overwritten.
+- It **refuses when the app declares no `:solution`**, saying so plainly and
+  exiting 0. That is the ratified jurisdiction sentence made executable: a
+  standalone RingServ app owes no manifest, and reporting the absence as a
+  failure would push people to claim membership they do not have.
+- It never runs at request time. The builder authors, the artifact ships.
+
+`ringserv check` reports placement defects as C2 envelopes over five codes
+(`RS_TOPOLOGY_UNKNOWN_SITE`, `_UNKNOWN_SERVICE`, `_UNKNOWN_STORE`,
+`_UNKNOWN_SYNC`, `_SYNC_WITHOUT_LOCAL`, `_AUTHORITY_NOT_SERVER`,
+`_NO_SITE` as the one warning). The verdicts are computed in
+`topology.ring`, where the vocabulary lives; `check` only carries them out.
+Two places deciding what a bad placement is would eventually disagree.
+
+## 7. Verification
 
 The sync suite is a **convergence oracle**: N simulated clients apply
 random interleavings of offline mutations, connections drop and

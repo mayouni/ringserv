@@ -338,6 +338,10 @@ const data_ring_src = @embedFile("ringlib/data.ring");
 /// Generic table services and contract validation, pure Ring.
 const generic_ring_src = @embedFile("ringlib/generic.ring");
 const contract_ring_src = @embedFile("ringlib/contract.ring");
+/// topologylib — placement as declared data, pure Ring. Loaded AFTER
+/// serv.ring: it reads that file's declaration to check a topology
+/// against the services that actually exist.
+const topology_ring_src = @embedFile("ringlib/topology.ring");
 /// The test vocabulary — Call/Expect/…, used by `ringserv test`.
 const testing_ring_src = @embedFile("ringlib/testing.ring");
 
@@ -382,6 +386,7 @@ const ringlib_files = [_]RingLibFile{
     .{ .name = "data.ring", .src = data_ring_src, .provides = "dataquery" },
     .{ .name = "generic.ring", .src = generic_ring_src, .provides = "rsrungeneric" },
     .{ .name = "contract.ring", .src = contract_ring_src, .provides = "rscontractcheck" },
+    .{ .name = "topology.ring", .src = topology_ring_src, .provides = "__rs_topology" },
     .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask" },
 };
 

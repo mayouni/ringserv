@@ -118,27 +118,38 @@ from an AST would be a second, weaker opinion. Details and the honest
 limits (including one gate recording a construct the young grammar
 does *not* catch) in [CHECK.md](CHECK.md).
 
-## Phase 6 — Topology + sync — UNBLOCKED
+## Phase 6 — Topology + sync — placement ✅ (passed 2026-08-18), sync in progress
 
 Its gate was C3, and **C3 was ratified v1.0 on 2026-08-12**; RingServ
 adopted it on 2026-08-17 (ALIGNMENT.md, [topology.md](topology.md) §5).
 
-`Topology()` compilation of the call seam (`:site` = `:local` /
-`:server` / `:device`, with `:authority`); shape logs in SQLite;
+**Part 1 — placement ✅ (passed 2026-08-18).** `Topology()` as a
+declaration; `GET /topology` publishing the compiled seam; dispatch
+enforcing it (a `:local` service without `:authority = :server` is
+refused 501 over the wire, with the fix in the message);
+`ringserv topology --emit` writing the manifest's `placement` section and
+**only** that, and refusing when the app declares no `:solution` — the
+ratified jurisdiction sentence, executable. `check` reports placement
+defects as C2 envelopes over seven codes.
+**Gate — passed:** 42 gates (`node tests/topology-gates.js`), including
+the **one-word move**: the same suite run against `:site = :server` and
+`:site = :local, :authority = :server`, compared as data, with no
+application code different between them.
+
+**Part 2 — sync, still ahead:** shape logs in SQLite;
 `GET /sync/shape` with long-poll/SSE; `POST /sync/push` with per-client
 exactly-once; RingScript-side store integration. Two obligations come
 from the contract rather than from this roadmap:
 
-- `Topology()` **emits** `zing.json` for an app that is part of a Zing
-  solution — the builder authors, the manifest ships and is judged.
-  A standalone RingServ app may keep the Ring surface alone.
+- ~~`Topology()` **emits** `zing.json`~~ — **done in part 1**, and
+  conditional on solution membership per the ratified §6.
 - the convergence oracle gains a **placement case**: a service moved
-  between `:local` and `:server` between runs must converge identically.
-**Gate:** the convergence oracle (topology.md §5): N clients, random
+  between `:local` and `:server` must converge identically. Half of this
+  is paid — the one-word move is gated *online*; the offline
+  interleaving of the same move waits on the protocol below.
+**Gate:** the convergence oracle (topology.md §7): N clients, random
 offline interleavings, hostile disconnections — single final state,
-every mutation exactly once. Plus the one-word-move gate: switching a
-scaffold service between `:local` and `:server` changes no
-application code and both configurations pass the same tests.
+every mutation exactly once.
 
 ## Phase 7 — The JS guest
 
