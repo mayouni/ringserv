@@ -98,6 +98,42 @@ revision (prompt 10). **Pending — recorded so it is not silently forgotten.**
 No obligation has been stated against RingServ for the world, evolution or
 commons contracts. If one arrives, it arrives through the mailbox.
 
+## Zing's server projection — the three questions, answered
+
+Zing's blueprint wrote an annex about RingServ (`zing/docs/zing-server-projection.md`
+§6) on 2026-08-07, when this repository was documentation and nothing else, and
+asked three questions. All three have since been answered by work rather than by
+opinion, so the answers live here where they can be checked against the tree.
+
+**1. Is the annex factually right about RingServ?** It was on 2026-08-07 and it is
+not now. It labels RingServ "Phase 0 — a design, not a download"; phases 1–5 have
+shipped, and the two seams the annex depends on are built and gated. It also
+describes the placement vocabulary as `:local` / `:server` / `:both`, and `:both`
+no longer exists — C3 decomposed it into `site` + `authority` (§C3 above). The
+annex needs a revision, not a correction of substance: what it says about the
+*fit* still holds.
+
+**2. Which of the three ZQL possibilities is the real one?** A fourth, and the
+cleanest: **there is no ZQL in RingServ to collide with.** Settled on 2026-08-14
+by removal, not by arbitration — this core is a general Ring application server,
+so it carries no framework's query dialect and speaks the engine's own SQL through
+`DataQuery` / `DataExec` ([DATA.md](docs/DATA.md)). Zing's ZQL keeps its name, its
+closed verb set and its safety property, unshared and unthreatened. The
+`insert`/`select` examples the issue quotes are gone from these docs. The one
+loose end is external: `stzzql`'s README still lists RingServ among its expected
+consumers, which is routed to Central rather than fixed here.
+
+**3. Does the projection sit badly with the service model?** No. Entities→tables,
+norms→constraints, flows→ordered state machines and a hash-chained ledger all ride
+on `{service, action, payload}` → `{code, message, data}`, which is unchanged since
+phase 2 and gated. One thing to know rather than to fix: RingServ enforces
+`Contract()` **before** dispatch and reports *every* violation at once as a 422, so
+a projection that expects first-failure semantics gets a superset, not a mismatch.
+
+Recorded here on 2026-08-18 in place of the GitHub issue that asked them. The
+Principal does not work through issues raised to himself, and an answer that lives
+in the repository is checkable; one that lives in an issue thread is not.
+
 ## What must not change
 
 The **service envelope** — `{service, action, payload}` → uniform
