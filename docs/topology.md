@@ -152,6 +152,21 @@ case §6 grants was "right when RingServ was the only reader". The
 two-surface doctrine is adopted for the family case; it is not adopted
 as a requirement that every RingServ app join the family.
 
+**Central ruled on 2026-08-18 that this boundary is the contract's own
+reading**, on three grounds worth keeping: the contract's argument in §6 is
+about *readers*, and where no second reader exists the reason for the
+manifest does not exist either; requiring it everywhere would reintroduce
+the framework-into-the-floor inversion that the ZQL removal settled on
+2026-08-14, through a different door; and MAY→MUST is the reversible
+direction, while MUST→MAY would mean removing a Zing dependency from
+scaffolds already generated in repositories nobody can reach. Inside a Zing
+solution the manifest is **not** optional — and what makes it mandatory is
+the solution's membership, never RingServ's discretion. The jurisdiction
+sentence now stands in [placement.md §6](https://github.com/mayouni/softanza/blob/main/contracts/placement.md),
+**ratified by the Principal on 2026-08-18** (`CENTRAL-C3-JURISDICTION`), so
+this is settled law rather than a boundary held pending a ruling. Phase 6
+builds on it.
+
 **3. The authority mechanic. Confirmed as contract language.** §2.2 took
 it from this file and it is exact: the server **re-executes** the action;
 it does not merge a result. Since 2026-08-17 that is also how the write

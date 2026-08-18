@@ -32,6 +32,7 @@ const suites = [
     { name: "data fuzz         ", node: "fuzz-data.js" },
     { name: "CLI gates         ", node: "cli-gates.js" },
     { name: "check + docs      ", node: "check-gates.js" },
+    { name: "C2 conformance    ", node: "c2-gates.js" },
 ];
 
 if (full) {

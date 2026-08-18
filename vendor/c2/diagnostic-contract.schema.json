@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "The Diagnostic Contract — the envelope",
+  "description": "C2 of the Softanza reference design: the shape of every diagnostic a conforming court emits in machine form. One object per diagnostic. Prose governing this shape is doc/diagnostic-contract.md; this file is what a court validates against. Version v1.0, 2026-08-08.",
+  "version": "1.0",
+  "type": "object",
+  "required": ["code", "severity", "message", "span", "cites", "language"],
+  "additionalProperties": true,
+  "properties": {
+    "code": {
+      "description": "The court's stable diagnostic identifier. Stable forever, never reused, unique within its language. Attested forms: MISSING_UNDO, ZUI-W001.",
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*([_-][A-Z0-9]+)*$"
+    },
+    "severity": {
+      "description": "The two-rung ladder, closed: error (unlawful; a build must fail) or warning (lawful but suspect, or undecidable without more input).",
+      "enum": ["error", "warning"]
+    },
+    "message": {
+      "description": "Human prose, in whatever language the operator reads. Never compared, never normative — the code and the cites carry the law.",
+      "type": "string",
+      "minLength": 1
+    },
+    "span": {
+      "description": "Where the finding lands. line 0 means the finding is file-wide. col is reserved: optional, >= 1 when known.",
+      "type": "object",
+      "required": ["file", "line"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 0 },
+        "col": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "cites": {
+      "description": "Citations into the court's pinned instrument, by stable identifier only. Empty is honest where no law applies (structural and grammar diagnostics).",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(rule|article|right|pattern):[A-Za-z0-9_.-]+$"
+      }
+    },
+    "language": {
+      "description": "The language being judged — and therefore the instrument the cites resolve in. zui today; zql, face, wflow as their courts adopt.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    }
+  }
+}

@@ -46,6 +46,12 @@ Answered in [docs/topology.md §5](docs/topology.md), decision by decision:
   *general* Ring application server, so emitting `zing.json` is something an app
   **may** do, not something it must. Family app: the manifest ships and the
   contract governs. Standalone app: `Topology()` may remain the only surface.
+  **Central ruled on 2026-08-18 that this is the contract's own reading** —
+  inside a Zing solution the manifest is mandatory, and what makes it mandatory
+  is the solution's membership, not RingServ's discretion. The Principal
+  **ratified** the jurisdiction sentence the same day (`CENTRAL-C3-JURISDICTION`,
+  `contracts/placement.md` §6), so the boundary is settled law, not a position
+  this repository is holding.
 - **The authority mechanic — confirmed** as contract language, and since
   2026-08-17 it is also how the write path is built ([WRITES.md](docs/WRITES.md)).
 - **StzZql pin — not applicable.** RingServ is not a StzZql consumer.
@@ -54,12 +60,26 @@ Answered in [docs/topology.md §5](docs/topology.md), decision by decision:
 
 ### C2 — Diagnostic · **adopted, this session**
 
-`ringserv check --json` emits one C2 v1.0 envelope per finding —
-`{code, severity, message, span{file,line,col}, cites[], language}` with
-`language: "ringserv"`. Six stable codes: `RS_SYNTAX_ERROR`,
+`ringserv check --json` emits one C2 envelope per finding —
+`{code, severity, message, span{file,line}, cites[], language}` with
+`language: "ringserv"`. Seven stable codes: `RS_SYNTAX_ERROR`,
 `RS_SYNTAX_MISSING`, `RS_CONTRACT_UNKNOWN_SERVICE`,
 `RS_CONTRACT_UNKNOWN_ACTION`, `RS_SERVICE_UNANSWERABLE`,
 `RS_ACTION_UNCONTRACTED` (warning) and `RS_APP_UNEVALUABLE`.
+
+**RingServ pins C2 v1.0**, whose normative home is
+`stzzui/doc/diagnostic-contract.md` — vendored at `vendor/c2/` and gated by
+`node tests/c2-gates.js` (40 gates, every code exercised, every envelope
+validated against the schema *as read*, not as restated). Recording the pin is
+itself a condition of conformance (§3.3); the details are in
+[docs/CHECK.md](docs/CHECK.md).
+
+Conforming exposed two real defects that the one-sentence summary could not
+have: `col` was emitted as `0` on file-wide findings where the schema requires
+`>= 1` when present, and `cites` carried documentation anchors where the
+contract admits only stable identifiers in a pinned instrument. Both fixed —
+`col` omitted, `cites` empty and honestly so, since RingServ pins no instrument
+of law.
 
 Prompt 07 asked for this *before* `check` was built; `check` shipped in phase 5
 on 2026-08-14, so this was a retrofit rather than a birth. It cost one output
@@ -103,3 +123,13 @@ Never edit a sibling repository. These went to Central:
    design** — answered as the germ; see the memo of 2026-08-17.
 3. **MicroRing's `interplay.md` still calls the device story bilateral.** It is
    the contract's now. MicroRing's own session applies that.
+4. **C2 had no file in `contracts/`** — answered 2026-08-18: the normative
+   specification *does* exist, at `stzzui/doc/diagnostic-contract.md` v1.0, and
+   the real defect was that nothing a session reads points at it. Central adds
+   the citation and a pointer file. RingServ conformed to a summary because the
+   summary was what the estate showed it — which is exactly how the `col` and
+   `cites` defects above got in.
+
+Central answered all four on 2026-08-18: finding 1 adopted as written, 2 and 3
+routed to their own sessions, 4 corrected and owned. Closures on 2 and 3 come
+back through the mailbox; this file does not mark them closed until they do.

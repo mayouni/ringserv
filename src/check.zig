@@ -39,7 +39,16 @@ pub const Finding = struct {
     message: []const u8,
     /// C2 `code` — stable, greppable, and never renamed once shipped.
     code: []const u8,
-    /// C2 `cites` — what the reader should go and read.
+    /// C2 `cites` — citations into a **pinned instrument of law**, by stable
+    /// identifier, in the form `rule:` / `article:` / `right:` / `pattern:`.
+    ///
+    /// **Empty today, and honestly so.** RingServ pins no instrument: its
+    /// rules live in prose (`docs/services.md`) with no stable identifiers,
+    /// and C2 §2.5 forbids citing prose — a section number renumbers, so it
+    /// is exactly the kind of reference the rule exists to prevent. Where no
+    /// law applies, `[]` is the conforming answer; the reader's pointer
+    /// travels in `message`, where wording is free. If RingServ's rules are
+    /// ever numbered, this field fills in without an envelope change.
     cites: []const []const u8 = &.{},
     /// Findings that must fail the command; notes that merely inform.
     /// Maps to C2 `severity`: error / warning.
@@ -158,6 +167,13 @@ pub fn check(arena: std.mem.Allocator, app_path: []const u8) !u8 {
 /// One per finding, so any court in the family can read a RingServ refusal
 /// without knowing anything about RingServ. The plain output stays human —
 /// a person reading a terminal is not a court.
+///
+/// Pinned at **C2 v1.0** (`stzzui/doc/diagnostic-contract.schema.json`,
+/// vendored at `vendor/c2/`). Two details the schema decides, not us:
+/// `line = 0` means the finding indicts the whole file, and `col` is
+/// **omitted** rather than zeroed when no column is known — the schema
+/// requires `col >= 1` where present, so a zero is not a missing column,
+/// it is an invalid one.
 fn reportC2(items: []const Finding) u8 {
     var buf: [8192]u8 = undefined;
     var w = std.fs.File.stdout().writer(&buf);
@@ -175,7 +191,9 @@ fn reportC2(items: []const Finding) u8 {
         writeJsonString(out, f.message);
         out.print(",\"span\":{{\"file\":", .{}) catch {};
         writeJsonString(out, f.file);
-        out.print(",\"line\":{d},\"col\":{d}}},\"cites\":[", .{ f.line, f.col }) catch {};
+        out.print(",\"line\":{d}", .{f.line}) catch {};
+        if (f.col > 0) out.print(",\"col\":{d}", .{f.col}) catch {};
+        out.print("}},\"cites\":[", .{}) catch {};
         for (f.cites, 0..) |c, j| {
             if (j > 0) out.print(",", .{}) catch {};
             writeJsonString(out, c);
@@ -274,9 +292,8 @@ pub fn checkMode(arena: std.mem.Allocator, app_path: []const u8, as_json: bool) 
                         .line = 0,
                         .col = 0,
                         .message = try std.fmt.allocPrint(arena,
-                            "Contract(:{s}) names a service that is not declared", .{cs}),
+                            "Contract(:{s}) names a service that is not declared (docs/services.md §5)", .{cs}),
                         .code = "RS_CONTRACT_UNKNOWN_SERVICE",
-                        .cites = &.{"docs/services.md#5"},
                     });
                 } else if (!act_found) {
                     try findings.append(arena, .{
@@ -284,10 +301,9 @@ pub fn checkMode(arena: std.mem.Allocator, app_path: []const u8, as_json: bool) 
                         .line = 0,
                         .col = 0,
                         .message = try std.fmt.allocPrint(arena,
-                            "Contract(:{s}) declares action `{s}`, which the service does not answer",
+                            "Contract(:{s}) declares action `{s}`, which the service does not answer (docs/services.md §5)",
                             .{ cs, ca }),
                         .code = "RS_CONTRACT_UNKNOWN_ACTION",
-                        .cites = &.{"docs/services.md#5"},
                     });
                 }
             }
@@ -308,9 +324,8 @@ pub fn checkMode(arena: std.mem.Allocator, app_path: []const u8, as_json: bool) 
                         .line = 0,
                         .col = 0,
                         .message = try std.fmt.allocPrint(arena,
-                            "service `{s}` declares no actions and no table — it can never answer", .{name}),
+                            "service `{s}` declares no actions and no table — it can never answer (docs/services.md §2)", .{name}),
                         .code = "RS_SERVICE_UNANSWERABLE",
-                        .cites = &.{"docs/services.md#2"},
                     });
                 }
                 for (actions) |a| {
@@ -333,7 +348,6 @@ pub fn checkMode(arena: std.mem.Allocator, app_path: []const u8, as_json: bool) 
                             .message = try std.fmt.allocPrint(arena,
                                 "note: {s}.{s} has no Contract — its payload is unchecked", .{ name, act }),
                             .code = "RS_ACTION_UNCONTRACTED",
-                            .cites = &.{"docs/services.md#5"},
                         });
                     }
                 }

@@ -6,5 +6,12 @@ pinned:
 - tree-sitter runtime: 277f53f886de938bb686703ce593b36184ef5470 (MIT)
 - tree-sitter-ring: ysdragon @ 946a10c9736251c235e387a063c9a873b105ecdd (2026-08-06, MIT) — days old, pinned; expect churn
 
+pinned instruments (law, not code — vendored so a gate can run with no sibling
+repository present, and held byte-identical to upstream by tests/c2-gates.js):
+- c2/diagnostic-contract.schema.json: the Diagnostic Contract envelope, **v1.0**
+  of 2026-08-08, normative home stzzui/doc/diagnostic-contract.md
+  @ 328c08aa42ec82f5c570391369f55f1c417667ef. RingServ pins v1.0 and moves by
+  its own decision, per §4 "Consumers pin".
+
 vendored from RingScript (same author, same project family), not from a third party:
 - src/rs_json.c: the C JSON codec, held byte-identical to src/ringlib/json.ring by tests/gates.zig

@@ -66,6 +66,53 @@ undocumented payload is a fact worth showing.
 `--json` emits the same catalog as data, so other tooling never has to
 parse the markdown.
 
+## `check --json` speaks the Diagnostic Contract
+
+**RingServ pins C2 v1.0** — `stzzui/doc/diagnostic-contract.md` and the
+schema beside it, of 2026-08-08, vendored here at
+`vendor/c2/diagnostic-contract.schema.json`. This paragraph is not
+decoration: §3.3 of the contract makes recording the pinned version a
+condition of conformance, and §4 puts moving off v1.0 under RingServ's own
+decision rather than upstream's.
+
+`--json` emits one envelope per finding:
+
+```json
+{ "code": "RS_SERVICE_UNANSWERABLE", "severity": "error",
+  "message": "service `notes` declares no actions and no table …",
+  "span": { "file": "app.ring", "line": 0 },
+  "cites": [], "language": "ringserv" }
+```
+
+Seven stable codes — `RS_SYNTAX_ERROR`, `RS_SYNTAX_MISSING`,
+`RS_CONTRACT_UNKNOWN_SERVICE`, `RS_CONTRACT_UNKNOWN_ACTION`,
+`RS_SERVICE_UNANSWERABLE`, `RS_ACTION_UNCONTRACTED` (the one warning) and
+`RS_APP_UNEVALUABLE` — stable forever and never reused, which is the
+promise a code carries.
+
+Three details the contract decides and this implementation obeys:
+
+- **`line: 0` means the whole file.** A contract naming a service that does
+  not exist is not at a line; pretending otherwise would be a lie with a
+  number in it.
+- **`col` is omitted, not zeroed.** The schema requires `col >= 1` where
+  present. A zero is not a missing column, it is an invalid one — and
+  RingServ is the first court in the family to emit the field at all, which
+  §"honest boundaries" reserved it for.
+- **`cites` is empty, and honestly so.** A cite must name a stable
+  identifier in a pinned instrument of law. RingServ pins none: its rules
+  live in prose with section numbers that renumber, which is exactly what
+  §2.5 forbids citing. Where no law applies, `[]` is the conforming answer,
+  and the reader's pointer travels in `message`, where wording is free.
+
+Conformance is executable: `node tests/c2-gates.js` (40 gates) drives all
+seven codes and validates every envelope against the vendored schema — the
+validator *reads* the schema rather than restating it, so a version bump is
+felt here instead of being agreed with. It also asserts the vendored copy is
+byte-identical to the normative file when a `stzzui` checkout sits beside
+this repository, and skips that one check when it does not: RingServ's gates
+must never need a sibling repository on disk.
+
 ## The honest limits
 
 - **The grammar is young** — pinned days after its first publication,
