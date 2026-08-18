@@ -35,6 +35,7 @@ const suites = [
     { name: "C2 conformance    ", node: "c2-gates.js" },
     { name: "placement         ", node: "topology-gates.js" },
     { name: "sync + convergence", node: "sync-gates.js" },
+    { name: "JS guest          ", node: "js-gates.js" },
 ];
 
 if (full) {

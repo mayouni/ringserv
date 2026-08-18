@@ -8,6 +8,7 @@ const serve = @import("serve.zig");
 const cli = @import("cli.zig");
 const check = @import("check.zig");
 const topology_cmd = @import("topology.zig");
+const js = @import("js.zig");
 
 extern fn fflush(stream: ?*anyopaque) c_int;
 
@@ -95,6 +96,41 @@ pub fn main() !u8 {
         return 2;
     }
     const cmd = args[1];
+
+    // A hidden probe used only by the phase-7 gates: prove the JS guest
+    // is alive and behaving before anything is built on it.
+    //
+    //   ringserv js-eval "<code>"                    evaluate
+    //   ringserv js-eval "<code>" <fn> <json-arg>    ...then call fn(arg)
+    //
+    // The second form is the one that matters: it exercises js_call, whose
+    // contract must equal rs_call's exactly, because the dispatcher is
+    // about to stop knowing which guest it is talking to.
+    if (std.mem.eql(u8, cmd, "js-eval")) {
+        if (args.len < 3) return 2;
+        js.js_set_echo(1);
+        if (js.js_init() != 0) {
+            std.debug.print("ringserv: {s}\n", .{js.js_last_error()});
+            return 1;
+        }
+        const code = try arena.dupeZ(u8, args[2]);
+        if (js.js_eval(code) != 0) {
+            std.debug.print("ringserv: {s}\n", .{js.js_last_error()});
+            return 1;
+        }
+        if (args.len >= 5) {
+            const fname = try arena.dupeZ(u8, args[3]);
+            const jarg = try arena.dupeZ(u8, args[4]);
+            const out = std.mem.span(js.js_call(fname, jarg));
+            const err = std.mem.span(js.js_last_error());
+            if (err.len != 0) {
+                std.debug.print("ringserv: {s}\n", .{err});
+                return 1;
+            }
+            std.debug.print("{s}\n", .{out});
+        }
+        return 0;
+    }
 
     if (std.mem.eql(u8, cmd, "version")) {
         std.debug.print("RingServ {s} (Ring 1.27, resident)\n", .{bridge.RINGSERV_VERSION});

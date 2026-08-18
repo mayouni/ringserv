@@ -120,6 +120,40 @@ fn addTreeSitter(mod: *std.Build.Module, b: *std.Build) void {
     });
 }
 
+// quickjs-ng: the second guest language. Four translation units — the
+// engine, the number formatter, the regexp engine and the Unicode
+// tables. `cutils.h` is header-only, so there is no fifth.
+//
+// DELIBERATELY ABSENT: quickjs-libc.c. That file gives a guest `std` and
+// `os` — files, processes, sockets — and RingServ's whole promise about
+// the JS guest is that its host surface is ECMA-429's, implemented once
+// in Zig and shared with the Ring side. Vendoring libc would hand the
+// guest a second, unaudited way to reach the machine.
+const qjs_cflags = [_][]const u8{
+    "-std=c11",
+    "-DCONFIG_VERSION=\"ringserv\"",
+    // The engine's own arithmetic relies on wrapping and on unaligned
+    // reads that UBSan flags; upstream builds with these off too.
+    "-fno-sanitize=undefined",
+    "-Wno-implicit-const-int-float-conversion",
+};
+
+fn addQuickJs(mod: *std.Build.Module, b: *std.Build) void {
+    mod.addIncludePath(b.path("vendor/quickjs"));
+    mod.addCSourceFiles(.{
+        .files = &.{
+            "vendor/quickjs/quickjs.c",
+            "vendor/quickjs/dtoa.c",
+            "vendor/quickjs/libregexp.c",
+            "vendor/quickjs/libunicode.c",
+            // The sentinel shim: JS_UNDEFINED and friends are macros over
+            // a union initialiser, which translate-c cannot evaluate.
+            "src/rs_js.c",
+        },
+        .flags = &qjs_cflags,
+    });
+}
+
 fn addVm(mod: *std.Build.Module, b: *std.Build) void {
     mod.addIncludePath(b.path("ringvm/include"));
     mod.addIncludePath(b.path("vendor/sqlite"));
@@ -136,6 +170,7 @@ fn addVm(mod: *std.Build.Module, b: *std.Build) void {
         .flags = &stub_cflags,
     });
     mod.addCSourceFiles(.{ .files = &.{"vendor/sqlite/sqlite3.c"}, .flags = &sqlite_cflags });
+    addQuickJs(mod, b);
 }
 
 pub fn build(b: *std.Build) void {
@@ -197,6 +232,11 @@ pub fn build(b: *std.Build) void {
     main_mod.addImport("bridge", bridge_mod);
     main_mod.addImport("httpz", httpz_mod);
     addTreeSitter(main_mod, b);
+    // `src/js.zig` lives in THIS module and @cImports quickjs.h, so the
+    // header must be reachable from here as well. The C sources stay
+    // attached to the bridge module only — compiled once per artifact,
+    // linked by both.
+    main_mod.addIncludePath(b.path("vendor/quickjs"));
 
     const exe = b.addExecutable(.{ .name = "ringserv", .root_module = main_mod });
     // Deep C recursion happens in the parser and in recursive list
