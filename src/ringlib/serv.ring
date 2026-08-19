@@ -97,6 +97,18 @@ func __dispatch aReq
 
 	aReq2 = [ :service = cService, :action = cAction, :payload = pPayload ]
 
+	# WHO is asking, before WHAT they asked. An action that requires a
+	# caller must not run its contract against a payload from someone the
+	# server cannot identify — and 401 and 403 stay distinct, because "I
+	# do not know who you are" and "I know, and no" are different problems
+	# for the caller.
+	pActor = RsActorOfRequest()
+	cDenied = RsActorCheck(cService, cAction, pActor)
+	if cDenied != ""
+		return [ :code = 1, :message = cDenied, :data = "" ]
+	ok
+	aReq2[:actor] = pActor
+
 	# Contracts are enforced at the door: the action never sees a
 	# payload that violates its declaration (docs/services.md §5).
 	cViolation = RsContractCheck(cService, cAction, pPayload)

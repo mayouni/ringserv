@@ -369,6 +369,9 @@ const sync_ring_src = @embedFile("ringlib/sync.ring");
 /// jsserv — the JS service form, pure Ring. Loaded after serv.ring, whose
 /// dispatcher calls into it.
 const jsserv_ring_src = @embedFile("ringlib/jsserv.ring");
+/// actorlib — who is calling, and whether they may. Loaded after
+/// contract.ring, whose per-action spec it reads.
+const actor_ring_src = @embedFile("ringlib/actor.ring");
 /// The test vocabulary — Call/Expect/…, used by `ringserv test`.
 const testing_ring_src = @embedFile("ringlib/testing.ring");
 
@@ -416,6 +419,7 @@ const ringlib_files = [_]RingLibFile{
     .{ .name = "topology.ring", .src = topology_ring_src, .provides = "__rs_topology" },
     .{ .name = "sync.ring", .src = sync_ring_src, .provides = "__rs_sync_push" },
     .{ .name = "jsserv.ring", .src = jsserv_ring_src, .provides = "rsjsdispatch" },
+    .{ .name = "actor.ring", .src = actor_ring_src, .provides = "rsactorcheck" },
     .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask" },
 };
 
@@ -461,6 +465,8 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__db_path", &db.pathHook);
     ring_vm_funcregister2(st, "__rs_probe", &probeHook);
     ring_vm_funcregister2(st, "__rs_approot", &appRootHook);
+    ring_vm_funcregister2(st, "__rs_authtoken", &authTokenHook);
+    ring_vm_funcregister2(st, "__rs_jwt_verify", &jwtVerifyHook);
     ring_vm_funcregister2(st, "__js_load", &jsLoadHook);
     ring_vm_funcregister2(st, "__js_call", &jsCallHook);
     ring_vm_funcregister2(st, "__js_has", &jsHasHook);
@@ -781,4 +787,175 @@ fn argZ(p: ?*anyopaque, n: c_int) ?[:0]u8 {
     const s = ring_vm_api_getstring(p, n) orelse return null;
     const len: usize = @intCast(ring_vm_api_getstringsize(p, n));
     return alloc.dupeZ(u8, s[0..len]) catch null;
+}
+
+// ------------------------------------------------------------ the actor
+//
+// Who is calling. Phase 8's auth seam, and the host half of what C5 will
+// eventually standardise across the family.
+//
+// TWO THINGS LIVE HERE AND NOTHING ELSE: the request's bearer token, and
+// a verifier for the one token format a server can check without asking
+// anyone — a JWT signed with a shared secret. Everything about what an
+// actor MAY DO is Ring's, in `actor.ring`, because permissions are an
+// application's vocabulary and the host has no business inventing them.
+
+/// The bearer token of the request this worker is serving, or "".
+/// Threadlocal, set by serve.zig before each dispatch and cleared after,
+/// so a token can never outlive the request that carried it.
+threadlocal var g_auth_token: []const u8 = "";
+
+pub fn setAuthToken(token: []const u8) void {
+    g_auth_token = token;
+}
+
+fn authTokenHook(p: ?*anyopaque) callconv(.c) void {
+    ring_vm_api_retstring2(p, g_auth_token.ptr, @intCast(g_auth_token.len));
+}
+
+/// base64url → bytes, appended to `out`. Returns false on any character
+/// that is not in the alphabet, because a token that is nearly base64url
+/// is not a token.
+fn b64UrlDecode(out: *std.ArrayList(u8), s: []const u8) bool {
+    var quad: [4]u8 = undefined;
+    var have: usize = 0;
+    for (s) |ch| {
+        if (ch == '=') continue;
+        const v: u8 = switch (ch) {
+            'A'...'Z' => ch - 'A',
+            'a'...'z' => ch - 'a' + 26,
+            '0'...'9' => ch - '0' + 52,
+            '-' => 62,
+            '_' => 63,
+            else => return false,
+        };
+        quad[have] = v;
+        have += 1;
+        if (have == 4) {
+            const n = (@as(u32, quad[0]) << 18) | (@as(u32, quad[1]) << 12) |
+                (@as(u32, quad[2]) << 6) | quad[3];
+            out.appendSlice(alloc, &.{
+                @truncate(n >> 16), @truncate(n >> 8), @truncate(n),
+            }) catch return false;
+            have = 0;
+        }
+    }
+    if (have == 1) return false;
+    if (have >= 2) {
+        const n = (@as(u32, quad[0]) << 18) | (@as(u32, quad[1]) << 12) |
+            (@as(u32, if (have > 2) quad[2] else 0) << 6);
+        out.append(alloc, @truncate(n >> 16)) catch return false;
+        if (have == 3) out.append(alloc, @truncate(n >> 8)) catch return false;
+    }
+    return true;
+}
+
+threadlocal var g_jwt_out: std.ArrayList(u8) = .empty;
+
+/// Ring: __rs_jwt_verify(cToken, cSecret, nLeewaySeconds) -> claims JSON, or "".
+///
+/// HS256 only, deliberately. RS256 would mean a key format, a key store
+/// and a rotation story, and a server that half-implements those is worse
+/// than one that says it does not do them: an application with real
+/// asymmetric keys supplies its own verifier through `Actor(:verify)`.
+///
+/// What this checks, in order, because each one has been someone's CVE:
+///   the token has exactly three segments;
+///   the header names alg HS256 — `alg: none` is refused by name;
+///   the signature matches, compared in CONSTANT TIME;
+///   `exp` has not passed and `nbf` has arrived, with leeway.
+///
+/// Signature BEFORE claims, always: parsing attacker-controlled JSON that
+/// has not been authenticated is doing the attacker's work for them.
+fn jwtVerifyHook(p: ?*anyopaque) callconv(.c) void {
+    g_jwt_out.clearRetainingCapacity();
+
+    const token = argSlice(p, 1) orelse return retEmpty(p);
+    const secret = argSlice(p, 2) orelse return retEmpty(p);
+    const leeway: i64 = if (ring_vm_api_isnumber(p, 3) != 0)
+        @intFromFloat(ring_vm_api_getnumber(p, 3))
+    else
+        0;
+    if (token.len == 0 or secret.len == 0) return retEmpty(p);
+
+    // Exactly three segments. Two is unsigned; four is somebody's idea.
+    var dot1: usize = 0;
+    var dot2: usize = 0;
+    var dots: usize = 0;
+    for (token, 0..) |ch, i| {
+        if (ch != '.') continue;
+        dots += 1;
+        if (dots == 1) dot1 = i else if (dots == 2) dot2 = i;
+    }
+    if (dots != 2 or dot1 == 0 or dot2 <= dot1 + 1 or dot2 == token.len - 1) {
+        return retEmpty(p);
+    }
+
+    const signing_input = token[0..dot2];
+    const sig_b64 = token[dot2 + 1 ..];
+
+    var header_buf: std.ArrayList(u8) = .empty;
+    defer header_buf.deinit(alloc);
+    if (!b64UrlDecode(&header_buf, token[0..dot1])) return retEmpty(p);
+
+    // `alg: none` is refused HERE, by looking for the algorithm we accept
+    // rather than by blocklisting the ones we do not. A blocklist is a
+    // list somebody will add to; an allowlist of one cannot be widened by
+    // accident.
+    if (std.mem.indexOf(u8, header_buf.items, "\"HS256\"") == null) return retEmpty(p);
+
+    var sig: std.ArrayList(u8) = .empty;
+    defer sig.deinit(alloc);
+    if (!b64UrlDecode(&sig, sig_b64)) return retEmpty(p);
+    if (sig.items.len != 32) return retEmpty(p);
+
+    var expected: [32]u8 = undefined;
+    std.crypto.auth.hmac.sha2.HmacSha256.create(&expected, signing_input, secret);
+    // Constant time: a byte-by-byte comparison that returns early leaks
+    // how much of a forged signature was right, one request at a time.
+    if (!std.crypto.timing_safe.eql([32]u8, expected, sig.items[0..32].*)) {
+        return retEmpty(p);
+    }
+
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(alloc);
+    if (!b64UrlDecode(&payload, token[dot1 + 1 .. dot2])) return retEmpty(p);
+
+    // Only now, with the signature verified, is the payload worth parsing.
+    const parsed = std.json.parseFromSlice(std.json.Value, alloc, payload.items, .{}) catch
+        return retEmpty(p);
+    defer parsed.deinit();
+    const obj = switch (parsed.value) {
+        .object => |o| o,
+        else => return retEmpty(p),
+    };
+
+    const now = std.time.timestamp();
+    if (claimSeconds(obj.get("exp"))) |exp| {
+        if (now > exp + leeway) return retEmpty(p);
+    }
+    if (claimSeconds(obj.get("nbf"))) |nbf| {
+        if (now + leeway < nbf) return retEmpty(p);
+    }
+
+    g_jwt_out.appendSlice(alloc, payload.items) catch return retEmpty(p);
+    ring_vm_api_retstring2(p, g_jwt_out.items.ptr, @intCast(g_jwt_out.items.len));
+}
+
+fn claimSeconds(v: ?std.json.Value) ?i64 {
+    return switch (v orelse return null) {
+        .integer => |i| i,
+        .float => |f| @intFromFloat(f),
+        else => null,
+    };
+}
+
+fn retEmpty(p: ?*anyopaque) void {
+    ring_vm_api_retstring2(p, "", 0);
+}
+
+fn argSlice(p: ?*anyopaque, n: c_int) ?[]const u8 {
+    if (ring_vm_api_isstring(p, n) == 0) return null;
+    const s = ring_vm_api_getstring(p, n) orelse return null;
+    return s[0..@intCast(ring_vm_api_getstringsize(p, n))];
 }

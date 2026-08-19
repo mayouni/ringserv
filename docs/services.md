@@ -212,10 +212,44 @@ annotations that decorate.
 
 ## 6. Auth and middleware — kept small on purpose
 
-- **Auth is a service concern, declared in the contract**
-  (`:auth = :required`, or `:auth = "orders.manage"` for a
-  permission). Token verification (JWT-shaped) happens in the core
-  before dispatch; the verified claims arrive as `oReq[:auth]`.
+**Built in phase 8.** Auth is a service concern, declared in the contract
+that already governs the payload:
+
+```ring
+Actor([ :secret = sysget("APP_SECRET"), :leeway = 60 ])
+
+Contract(:orders, [
+    :place  = [ :auth = :required, :in = [ … ] ],
+    :refund = [ :auth = "orders.manage" ]
+])
+```
+
+The verified claims arrive as `aReq[:actor]`, and the split is where the
+responsibility splits:
+
+- **The host verifies a token.** It knows one format it can check without
+  asking anyone — a JWT signed with a shared secret — and it checks it
+  properly: HS256 only, **signature before claims**, constant-time
+  compare, `exp`/`nbf` honoured, and `alg: none` refused by *allowlist*
+  rather than blocklist, because a blocklist is a list somebody will add
+  to.
+- **Ring decides what an actor may do**, because permissions are an
+  application's vocabulary. A permission is read from `scope` (space
+  separated, the OAuth convention) or from `permissions` / `roles` — all
+  three, because all three are in the wild and an application already
+  issuing one should not have to reissue its tokens.
+- **401 and 403 stay distinct.** "I do not know who you are" and "I know,
+  and no" are different problems for the caller; collapsing them is a
+  small unkindness that costs a developer an afternoon.
+
+An application with asymmetric keys, an introspection endpoint or a
+session table supplies its own verifier — `Actor([ :verify = func cToken
+{ … } ])` — and the host stays out of it.
+
+**Not here, deliberately:** any notion of a signed principal assertion
+another host would accept. That is C5, co-authored with Zing's
+`stzAppServer`, and inventing a format here would mean inventing the thing
+the contract exists to agree on. This is the seam C5 plugs into.
 - **Middleware is two hooks, not an onion**: `OnRequest` (before
   dispatch — may short-circuit with a Reply) and `OnResponse` (after —
   may observe/annotate). Pionia's simplification, adopted: chains of

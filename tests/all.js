@@ -38,6 +38,7 @@ const suites = [
     { name: "JS guest          ", node: "js-gates.js" },
     { name: "JS services       ", node: "jsserv-gates.js" },
     { name: "TLS decision      ", node: "tls-gates.js" },
+    { name: "actor / auth      ", node: "auth-gates.js" },
 ];
 
 if (full) {

@@ -35,6 +35,11 @@ var g_statics: []const StaticRoute = &.{};
 const Job = struct {
     entry: [:0]const u8 = "__dispatch_raw",
     body: []const u8,
+    /// The request's bearer token, if it carried one. Travels beside the
+    /// body rather than inside it, because it is transport, not payload —
+    /// and because a token inside the body would be logged by anything
+    /// that logs bodies.
+    auth: []const u8 = "",
     /// The body is already valid JSON for the entry point's single
     /// argument, so it must NOT be quoted again. Used where the Zig side
     /// composes the argument rather than forwarding a request body.
@@ -94,6 +99,11 @@ fn appendJsonString(out: *std.ArrayList(u8), s: []const u8) void {
 }
 
 fn serveJob(job: *Job) void {
+    // The token is scoped to THIS dispatch and cleared after it, so it can
+    // never be read by the next request this worker serves.
+    bridge.setAuthToken(job.auth);
+    defer bridge.setAuthToken("");
+
     // The body travels as a JSON STRING argument: rs_call's machinery
     // JsonDecodes its argument, so this quoting hands servlib the raw
     // body text — and the real decode happens in Ring, inside a catch,
@@ -157,7 +167,17 @@ fn workerMain(id: u32) void {
 // ------------------------------------------------------------- handlers
 
 fn postApiV1(req: *httpz.Request, res: *httpz.Response) !void {
-    return runInVm(res, "__dispatch_raw", req.body() orelse "");
+    return runInVm(res, "__dispatch_raw", req.body() orelse "", bearerOf(req));
+}
+
+/// The bearer token of a request, or "". Only the `Bearer` scheme is
+/// read: Basic would mean holding a password in memory, and this server
+/// has no business doing that when a token is what it verifies.
+fn bearerOf(req: *httpz.Request) []const u8 {
+    const h = req.header("authorization") orelse return "";
+    if (h.len < 7) return "";
+    if (!std.ascii.eqlIgnoreCase(h[0..7], "bearer ")) return "";
+    return std.mem.trim(u8, h[7..], " ");
 }
 
 /// The placement seam a page reads to compile `serv.call`. A GET, because
@@ -166,7 +186,7 @@ fn postApiV1(req: *httpz.Request, res: *httpz.Response) !void {
 /// made a single call.
 fn getTopology(req: *httpz.Request, res: *httpz.Response) !void {
     _ = req;
-    return runInVm(res, "__rs_topology_public", "0");
+    return runInVm(res, "__rs_topology_public", "0", "");
 }
 
 /// GET /sync/shape?shape=notes&offset=N&limit=M&live=true
@@ -205,7 +225,7 @@ fn getSyncShape(req: *httpz.Request, res: *httpz.Response) !void {
             std.Thread.sleep(200 * std.time.ns_per_ms);
         }
     }
-    return runInVm(res, "__rs_sync_shape", body.items);
+    return runInVm(res, "__rs_sync_shape", body.items, "");
 }
 
 /// The shape's highest offset, asked of a worker. Cheap — one indexed
@@ -224,23 +244,28 @@ fn headOf(shape: []const u8) !i64 {
 }
 
 fn postSyncPush(req: *httpz.Request, res: *httpz.Response) !void {
-    return runInVm(res, "__rs_sync_push", req.body() orelse "");
+    return runInVm(res, "__rs_sync_push", req.body() orelse "", bearerOf(req));
 }
 
 fn postSyncState(req: *httpz.Request, res: *httpz.Response) !void {
-    return runInVm(res, "__rs_sync_state", req.body() orelse "");
+    return runInVm(res, "__rs_sync_state", req.body() orelse "", bearerOf(req));
 }
 
 /// One VM round trip, on the worker pool, with the same timeouts and the
 /// same liveness check for every endpoint that needs Ring.
-fn runInVm(res: *httpz.Response, entry: [:0]const u8, body: []const u8) !void {
+fn runInVm(
+    res: *httpz.Response,
+    entry: [:0]const u8,
+    body: []const u8,
+    auth: []const u8,
+) !void {
     if (g_workers_alive.load(.monotonic) == 0) {
         res.status = 503;
         res.content_type = .JSON;
         res.body = "{\"code\":1,\"message\":\"no workers available\",\"data\":\"\"}";
         return;
     }
-    var job = Job{ .entry = entry, .body = body };
+    var job = Job{ .entry = entry, .body = body, .auth = auth };
     defer job.response.deinit(alloc);
     enqueue(&job);
     job.done.timedWait(120 * std.time.ns_per_s) catch {

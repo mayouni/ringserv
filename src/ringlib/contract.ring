@@ -26,6 +26,21 @@ func Contract cService, aActions
 	return len(aRsContracts)
 
 # The :in spec for one service.action, or "" when none is declared.
+# The whole declaration for one action, or "" — the shape :in, :out and
+# :auth all live in. RsContractIn is the :in half of this, kept as its own
+# function because it is on the hot path of every request.
+func RsContractSpec cService, cAction
+	for aEntry in aRsContracts
+		if aEntry[1] != lower(cService)
+			loop
+		ok
+		aSpec = RsDeclGet(aEntry[2], cAction, "")
+		if islist(aSpec)
+			return aSpec
+		ok
+	next
+	return ""
+
 func RsContractIn cService, cAction
 	for aEntry in aRsContracts
 		if aEntry[1] != lower(cService)
