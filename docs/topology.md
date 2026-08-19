@@ -202,14 +202,19 @@ server half **from the contract**. If MicroRing's session decides
 otherwise for `:shadow` (§8.3 leaves that to it), the contract changes
 and this file follows it — not the other way round.
 
-That correction belongs in MicroRing's file too, and this session did
-not make it: never edit a sibling repository. It is routed to Central
-instead, for MicroRing's own session to apply.
+That correction belonged in MicroRing's file too, and this session did
+not make it: never edit a sibling repository. It was routed to Central,
+and **MicroRing's own session applied it on 2026-08-18 in `95b5a8b`** —
+`interplay.md` now assigns the device story to the contract, cites
+§2.3's four terms rather than copying them, and states that where the
+file and the contract disagree the contract is right. Closed.
 
 ## 6. What is built, and what the runtime holds to
 
-Shipped 2026-08-18, the placement half of phase 6. The sync half (§3, §4)
-is still design.
+Shipped 2026-08-18: the placement half of phase 6 in `bb0fea2`, the sync
+half (§3, §4) in `e34a97f`. Both are built; §7 below is what the sync
+half became. What is *not* built is compaction — the floor table and the
+must-refetch control are honoured, but nothing yet moves the floor. Phase 8.
 
 **`Topology()` is a declaration, not a compiler.** It stores the map; the
 server publishes and enforces it; the *page* compiles `serv.call` into a

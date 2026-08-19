@@ -10,3 +10,6 @@ zig-out/
 bin/
 tests/doc-snippets/
 tests/sweep-failures.json
+
+# Autopilot run logs: an ignored file is not untracked.
+.central/runs/

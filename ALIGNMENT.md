@@ -161,18 +161,33 @@ Never edit a sibling repository. These went to Central:
 
 1. **`stzzql`'s README lists RingServ among its expected consumers.** RingServ is
    not one, by a decision taken on 2026-08-14. That README is wrong and is not
-   this session's to correct.
+   this session's to correct. **CLOSED 2026-08-18**, corrected by `stzzql`'s own
+   session; Central reported it at 13:55.
 2. **C3 §2.1's two disputed claims are RingServ-shaped and describe an unbuilt
-   design** — answered as the germ; see the memo of 2026-08-17.
+   design** — answered as the germ; see the memo of 2026-08-17. **CLOSED
+   2026-08-18**: adopted by Central as written, and the contract amended.
 3. **MicroRing's `interplay.md` still calls the device story bilateral.** It is
-   the contract's now. MicroRing's own session applies that.
+   the contract's now. **CLOSED 2026-08-18**, applied by MicroRing's own
+   session in `95b5a8b`, which also fixed a second copy in its `readme.md`.
 4. **C2 had no file in `contracts/`** — answered 2026-08-18: the normative
    specification *does* exist, at `stzzui/doc/diagnostic-contract.md` v1.0, and
    the real defect was that nothing a session reads points at it. Central adds
    the citation and a pointer file. RingServ conformed to a summary because the
    summary was what the estate showed it — which is exactly how the `col` and
-   `cites` defects above got in.
+   `cites` defects above got in. **CLOSED 2026-08-18**: pointer filed, citation added.
 
-Central answered all four on 2026-08-18: finding 1 adopted as written, 2 and 3
-routed to their own sessions, 4 corrected and owned. Closures on 2 and 3 come
-back through the mailbox; this file does not mark them closed until they do.
+Central answered all four on 2026-08-18 and both sibling closures came back
+through the mailbox the same day; all four are marked above.
+
+**Central numbers these differently, and the two orders are permuted.** In
+Central's mail, its *finding 1* is §2.1 (this file's 2) and its *finding 2* is
+the `stzzql` README (this file's 1); 3 and 4 agree. Read any mail about these
+against that mapping rather than against the numbers alone — the mismatch is
+recorded here because it already produced one misattribution.
+
+Finding 3's closure also carried a second copy this session had not named —
+`readme.md` pillar 5, in MicroRing, fixed there — with a suggestion to grep the
+same sentence shape elsewhere. This repository was grepped on 2026-08-19 and
+carries no instance: its only MicroRing references, in `docs/topology.md`
+§2.3 and this section, already say the coupling is the contract's rather
+than bilateral.
