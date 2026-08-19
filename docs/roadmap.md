@@ -200,7 +200,7 @@ absence carrying a reason. 45 gates in `js-gates.js`, 33 in
 `crypto.subtle`, streams, `Blob` and `WebSocket`, each with its reason in
 `wintertc.json`.
 
-## Phase 8 — Hardening toward 0.9 — four of five delivered
+## Phase 8 — Hardening toward 0.9 ✅ (delivered 2026-08-19)
 
 **Compaction ✅ (2026-08-19).** `SyncCompact` trims a shape and moves its
 floor **in one transaction**, because two statements would leave a window
@@ -224,11 +224,20 @@ guessed at** — this is the seam it plugs into.
 with the method beside the numbers and one finding published *unresolved*
 rather than benchmarked around.
 
-**Still ahead:** the docs rewritten from blueprint into didactic guides
-(the RingScript documentation culture).
+**The didactic docs ✅ (2026-08-19).** RingScript's culture, adopted:
+[getting-started.md](getting-started.md) and a **worked application**,
+[fieldnotes-app.md](fieldnotes-app.md), built all the way through. The
+listings are not excerpts — they come from
+[`examples/fieldnotes/`](../examples/fieldnotes), which runs, tests and
+serves. `tests/guide-gates.js` (31) checks the guide's claims against that
+application, its links, and the commands it promises: documentation rots
+because nothing fails when it stops being true, so now something does.
+
+**Phase 8 is delivered.**
 **Gate — the Principal's to open:** RingServ carries one real application
 of the author's — the same bar RingScript's 0.9 met before its API froze.
-No session can open that gate for him.
+No session can open that gate for him, and the worked example is a guide,
+not a substitute.
 
 ## Standing risks (tracked, not hidden)
 

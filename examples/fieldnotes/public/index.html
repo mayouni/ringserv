@@ -1,41 +1,35 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>fieldnotes</title>
-</head>
-<body>
-  <script src="ringscript.js"></script>
-  <script>RingScript.boot()</script>
+<!-- The page calls its own services. Nothing here knows a URL scheme:
+     it posts a {service, action, payload} envelope, which is the only
+     shape RingServ speaks. -->
+<meta charset="utf-8">
+<title>Fieldnotes</title>
+<h1>Fieldnotes</h1>
+<form id="f">
+  <input name="title" placeholder="title" required>
+  <input name="place" placeholder="place">
+  <input name="weight" type="number" value="10">
+  <button>add</button>
+</form>
+<ul id="list"></ul>
+<script>
+const call = (service, action, payload) =>
+  fetch("/api/v1", { method: "POST",
+    body: JSON.stringify({ service, action, payload }) }).then(r => r.json());
 
-  <input id="title" placeholder="Note title">
-  <button onclick="ring.call('AddNote')">Add</button>
-  <button onclick="ring.call('ShowReport')">Report</button>
-  <div id="notes"></div>
-  <div id="report"></div>
+async function refresh() {
+  const r = await call("notes", "list", { limit: 50 });
+  document.getElementById("list").innerHTML =
+    r.data.rows.map(n => `<li>${n.title} — ${n.place || "?"} (${n.weight})</li>`).join("");
+}
 
-  <script type="text/ring">
-  # The same seam everywhere: serv.call("service.action", payload).
-  # :notes is :both  -> this runs against the local synced store.
-  # :report is :server -> the same gesture becomes a wire call.
-
-  func AddNote aEv
-      cTitle = Page(:getvalue, [ :id = "title" ])
-      serv.call("notes.create", [ :title = cTitle ])
-      Refresh()
-
-  func ShowReport aEv
-      oRep = serv.call("report.build", [])
-      Page(:settext, [ :id = "report",
-           :text = "Notes: " + oRep[:data][:count] ])
-
-  func Refresh
-      aNotes = serv.call("notes.list", [])
-      cText = ""
-      for oNote in aNotes[:data][:notes]
-          cText = cText + oNote[:title] + nl
-      next
-      Page(:settext, [ :id = "notes", :text = cText ])
-  </script>
-</body>
-</html>
+document.getElementById("f").onsubmit = async e => {
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(e.target));
+  d.weight = Number(d.weight);
+  const r = await call("notes", "create", d);
+  if (r.code !== 0) return alert(r.message);   // the contract's words
+  e.target.reset();
+  refresh();
+};
+refresh();
+</script>
