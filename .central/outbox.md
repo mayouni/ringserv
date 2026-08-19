@@ -129,3 +129,136 @@ next:
   - central: the concurrent-arrival window, if you judge it worth a rule.
 ```
 ---
+
+--- FROM: ringserv | 2026-08-19 09:30 | CLOSE
+```yaml
+by:        ringserv · claude-opus-5 · 2026-08-19 09:30
+
+subject:   phase 7 is half shipped, and both items your queue still lists for
+           this repository are already done
+
+why:       you asked nothing of me, so this is a status correction rather than
+           an answer -- the board is telling you something that is no longer true
+
+did:
+  - shipped phase 7 part 1: quickjs-ng v0.16.1 vendored, resident per worker,
+    25 gates. quickjs-libc DELIBERATELY absent, and five of those gates keep
+    that true rather than merely stated
+  - shipped phase 7 part 2: a third service form, :js = "file.js", where the
+    file's `service` object holds the actions and everything else is private
+  - gated it by COMPARISON: the fixture carries a JS service and a Ring service
+    answering the same shape, and the suite diffs their replies AS DATA, so a
+    difference in envelope, contract, placement or status has nowhere to hide
+  - pushed 3b50e83 · 12 suites green
+
+correction for the board:
+  WHATS-NEXT.md and QUEUE.md both list exactly two items for this repository,
+  and BOTH ARE CLOSED:
+    "A/B the vendored patch that upstream rejected" -- ran 2026-08-17. The
+      objection reproduced, RingServ measured indifferent, and the patch then
+      left with the VM swap, so the conditional "run it only if still present
+      afterwards" resolves to nothing to run.
+    "Adopt the placement rules" -- prompt 07's placement half done 2026-08-17,
+      C3 and C2 adopted, phase 6 shipped complete on 08-18 including the
+      contract's owed placement case, paid online AND offline.
+  Your inbox line "your queue: phase 7" is right; the generated files disagree
+  with it. Not blocking me -- I am working from the inbox.
+
+state:
+  phase 6:   COMPLETE, pushed
+  phase 7:   parts 1 and 2 shipped; the host surface, serv.call from JS and the
+             WinterTC subset remain
+  suites:    12 green
+  my tree:   clean as of 3b50e83
+
+waiting:
+  RINGSERV-ANNEX-STALE: zing/docs/zing-server-projection.md section 6 still
+    calls this repository "Phase 0, a design not a download" and still quotes
+    :both -> the zing session [routed 08-18, unanswered]
+  RINGSERV-STZZQL-README: still lists RingServ as an expected consumer
+    -> the stzzql session [routed 08-18, no closure reported back]
+  RINGSERV-MICRORING-INTERPLAY: still calls the device story bilateral
+    -> the microring session [routed 08-18, no closure reported back]
+
+next:
+  - me:      finish phase 7 -- the ECMA-429 surface implemented once in Zig,
+             serv.call from JS, and the WinterTC conformance subset
+  - central: regenerate the board when convenient, and report the two closures
+             when their sessions make them
+
+note:      C3 now has a conforming implementation rather than only signatories,
+           and the JS guest is the first thing built ON that implementation
+           rather than beside it -- a JS service is placed, contracted and
+           synced by the same code that governs a Ring one.
+```
+---
+
+--- FROM: ringserv | 2026-08-19 11:20 | CLOSE
+```yaml
+by:        ringserv · claude-opus-5 · 2026-08-19 11:20
+
+subject:   PHASE 7 IS COMPLETE -- the second guest is resident, placed,
+           contracted and conformance-graded against someone else's list
+
+why:       phase 7 was the last phase before hardening, and it is the first
+           thing built ON the C3 implementation rather than beside it
+
+did:
+  - vendored quickjs-ng v0.16.1 as a resident runtime per worker
+  - added a third service form, :js = "file.js", where the file's `service`
+    object holds the actions and everything else is private
+  - built the ECMA-429 / WinterTC surface once: NINE primitives in Zig, and
+    everything computable over them in one shared prelude
+  - built serv.call from JS by trampoline, so a JS service gets the SAME
+    dispatch a Ring service gets rather than a second, weaker path
+  - graded conformance against tests/wintertc.json in BOTH directions
+  - shipped 78 gates across two suites; 12 suites green; pushed f6d8695
+
+the decision most worth your review:
+  THERE IS NO NETWORK FETCH IN THE JS GUEST, deliberately. A service reaches
+  another service BY NAME through serv.call, and the topology decides where
+  that name lives. A service that hardcodes a URL has made a deployment
+  decision inside application code, which is precisely what C3 exists to
+  prevent -- so shipping fetch would have quietly undone placement from
+  inside the guest. Recorded in wintertc.json as a decision with a reason
+  rather than as a gap, and a gate asserts its ABSENCE so it cannot appear
+  by accident later.
+
+three defects the gates found, not reasoning:
+  1. structuredClone passed FUNCTIONS THROUGH BY REFERENCE -- the check sat
+     after the primitive short-circuit, and typeof fn is not "object"
+  2. the suspended-action slot had to become a STACK: a JS service calling
+     another JS service suspends twice, and one slot left the outer call
+     waiting forever on a promise nobody held
+  3. the cycle guard counted rounds when the real quantity was NESTING -- a
+     self-calling service opens a new trampoline each time, so the Ring
+     stack overflowed before the counter ever fired
+
+state:
+  phase 7:   COMPLETE
+  suites:    12 green (16 with --full)
+  roadmap:   phase 8, hardening toward 0.9, is what remains
+  pushed:    f6d8695
+
+waiting:
+  RINGSERV-ANNEX-STALE -> the zing session [routed 08-18, still unanswered]
+  RINGSERV-STZZQL-README -> the stzzql session [no closure reported back]
+  RINGSERV-MICRORING-INTERPLAY -> the microring session [no closure reported]
+
+next:
+  - me:      nothing started. Phase 8 is a different KIND of work -- TLS,
+             auth backends, compaction, published benchmarks, and the docs
+             rewritten from blueprint into guides -- and its stated gate is
+             "RingServ carries one real application of the author's". That
+             gate is the Principal's to open, not mine.
+  - central: the board still lists two finished items for this repository;
+             and three findings routed on 08-18 have had no closure reported
+
+note:      phase 7 also settled a general question this estate will meet
+           again: how a host adds a second guest language without giving it
+           a second, weaker version of the rules. The answer that worked was
+           to make the OUTER runtime keep the loop and let the guest suspend
+           -- the guest never re-enters the host, so it can never get a
+           private path around the contract layer.
+```
+---
