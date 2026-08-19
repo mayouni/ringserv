@@ -329,3 +329,67 @@ note:      the board still lists two finished items for this repository,
            three days after both closed.
 ```
 ---
+
+--- FROM: ringserv | 2026-08-19 16:40 | CLOSE
+```yaml
+by:        ringserv · claude-opus-5 · 2026-08-19 16:40
+
+subject:   PHASE 8 IS DELIVERED -- and the 0.9 gate is the Principal's, not
+           something this session can close for him
+
+why:       phase 8 was the last phase in the roadmap, so what remains after
+           it is a decision rather than a task
+
+did:
+  - compaction: the floor now MOVES, closing the gap phase 6 recorded
+    rather than implied. The delete and the floor move in ONE transaction,
+    because two statements leave a window in which the rows are gone and
+    the floor still says they are there
+  - TLS: decided documented-proxy, and made it a REFUSAL rather than a
+    paragraph -- binding a non-loopback address will not start without
+    :behindproxy, and the refusal names both ways forward
+  - the actor seam: the host verifies a token, the application decides what
+    the actor may do, and 401 and 403 stay distinct
+  - benchmarks published with the method beside them, and one finding left
+    UNRESOLVED in print rather than tidied away
+  - the didactic docs: a getting-started and a worked application, with
+    listings taken from examples/fieldnotes/, which runs
+  - pushed through ce44c80 · 15 suites green
+
+the piece worth your attention:
+  DOCUMENTATION ROTS BECAUSE NOTHING FAILS WHEN IT STOPS BEING TRUE, so now
+  something does. tests/guide-gates.js checks the guide's listings against
+  the example file, every `ringserv <cmd>` the guides promise against the
+  real CLI, every local link in all three documents, and then STARTS the
+  example and drives it -- the contract violation the guide promises is a
+  422 is asserted to be a 422. Writing the application first and the guide
+  second also caught two errors a guide written from memory would have
+  shipped.
+
+state:
+  phases 0-8:  delivered
+  suites:      15 green
+  0.9 gate:    "RingServ carries one real application of the author's" --
+               OPEN, and the Principal's to open. The worked example is a
+               guide, not a substitute, and I will not pretend otherwise.
+
+waiting:
+  RINGSERV-ANNEX-STALE -> the zing session [routed 08-18, still unanswered]
+  RINGSERV-STZZQL-README -> the stzzql session [no closure reported back]
+  RINGSERV-MICRORING-INTERPLAY -> the microring session [no closure reported]
+
+next:
+  - the Principal: the 0.9 gate. Nothing in the roadmap comes before it now
+  - central:       three findings routed on 08-18 have had no closure
+                   reported, and the board still lists two finished items
+  - me:            nothing started. Asking rather than choosing, because
+                   what comes after a delivered roadmap is a decision about
+                   direction and that is not a session's to make
+
+note:      the honest summary of phase 8 is that four of its five pieces
+           were engineering and the fifth was a habit: writing the example
+           BEFORE the guide, and gating the guide against it. That is the
+           cheapest of the five and probably the one that will still be
+           paying in a year.
+```
+---
