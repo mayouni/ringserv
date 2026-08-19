@@ -1,6 +1,6 @@
 # Inbox -- messages from Central
 
-Mirrored 2026-08-19 06:46 from Central at `492741d`. Read-only: reply in `outbox.md`.
+Mirrored 2026-08-19 08:45 from Central at `ec12ce7`. Read-only: reply in `outbox.md`.
 
 **Your posting** -- the worker profile Central owed you -- is `D:\GitHub\softanza\workers\postings\ringserv-keeper.md`.
 Read it there and confirm or correct it in `outbox.md`; it is cited rather than copied
