@@ -94,6 +94,66 @@ class OrdersService from Service
             # not reachable from the wire
 ```
 
+## 3b. Declaring services — the JS form
+
+A service's implementation may be JavaScript. The declaration stays in
+Ring, because that is where `RingServ()`, `Contract()` and `Topology()`
+already are and one declaration surface is worth more than two:
+
+```ring
+:report = [ :js = "services/report.js" ]
+```
+
+```js
+// services/report.js
+function money(n) {                    // private — see below
+    return "$" + n.toFixed(2);
+}
+
+const service = {
+    build(payload) {
+        return { code: 0, message: "OK", data: { total: money(payload.n) } };
+    },
+
+    async summary(payload) {           // async is free
+        const rows = await somethingSlow(payload);
+        return { code: 0, message: "OK", data: { rows } };
+    },
+};
+```
+
+**The `service` object's methods are the actions; everything else in the
+file is private.** That is the JS analogue of the class form's `Action`
+suffix, and it gives privacy *by structure* rather than by naming
+convention — a helper cannot become an endpoint by accident.
+
+Three properties worth stating, because they are the whole point:
+
+- **Nothing around the service changes.** The envelope, `Contract()`
+  validation, placement, status codes, the sync path and the catalog all
+  behave identically. `tests/jsserv-gates.js` runs the same assertions
+  against a JS service and a Ring service and compares the two **as
+  data**, so a difference has nowhere to hide.
+- **`async` is free.** An action may be `async`; the host settles the
+  promise before encoding. A rejected one fails exactly like a thrown
+  synchronous error, with a line number.
+- **The guest cannot reach the machine.** There is no `require`, no
+  `std`, no `os`, no filesystem — quickjs-libc is deliberately not
+  vendored. Ring reads the `.js` file and hands the host *source*, never
+  a path, so there is no host function that takes a path and therefore
+  nothing to escape from.
+
+Each file is evaluated inside a function rather than at global scope, so
+two services may both declare `service`, and a helper named `fmt` in one
+cannot be reached or clobbered by the other. What they *do* share is one
+QuickJS context per worker — resident, like the Ring VM beside it, so a
+JS service costs no more per request than a Ring one after the first
+call. A server with no JS services never creates a context at all.
+
+The catalog asks the **guest** which actions exist, exactly as the class
+form asks `methods()`. Parsing the file would be a second, weaker opinion
+about a fact the runtime already holds.
+
 ## 4. Generic table services — the boilerplate killer
 
 Pionia's `UniversalGenericService` (itself a descendant of Django

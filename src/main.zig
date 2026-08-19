@@ -8,7 +8,7 @@ const serve = @import("serve.zig");
 const cli = @import("cli.zig");
 const check = @import("check.zig");
 const topology_cmd = @import("topology.zig");
-const js = @import("js.zig");
+const js = bridge.js;
 
 extern fn fflush(stream: ?*anyopaque) c_int;
 
@@ -204,6 +204,9 @@ pub fn main() !u8 {
             };
             defer f.close();
             const src = try f.readToEndAlloc(arena, 64 * 1024 * 1024);
+            // A `:js` path is resolved against the application, so the
+            // application's own directory has to be known before it runs.
+            bridge.setAppDir(std.fs.path.dirname(args[2]) orelse ".");
             // Native ring normalizes CRLF as it reads; so must we.
             break :blk try cli.normalizeZ(arena, src);
         } else try arena.dupeZ(u8, args[2]);

@@ -81,6 +81,7 @@ pub fn runTests(arena: std.mem.Allocator, app_path: []const u8) !u8 {
         return 1;
     };
 
+    bridge.setAppDir(std.fs.path.dirname(app_path) orelse ".");
     try bridge.db.configure(":memory:");
     bridge.db.setDisplayPath(":memory:");
     bridge.rs_set_echo(1);

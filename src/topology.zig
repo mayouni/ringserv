@@ -33,6 +33,7 @@ fn manifestOf(arena: std.mem.Allocator, app_path: []const u8) !?std.json.Parsed(
     const src = try f.readToEndAlloc(arena, 64 * 1024 * 1024);
     const src_z = try @import("cli.zig").normalizeZ(arena, src);
 
+    bridge.setAppDir(std.fs.path.dirname(app_path) orelse ".");
     try bridge.db.configure(":memory:");
     bridge.db.setDisplayPath(":memory:");
     bridge.rs_set_echo(0);

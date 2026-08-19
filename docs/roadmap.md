@@ -160,14 +160,32 @@ table and the `must-refetch` control exist and are honoured; nothing yet
 moves the floor. Phase 8. RingScript-side store integration is
 RingScript's, and belongs to that repository's plan.
 
-## Phase 7 — The JS guest
+## Phase 7 — The JS guest — in progress
 
-Vendor quickjs-ng (amalgamation); `.js` services beside `.ring` ones;
-the ECMA-429 minimum surface implemented once in Zig, exposed to the
-guest; `serv.call` from JS on the server.
-**Gate:** the scaffold's hello service rewritten in JS passes the
-same service gates; a subset of WinterTC's API list is
-conformance-tested.
+**Part 1 — the resident runtime ✅ (passed 2026-08-18).** quickjs-ng
+v0.16.1 vendored (four translation units; **quickjs-libc deliberately
+absent**), `src/js.zig` mirroring the Ring bridge name for name, one
+runtime and context per worker. Errors carry line numbers; an `async`
+function is settled rather than encoded as a promise; memory and stack
+limits are the server's.
+**Gate — passed:** 25 gates (`node tests/js-gates.js`), five of which
+keep the guest fenced in — `require`, `std`, `os`, `scriptArgs` and
+`process` must all be undefined.
+
+**Part 2 — `.js` services ✅ (passed 2026-08-18).** A third service form:
+`:report = [ :js = "services/report.js" ]`, where the file's `service`
+object holds the actions and everything else is private. Ring reads the
+file and hands the host **source, never a path**, so the guest's lack of
+a filesystem is a property of the build. The catalog asks the guest what
+it answers.
+**Gate — passed:** 23 gates (`node tests/jsserv-gates.js`), the central
+one being that a JS service and a Ring service answering the same shape
+are compared **as data** — envelope, contract, placement, status codes
+and catalog identical.
+
+**Still ahead:** the ECMA-429 minimum surface implemented once in Zig and
+exposed to the guest, `serv.call` from JS on the server, and the WinterTC
+conformance subset.
 
 ## Phase 8 — Hardening toward 0.9
 

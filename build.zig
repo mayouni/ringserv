@@ -232,11 +232,6 @@ pub fn build(b: *std.Build) void {
     main_mod.addImport("bridge", bridge_mod);
     main_mod.addImport("httpz", httpz_mod);
     addTreeSitter(main_mod, b);
-    // `src/js.zig` lives in THIS module and @cImports quickjs.h, so the
-    // header must be reachable from here as well. The C sources stay
-    // attached to the bridge module only — compiled once per artifact,
-    // linked by both.
-    main_mod.addIncludePath(b.path("vendor/quickjs"));
 
     const exe = b.addExecutable(.{ .name = "ringserv", .root_module = main_mod });
     // Deep C recursion happens in the parser and in recursive list

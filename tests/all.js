@@ -36,6 +36,7 @@ const suites = [
     { name: "placement         ", node: "topology-gates.js" },
     { name: "sync + convergence", node: "sync-gates.js" },
     { name: "JS guest          ", node: "js-gates.js" },
+    { name: "JS services       ", node: "jsserv-gates.js" },
 ];
 
 if (full) {

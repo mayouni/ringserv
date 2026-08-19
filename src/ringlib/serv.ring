@@ -105,6 +105,20 @@ func __dispatch aReq
 		return [ :code = 1, :message = cViolation, :data = "" ]
 	ok
 
+	# JS form: the implementation lives in a .js file and the guest
+	# answers. Checked before the two Ring forms because it is a property
+	# of the DECLARATION, not of the handler — and note what is already
+	# behind us: the contract ran, the placement was enforced, the envelope
+	# is the same. That is the whole claim of two guests, one dispatcher.
+	cJsFile = RsJsFile(pSvc)
+	if cJsFile != ""
+		try
+			return RsJsDispatch(cService, cJsFile, aReq2)
+		catch
+			return RsFailed(cCatchError)
+		done
+	ok
+
 	# Class form: an object whose <action>Action methods are reachable —
 	# the Action suffix rule (docs/services.md §3). The method name is
 	# built from a validated name, then reached through eval in local
@@ -263,6 +277,12 @@ func __rs_catalog aIgnored
 					add(aActions, left(cM, len(cM) - 6))
 				ok
 			next
+		but RsJsFile(pSvc) != ""
+			# JS form: ask the GUEST what it answers. Parsing the file
+			# here would be a second, weaker opinion about a fact the
+			# runtime already holds — the same reason the class form asks
+			# methods() rather than reading the source.
+			aActions = RsJsActions(cName, RsJsFile(pSvc))
 		but islist(pSvc)
 			cTable = RsDeclGet(pSvc, "table", "")
 			if not isstring(cTable) cTable = "" ok

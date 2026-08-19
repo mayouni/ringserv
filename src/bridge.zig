@@ -18,6 +18,10 @@
 
 const std = @import("std");
 pub const db = @import("db.zig");
+/// The second guest. Lives in THIS module, beside db.zig and for the same
+/// reason: the Ring hooks that reach it are registered here, and a hook
+/// cannot call into a module the bridge does not have.
+pub const js = @import("js.zig");
 
 const alloc = std.heap.c_allocator;
 
@@ -123,6 +127,23 @@ pub export fn rs_end_run() void {
 
 pub export fn rs_set_echo(on: u32) void {
     g_echo = on != 0;
+}
+
+/// The directory the running application lives in.
+///
+/// Set once by whichever entry point knows it — `run`, `dev`, `check`,
+/// `topology` — and read by the Ring side through `__rs_approot`. A `:js`
+/// path is relative to the APPLICATION, never to the directory the server
+/// happened to be started from: an app that works under `ringserv run
+/// app.ring` must work under `ringserv run /elsewhere/app.ring` too.
+var g_app_dir: []const u8 = "";
+
+pub fn setAppDir(dir: []const u8) void {
+    g_app_dir = dir;
+}
+
+fn appRootHook(p: ?*anyopaque) callconv(.c) void {
+    ring_vm_api_retstring2(p, g_app_dir.ptr, @intCast(g_app_dir.len));
 }
 
 fn appendOut(bytes: []const u8) void {
@@ -345,6 +366,9 @@ const topology_ring_src = @embedFile("ringlib/topology.ring");
 /// synclib — the shape log and the mutation queue, pure Ring. Loaded
 /// after topology.ring: a shape IS a synced table in the topology.
 const sync_ring_src = @embedFile("ringlib/sync.ring");
+/// jsserv — the JS service form, pure Ring. Loaded after serv.ring, whose
+/// dispatcher calls into it.
+const jsserv_ring_src = @embedFile("ringlib/jsserv.ring");
 /// The test vocabulary — Call/Expect/…, used by `ringserv test`.
 const testing_ring_src = @embedFile("ringlib/testing.ring");
 
@@ -391,6 +415,7 @@ const ringlib_files = [_]RingLibFile{
     .{ .name = "contract.ring", .src = contract_ring_src, .provides = "rscontractcheck" },
     .{ .name = "topology.ring", .src = topology_ring_src, .provides = "__rs_topology" },
     .{ .name = "sync.ring", .src = sync_ring_src, .provides = "__rs_sync_push" },
+    .{ .name = "jsserv.ring", .src = jsserv_ring_src, .provides = "rsjsdispatch" },
     .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask" },
 };
 
@@ -435,6 +460,11 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__db_columns", &db.columnsHook);
     ring_vm_funcregister2(st, "__db_path", &db.pathHook);
     ring_vm_funcregister2(st, "__rs_probe", &probeHook);
+    ring_vm_funcregister2(st, "__rs_approot", &appRootHook);
+    ring_vm_funcregister2(st, "__js_load", &jsLoadHook);
+    ring_vm_funcregister2(st, "__js_call", &jsCallHook);
+    ring_vm_funcregister2(st, "__js_has", &jsHasHook);
+    ring_vm_funcregister2(st, "__js_actions", &jsActionsHook);
     ring_vm_funcregister2(st, "rs_jsonencode", &rs_jsonencode_hook);
     ring_vm_funcregister2(st, "rs_jsondecode", &rs_jsondecode_hook);
     ring_state_runcode(st, see_shim);
@@ -607,4 +637,101 @@ pub export fn rs_set_input(text: [*:0]const u8) void {
 /// Append raw bytes to the eval output buffer (called by the C printers).
 pub export fn rs_append_output(ptr: [*]const u8, len: usize) void {
     appendOut(ptr[0..len]);
+}
+
+// ------------------------------------------------- the second guest's hooks
+//
+// Ring reaches JS through these four. The division of labour is
+// deliberate: RING resolves and reads the file, the GUEST only ever sees
+// source text. That is what keeps "the JS guest has no filesystem" true
+// as a property of the build rather than a promise in a document.
+
+/// Ring: __js_load(cName, cSource) — register a JS service in this
+/// worker's guest. Raises a trappable Ring error carrying the guest's own
+/// diagnostic, so a broken service file lands in a 500 envelope with a
+/// line number instead of taking the worker down.
+fn jsLoadHook(p: ?*anyopaque) callconv(.c) void {
+    if (js.js_init() != 0) {
+        ring_vm_error(p, js.js_last_error());
+        return;
+    }
+    const name = argZ(p, 1) orelse {
+        ring_vm_error(p, "__js_load: expects a service name and its source");
+        return;
+    };
+    defer alloc.free(name);
+    const src = argZ(p, 2) orelse {
+        ring_vm_error(p, "__js_load: expects a service name and its source");
+        return;
+    };
+    defer alloc.free(src);
+
+    if (js.js_load_service(name, src) != 0) {
+        ring_vm_error(p, js.js_last_error());
+        return;
+    }
+    ring_vm_api_retnumber(p, 1);
+}
+
+/// Ring: __js_call(cName, cAction, cPayloadJson) -> reply JSON.
+fn jsCallHook(p: ?*anyopaque) callconv(.c) void {
+    const name = argZ(p, 1) orelse {
+        ring_vm_error(p, "__js_call: expects service, action and payload");
+        return;
+    };
+    defer alloc.free(name);
+    const action = argZ(p, 2) orelse {
+        ring_vm_error(p, "__js_call: expects service, action and payload");
+        return;
+    };
+    defer alloc.free(action);
+    const payload = argZ(p, 3) orelse {
+        ring_vm_error(p, "__js_call: expects service, action and payload");
+        return;
+    };
+    defer alloc.free(payload);
+
+    const out = std.mem.span(js.js_service_call(name, action, payload));
+    const err = std.mem.span(js.js_last_error());
+    if (err.len != 0) {
+        ring_vm_error(p, js.js_last_error());
+        return;
+    }
+    ring_vm_api_retstring2(p, out.ptr, @intCast(out.len));
+}
+
+/// Ring: __js_has(cName, cAction) -> 0/1.
+fn jsHasHook(p: ?*anyopaque) callconv(.c) void {
+    const name = argZ(p, 1) orelse {
+        ring_vm_api_retnumber(p, 0);
+        return;
+    };
+    defer alloc.free(name);
+    const action = argZ(p, 2) orelse {
+        ring_vm_api_retnumber(p, 0);
+        return;
+    };
+    defer alloc.free(action);
+    ring_vm_api_retnumber(p, @floatFromInt(js.js_service_has(name, action)));
+}
+
+/// Ring: __js_actions(cName) -> JSON array of action names. The catalog
+/// asks the GUEST what it answers, exactly as it asks the Ring runtime —
+/// runtime truth stays with the runtime, whichever runtime it is.
+fn jsActionsHook(p: ?*anyopaque) callconv(.c) void {
+    const name = argZ(p, 1) orelse {
+        ring_vm_api_retstring2(p, "[]", 2);
+        return;
+    };
+    defer alloc.free(name);
+    const out = std.mem.span(js.js_service_actions(name));
+    ring_vm_api_retstring2(p, out.ptr, @intCast(out.len));
+}
+
+/// A NUL-terminated copy of a Ring string argument. Owned by the caller.
+fn argZ(p: ?*anyopaque, n: c_int) ?[:0]u8 {
+    if (ring_vm_api_isstring(p, n) == 0) return null;
+    const s = ring_vm_api_getstring(p, n) orelse return null;
+    const len: usize = @intCast(ring_vm_api_getstringsize(p, n));
+    return alloc.dupeZ(u8, s[0..len]) catch null;
 }

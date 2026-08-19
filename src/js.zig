@@ -369,3 +369,219 @@ fn installHost(ctx: *c.JSContext) i32 {
     _ = c.JS_SetPropertyStr(ctx, global, "console", console);
     return 0;
 }
+
+// ------------------------------------------------------------- services
+//
+// A JS service is a file that assigns a `service` object:
+//
+//     const service = {
+//         greet(p) { return { code: 0, message: "OK", data: {...} }; },
+//     };
+//
+// Its methods are the actions; anything else in the file is private.
+// That is the JS analogue of the Ring class form's Action suffix, and it
+// gives privacy for free rather than by naming convention.
+//
+// Each file is evaluated INSIDE A FUNCTION rather than at global scope,
+// so two services can both declare `service` — and a helper named `fmt`
+// in one cannot be reached, or clobbered, by the other. What they DO
+// share is the host surface, which is the point of one guest per worker.
+
+/// Evaluate a service file and register what it exported.
+///
+/// The SOURCE arrives from the Ring side, never a path: the guest has no
+/// filesystem and this is the seam that keeps that true. Ring already
+/// knows where the application lives, so resolution belongs there.
+pub export fn js_load_service(name: [*:0]const u8, source: [*:0]const u8) i32 {
+    const ctx = g_ctx orelse {
+        setError("no JS context (js_init first)", .{});
+        return 1;
+    };
+    g_err.clearRetainingCapacity();
+
+    const sname = std.mem.span(name);
+    const src = std.mem.span(source);
+
+    // The wrapper: run the file as a function body and hand back whatever
+    // `service` it bound. `typeof` rather than a bare reference, so a file
+    // that forgot to declare one gets a clean diagnostic instead of a
+    // ReferenceError from somewhere inside the wrapper.
+    var wrapped: std.ArrayList(u8) = .empty;
+    defer wrapped.deinit(alloc);
+    wrapped.appendSlice(alloc, "globalThis.__rs_services = globalThis.__rs_services || {};") catch return 1;
+    wrapped.appendSlice(alloc, "globalThis.__rs_services[") catch return 1;
+    appendJsString(&wrapped, sname);
+    wrapped.appendSlice(alloc, "] = (function(){\n") catch return 1;
+    wrapped.appendSlice(alloc, src) catch return 1;
+    wrapped.appendSlice(alloc, "\n;return typeof service !== 'undefined' ? service : null;})();") catch return 1;
+    wrapped.append(alloc, 0) catch return 1;
+
+    const z: [*:0]const u8 = @ptrCast(wrapped.items.ptr);
+    const val = c.JS_Eval(ctx, z, wrapped.items.len - 1, name, c.JS_EVAL_TYPE_GLOBAL);
+    defer c.JS_FreeValue(ctx, val);
+    if (c.JS_IsException(val)) {
+        captureException(ctx);
+        return 1;
+    }
+    drainJobs(ctx);
+
+    if (serviceObject(ctx, sname)) |obj| {
+        c.JS_FreeValue(ctx, obj);
+        return 0;
+    }
+    setError("{s} declares no `service` object — a JS service is a file that " ++
+        "assigns `const service = {{ action(payload) {{ … }} }}`", .{sname});
+    return 1;
+}
+
+/// The registered service object, or null. Caller owns the value.
+fn serviceObject(ctx: *c.JSContext, name: []const u8) ?c.JSValue {
+    const global = c.JS_GetGlobalObject(ctx);
+    defer c.JS_FreeValue(ctx, global);
+    const reg = c.JS_GetPropertyStr(ctx, global, "__rs_services");
+    defer c.JS_FreeValue(ctx, reg);
+    if (c.JS_IsUndefined(reg)) return null;
+
+    var buf: [256]u8 = undefined;
+    const key = std.fmt.bufPrintZ(&buf, "{s}", .{name}) catch return null;
+    const obj = c.JS_GetPropertyStr(ctx, reg, key);
+    if (c.JS_IsUndefined(obj) or c.JS_IsNull(obj)) {
+        c.JS_FreeValue(ctx, obj);
+        return null;
+    }
+    return obj;
+}
+
+/// True when a loaded service answers this action.
+pub export fn js_service_has(name: [*:0]const u8, action: [*:0]const u8) u32 {
+    const ctx = g_ctx orelse return 0;
+    const obj = serviceObject(ctx, std.mem.span(name)) orelse return 0;
+    defer c.JS_FreeValue(ctx, obj);
+    const m = c.JS_GetPropertyStr(ctx, obj, action);
+    defer c.JS_FreeValue(ctx, m);
+    return if (c.JS_IsFunction(ctx, m)) 1 else 0;
+}
+
+/// The action names a loaded service answers, as a JSON array — so the
+/// catalog that `check` and `docs` read is computed from the guest rather
+/// than reconstructed from the file. Same principle as the Ring side:
+/// runtime truth stays with the runtime.
+pub export fn js_service_actions(name: [*:0]const u8) [*:0]const u8 {
+    g_result.clearRetainingCapacity();
+    const ctx = g_ctx orelse return "[]";
+    const obj = serviceObject(ctx, std.mem.span(name)) orelse return "[]";
+    defer c.JS_FreeValue(ctx, obj);
+
+    const expr = "(function(o){return Object.keys(o).filter(function(k){return typeof o[k]==='function'})})";
+    const keys = c.JS_Eval(ctx, expr, expr.len, "<actions>", c.JS_EVAL_TYPE_GLOBAL);
+    defer c.JS_FreeValue(ctx, keys);
+    if (c.JS_IsException(keys)) {
+        captureException(ctx);
+        return "[]";
+    }
+    var arg = rs_js_dup_value(ctx, obj);
+    const list = c.JS_Call(ctx, keys, rs_js_undefined(), 1, @ptrCast(&arg));
+    c.JS_FreeValue(ctx, arg);
+    defer c.JS_FreeValue(ctx, list);
+    if (c.JS_IsException(list)) {
+        captureException(ctx);
+        return "[]";
+    }
+    const encoded = c.JS_JSONStringify(ctx, list, rs_js_undefined(), rs_js_undefined());
+    defer c.JS_FreeValue(ctx, encoded);
+    if (c.JS_ToCString(ctx, encoded)) |s| {
+        defer c.JS_FreeCString(ctx, s);
+        g_result.appendSlice(alloc, std.mem.span(s)) catch {};
+    }
+    g_result.append(alloc, 0) catch return "[]";
+    defer _ = g_result.pop();
+    return @ptrCast(g_result.items.ptr);
+}
+
+/// Call `service.action(payload)` and JSON-encode the reply.
+///
+/// The same contract as `js_call` — including promise settling, so an
+/// action may be `async` without anything upstream noticing.
+pub export fn js_service_call(
+    name: [*:0]const u8,
+    action: [*:0]const u8,
+    json_arg: [*:0]const u8,
+) [*:0]const u8 {
+    g_result.clearRetainingCapacity();
+    g_err.clearRetainingCapacity();
+
+    const ctx = g_ctx orelse {
+        setError("no JS context (js_init first)", .{});
+        return "";
+    };
+    const obj = serviceObject(ctx, std.mem.span(name)) orelse {
+        setError("no JS service named {s}", .{name});
+        return "";
+    };
+    defer c.JS_FreeValue(ctx, obj);
+
+    const fn_val = c.JS_GetPropertyStr(ctx, obj, action);
+    defer c.JS_FreeValue(ctx, fn_val);
+    if (!c.JS_IsFunction(ctx, fn_val)) {
+        setError("JS service {s} does not answer {s}", .{ name, action });
+        return "";
+    }
+
+    const arg_src = std.mem.span(json_arg);
+    var arg = c.JS_ParseJSON(ctx, arg_src.ptr, arg_src.len, "<payload>");
+    if (c.JS_IsException(arg)) {
+        captureException(ctx);
+        c.JS_FreeValue(ctx, arg);
+        return "";
+    }
+    defer c.JS_FreeValue(ctx, arg);
+
+    // `this` is the service object, so an action may call a sibling as
+    // `this.other(...)` — the same reach a Ring class-form service has.
+    const ret = c.JS_Call(ctx, fn_val, obj, 1, @ptrCast(&arg));
+    defer c.JS_FreeValue(ctx, ret);
+    if (c.JS_IsException(ret)) {
+        captureException(ctx);
+        return "";
+    }
+    drainJobs(ctx);
+    if (g_err.items.len != 0) return "";
+
+    const settled = settle(ctx, ret) orelse return "";
+    defer c.JS_FreeValue(ctx, settled);
+
+    const encoded = c.JS_JSONStringify(ctx, settled, rs_js_undefined(), rs_js_undefined());
+    defer c.JS_FreeValue(ctx, encoded);
+    if (c.JS_IsException(encoded)) {
+        captureException(ctx);
+        return "";
+    }
+    if (c.JS_ToCString(ctx, encoded)) |s| {
+        defer c.JS_FreeCString(ctx, s);
+        g_result.appendSlice(alloc, std.mem.span(s)) catch {};
+    }
+    g_result.append(alloc, 0) catch return "";
+    defer _ = g_result.pop();
+    return @ptrCast(g_result.items.ptr);
+}
+
+/// A JS string literal, for building the wrapper safely. The service name
+/// is validated upstream, but a codec that only works on trusted input is
+/// a codec waiting for untrusted input.
+fn appendJsString(out: *std.ArrayList(u8), s: []const u8) void {
+    out.append(alloc, '"') catch return;
+    for (s) |ch| switch (ch) {
+        '"' => out.appendSlice(alloc, "\\\"") catch return,
+        '\\' => out.appendSlice(alloc, "\\\\") catch return,
+        '\n' => out.appendSlice(alloc, "\\n") catch return,
+        '\r' => out.appendSlice(alloc, "\\r") catch return,
+        else => {
+            if (ch < 0x20) {
+                var buf: [8]u8 = undefined;
+                const hex = std.fmt.bufPrint(&buf, "\\u{x:0>4}", .{ch}) catch return;
+                out.appendSlice(alloc, hex) catch return;
+            } else out.append(alloc, ch) catch return;
+        },
+    };
+    out.append(alloc, '"') catch return;
+}
