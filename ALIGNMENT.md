@@ -28,9 +28,10 @@ the generalization was intended.
 | Phase 4 | the CLI: `new` · `dev` · `test` · `where` · static routes · cross-compiled dist |
 | Phase 5 | `check` and `docs` — syntax from tree-sitter, structure from the VM |
 | Phase 6 | placement declared, published, enforced, emitted · the sync protocol · the convergence oracle |
+| Phase 7 | the JS guest: resident quickjs-ng · `.js` services · the WinterTC surface · `serv.call` from JS |
 | Since | C JSON codec (byte-identical to the pure reference), one-writer connection, VM swapped to patched Ring, C2 conformance gated |
 
-**10 gate suites green** by default and 14 with `--full`, one command:
+**12 gate suites green** by default and 16 with `--full`, one command:
 `zig build gates`.
 
 ## The six horizontal contracts, as they stand here

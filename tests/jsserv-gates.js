@@ -134,6 +134,84 @@ server.on("exit", () => { died = true; });
 
     check("the server never died", !died);
 
+
+    // ============================================ serv.call, by trampoline
+    //
+    // The claim: a JS service calling another service gets the SAME
+    // dispatch a Ring service gets — contracts, placement, generic table
+    // services and all — rather than a second, weaker path that would
+    // drift from it. Every gate below is one way that could be false.
+
+    r = await call("orchestra", "viaRing", { name: "Ring" });
+    check("a JS service can call a RING service",
+        r.json.data.inner === "Hello, Ring!", JSON.stringify(r.json));
+
+    r = await call("orchestra", "viaJs", { name: "deep" });
+    check("...and another JS service", r.json.data.inner === "Hello, deep!",
+        JSON.stringify(r.json));
+
+    r = await call("orchestra", "store", { title: "note-1", weight: 3 });
+    check("...and a GENERIC TABLE service, so data arrives through the same seam",
+        r.json.data.id > 0 && r.json.data.title === "note-1", JSON.stringify(r.json));
+
+    r = await call("orchestra", "chain", { names: ["a", "b", "c"] });
+    check("sequential calls each get their own trampoline round",
+        JSON.stringify(r.json.data.greetings) ===
+        JSON.stringify(["Hello, a!", "Hello, b!", "Hello, c!"]),
+        JSON.stringify(r.json.data));
+
+    r = await call("orchestra", "fanout", { names: ["x", "y", "z"] });
+    check("Promise.all sends several calls in ONE round",
+        r.json.data.n === 3 && r.json.data.first === "Hello, x!",
+        JSON.stringify(r.json.data));
+
+    // A refusal comes back as an ENVELOPE, exactly what an HTTP caller
+    // sees. serv.call rejects only when dispatch itself raises; a contract
+    // violation is a business outcome and travels in `code`.
+    r = await call("orchestra", "refused", {});
+    check("a contract violation crosses the seam as an envelope, not a throw",
+        r.json.data.code === 1 && /at most 20/.test(r.json.data.why),
+        JSON.stringify(r.json.data));
+
+    r = await call("orchestra", "missing", {});
+    check("calling an unknown service answers code 1, not undefined",
+        r.json.data.code === 1, JSON.stringify(r.json.data));
+
+    r = await call("orchestra", "badtarget", {});
+    check("a malformed target is refused before it reaches the host",
+        /service\.action/.test(r.json.data.caught), JSON.stringify(r.json.data));
+
+    // The guest must not be able to hang a worker by calling itself.
+    {
+        const dir = path.join(tmp, "cycle");
+        fs.mkdirSync(path.join(dir, "s"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "s", "loop.js"),
+            "const service = { async go() { return await serv.call('loop.go', {}); } };\n");
+        fs.writeFileSync(path.join(dir, "app.ring"),
+            'RingServ([ :port = 8090, :services = [ :loop = [ :js = "s/loop.js" ] ] ])\n');
+        const srv2 = spawn(RINGSERV, ["run", path.join(dir, "app.ring")],
+            { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, RINGSERV_TEST_DB: ":memory:" } });
+        try {
+            const t0 = Date.now();
+            let up = false;
+            while (Date.now() - t0 < 20000) {
+                try { if ((await fetch("http://127.0.0.1:8090/health")).status === 200) { up = true; break; } } catch {}
+                await new Promise(res => setTimeout(res, 150));
+            }
+            check("the cycle fixture comes up", up);
+            const res = await fetch("http://127.0.0.1:8090/api/v1", {
+                method: "POST",
+                body: JSON.stringify({ service: "loop", action: "go", payload: {} }),
+            });
+            const body = await res.text();
+            check("a service that calls ITSELF is stopped, not left to hang",
+                /cycle|nested/.test(body), body.slice(0, 200));
+        } finally {
+            srv2.kill();
+            await new Promise(res => setTimeout(res, 600));
+        }
+    }
+
     // ==================================== 4. the catalog asks the guest
     const docs = spawnSync(RINGSERV, ["docs", FIXTURE, "--json"], { encoding: "utf8" });
     let cat = null;

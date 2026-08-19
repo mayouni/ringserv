@@ -1,0 +1,99 @@
+{
+  "_comment": [
+    "The WinterTC / ECMA-429 Minimum Common API, as a checklist RingServ is",
+    "measured against — someone else's list, which is the point. A surface",
+    "graded by its own author grades itself generous.",
+    "",
+    "Each entry says what RingServ claims for that name, and tests/js-gates.js",
+    "verifies EVERY claim in both directions: `present` must exist and behave,",
+    "`absent` must be genuinely absent. A capability that quietly appears later",
+    "is as much a defect as one that quietly disappears — this file is what",
+    "makes either one fail a build.",
+    "",
+    "Source: the Minimum Common API list published by WinterTC (formerly",
+    "WinterCG), read 2026-08-19. Where a name is absent, `why` says so in",
+    "terms of this server rather than in terms of the standard."
+  ],
+  "version": "wintertc-minimum-common-api, read 2026-08-19",
+  "entries": [
+    { "name": "console", "status": "present", "probe": "typeof console.log" },
+    { "name": "globalThis", "status": "present", "probe": "typeof globalThis" },
+    { "name": "self", "status": "present", "probe": "typeof self" },
+    { "name": "queueMicrotask", "status": "present", "probe": "typeof queueMicrotask" },
+    { "name": "structuredClone", "status": "present", "probe": "typeof structuredClone" },
+    { "name": "atob", "status": "present", "probe": "typeof atob" },
+    { "name": "btoa", "status": "present", "probe": "typeof btoa" },
+    { "name": "setTimeout", "status": "present", "probe": "typeof setTimeout" },
+    { "name": "clearTimeout", "status": "present", "probe": "typeof clearTimeout" },
+    { "name": "TextEncoder", "status": "present", "probe": "typeof TextEncoder" },
+    { "name": "TextDecoder", "status": "present", "probe": "typeof TextDecoder" },
+    { "name": "URL", "status": "present", "probe": "typeof URL" },
+    { "name": "URLSearchParams", "status": "present", "probe": "typeof URLSearchParams" },
+    { "name": "Event", "status": "present", "probe": "typeof Event" },
+    { "name": "EventTarget", "status": "present", "probe": "typeof EventTarget" },
+    { "name": "AbortController", "status": "present", "probe": "typeof AbortController" },
+    { "name": "AbortSignal", "status": "present", "probe": "typeof AbortSignal" },
+    { "name": "Headers", "status": "present", "probe": "typeof Headers" },
+    { "name": "Request", "status": "present", "probe": "typeof Request" },
+    { "name": "Response", "status": "present", "probe": "typeof Response" },
+    { "name": "crypto.getRandomValues", "status": "present", "probe": "typeof crypto.getRandomValues" },
+    { "name": "crypto.randomUUID", "status": "present", "probe": "typeof crypto.randomUUID" },
+    { "name": "performance.now", "status": "present", "probe": "typeof performance.now" },
+
+    {
+      "name": "fetch",
+      "status": "absent",
+      "probe": "typeof fetch",
+      "why": "A service reaches another service by NAME through serv.call, and the topology decides where that name lives. A service that hardcodes a URL has made a deployment decision inside application code, which is what placement exists to prevent. Outbound HTTP to the wider internet is a phase-8 decision about egress policy, not an oversight."
+    },
+    {
+      "name": "setInterval",
+      "status": "absent",
+      "probe": "typeof setInterval === 'function' && (() => { try { setInterval(() => {}, 1); return 'usable'; } catch (e) { return 'refused'; } })() === 'usable'",
+      "expect": "false",
+      "why": "Declared so the name is not silently missing, but it THROWS: a request-scoped guest has nowhere to run a repeating timer, and one that survived a request would be a leak with a schedule."
+    },
+    {
+      "name": "crypto.subtle",
+      "status": "absent",
+      "probe": "typeof crypto.subtle",
+      "why": "Not yet implemented. Recorded here rather than left to be discovered, because a half-present SubtleCrypto is worse than an absent one."
+    },
+    {
+      "name": "Blob",
+      "status": "absent",
+      "probe": "typeof Blob",
+      "why": "Not yet implemented. The body types a service actually meets are strings and JSON; Blob arrives when a service needs it."
+    },
+    {
+      "name": "CompressionStream",
+      "status": "absent",
+      "probe": "typeof CompressionStream",
+      "why": "Not yet implemented. Streams are phase-8 work: the request path is currently whole-body, so a stream would be a shape with nothing behind it."
+    },
+    {
+      "name": "ReadableStream",
+      "status": "absent",
+      "probe": "typeof ReadableStream",
+      "why": "Not yet implemented — see CompressionStream."
+    },
+    {
+      "name": "WebSocket",
+      "status": "absent",
+      "probe": "typeof WebSocket",
+      "why": "Not yet implemented. The vendored httpz carries a websocket module, so this is a wiring decision rather than a missing capability, and it belongs with the sync work's live channel."
+    },
+    {
+      "name": "require",
+      "status": "absent",
+      "probe": "typeof require",
+      "why": "Not part of the standard, and deliberately not provided: it is quickjs-libc's door to the filesystem."
+    },
+    {
+      "name": "process",
+      "status": "absent",
+      "probe": "typeof process",
+      "why": "Node's, not the standard's. A guest with no filesystem and no child processes has nothing to put in it."
+    }
+  ]
+}

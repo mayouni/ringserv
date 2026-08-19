@@ -465,6 +465,11 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__js_call", &jsCallHook);
     ring_vm_funcregister2(st, "__js_has", &jsHasHook);
     ring_vm_funcregister2(st, "__js_actions", &jsActionsHook);
+    ring_vm_funcregister2(st, "__js_depth", &jsDepthHook);
+    ring_vm_funcregister2(st, "__js_pending_calls", &jsPendingCallsHook);
+    ring_vm_funcregister2(st, "__js_resolve_call", &jsResolveCallHook);
+    ring_vm_funcregister2(st, "__js_reject_call", &jsRejectCallHook);
+    ring_vm_funcregister2(st, "__js_continue", &jsContinueHook);
     ring_vm_funcregister2(st, "rs_jsonencode", &rs_jsonencode_hook);
     ring_vm_funcregister2(st, "rs_jsondecode", &rs_jsondecode_hook);
     ring_state_runcode(st, see_shim);
@@ -713,6 +718,48 @@ fn jsHasHook(p: ?*anyopaque) callconv(.c) void {
     };
     defer alloc.free(action);
     ring_vm_api_retnumber(p, @floatFromInt(js.js_service_has(name, action)));
+}
+
+/// Ring: __js_depth() -> how many JS actions are suspended right now.
+fn jsDepthHook(p: ?*anyopaque) callconv(.c) void {
+    ring_vm_api_retnumber(p, @floatFromInt(js.js_depth()));
+}
+
+/// Ring: __js_pending_calls() -> JSON array of queued serv.call requests.
+/// The trampoline's read half; see jsserv.ring for why Ring is the loop.
+fn jsPendingCallsHook(p: ?*anyopaque) callconv(.c) void {
+    const out = std.mem.span(js.js_pending_calls());
+    ring_vm_api_retstring2(p, out.ptr, @intCast(out.len));
+}
+
+/// Ring: __js_resolve_call(nId, cReplyJson) — hand one dispatch result back.
+fn jsResolveCallHook(p: ?*anyopaque) callconv(.c) void {
+    if (ring_vm_api_isnumber(p, 1) == 0) return;
+    const id: u32 = @intFromFloat(ring_vm_api_getnumber(p, 1));
+    const json = argZ(p, 2) orelse return;
+    defer alloc.free(json);
+    ring_vm_api_retnumber(p, @floatFromInt(js.js_resolve_call(id, json)));
+}
+
+/// Ring: __js_reject_call(nId, cMessage) — a Ring-side raise becomes a
+/// rejected promise in the guest, so try/catch works across the seam.
+fn jsRejectCallHook(p: ?*anyopaque) callconv(.c) void {
+    if (ring_vm_api_isnumber(p, 1) == 0) return;
+    const id: u32 = @intFromFloat(ring_vm_api_getnumber(p, 1));
+    const msg = argZ(p, 2) orelse return;
+    defer alloc.free(msg);
+    ring_vm_api_retnumber(p, @floatFromInt(js.js_reject_call(id, msg)));
+}
+
+/// Ring: __js_continue() -> the settled reply, or the pending sentinel.
+fn jsContinueHook(p: ?*anyopaque) callconv(.c) void {
+    const out = std.mem.span(js.js_continue());
+    const err = std.mem.span(js.js_last_error());
+    if (err.len != 0) {
+        ring_vm_error(p, js.js_last_error());
+        return;
+    }
+    ring_vm_api_retstring2(p, out.ptr, @intCast(out.len));
 }
 
 /// Ring: __js_actions(cName) -> JSON array of action names. The catalog

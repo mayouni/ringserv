@@ -21,6 +21,7 @@
 **   node tests/js-gates.js
 */
 const { spawnSync } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 
 const RINGSERV = path.join(__dirname, "..", "zig-out", "bin",
@@ -130,6 +131,137 @@ check("the language itself is intact (eval, Function)",
 r = js('function f(){ const a = []; for(;;) a.push(new Array(100000).fill(0)); }', "f", "{}");
 check("an out-of-memory guest is an error, not a dead worker",
     r.status !== 0 && r.out.length > 0, r.out.slice(0, 120));
+
+// ============================================ the WinterTC conformance list
+//
+// Graded against tests/wintertc.json — SOMEONE ELSE'S list, which is the
+// point: a surface graded by its own author grades itself generous.
+//
+// Both directions are checked. A name claimed `present` must exist; a name
+// claimed `absent` must be genuinely absent. The second half matters as
+// much as the first, because a capability that quietly appears is as much
+// a defect as one that quietly disappears — and `fetch` appearing by
+// accident would silently undo the reason placement exists.
+{
+    const list = JSON.parse(fs.readFileSync(path.join(__dirname, "wintertc.json"), "utf8"));
+    const claimed = list.entries.filter(e => e.status === "present");
+    const absent = list.entries.filter(e => e.status === "absent");
+
+    // One process for the whole sweep: thirty spawns would cost more than
+    // the rest of this suite together.
+    const probe = claimed.map(e => JSON.stringify(e.name) + '+":"+(' + e.probe + ")").join(",");
+    const r = js("console.log([" + probe + '].join("\\n"))');
+    const got = {};
+    for (const line of r.out.split("\n")) {
+        const i = line.indexOf(":");
+        if (i > 0) got[line.slice(0, i)] = line.slice(i + 1);
+    }
+    const missing = claimed
+        .filter(e => got[e.name] === undefined || got[e.name] === "undefined")
+        .map(e => e.name);
+    check(`every claimed WinterTC name is present (${claimed.length} of them)`,
+        missing.length === 0, "missing: " + missing.join(", "));
+
+    const wrong = [];
+    for (const e of absent) {
+        const expr = e.expect === "false" ? e.probe : "(" + e.probe + ') === "undefined"';
+        const rr = js("console.log(" + expr + ")");
+        const ok = e.expect === "false" ? /false/.test(rr.out) : /true/.test(rr.out);
+        if (!ok) wrong.push(e.name);
+    }
+    check(`every name recorded ABSENT really is absent (${absent.length} of them)`,
+        wrong.length === 0, "unexpectedly present: " + wrong.join(", "));
+
+    // The list must explain itself: an absence with no reason is an
+    // omission wearing a checklist's clothes.
+    const unexplained = absent.filter(e => !e.why || e.why.length < 20).map(e => e.name);
+    check("every absence carries a reason a reader can act on",
+        unexplained.length === 0, unexplained.join(", "));
+}
+
+// ---------------------------------------- the surface behaves, not just exists
+//
+// Presence is the cheap half. These are the places a hand-written platform
+// surface is usually wrong.
+r = js('const b = new TextEncoder().encode("héllo 日"); ' +
+    'console.log(b.length, b instanceof Uint8Array, new TextDecoder().decode(b));');
+check("TextEncoder/TextDecoder round-trip non-ASCII as UTF-8",
+    /10 true héllo 日/.test(r.out), r.out);
+
+r = js('console.log(btoa("hello world"), atob("aGVsbG8gd29ybGQ="));');
+check("base64 round-trips", /aGVsbG8gd29ybGQ= hello world/.test(r.out), r.out);
+
+r = js('console.log(btoa("a"), btoa("ab"), btoa("abc"));');
+check("...including both padding cases", /YQ== YWI= YWJj/.test(r.out), r.out);
+
+r = js('try { atob("!!!!"); console.log("accepted"); } catch (e) { console.log("refused"); }');
+check("invalid base64 is refused, not silently decoded", /refused/.test(r.out), r.out);
+
+r = js("const u = crypto.randomUUID(); console.log(" +
+    "/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(u));");
+check("randomUUID is a well-formed v4", /true/.test(r.out), r.out);
+
+r = js("const a = crypto.randomUUID(), b = crypto.randomUUID(); console.log(a !== b);");
+check("...and two of them differ", /true/.test(r.out), r.out);
+
+r = js('const u = new URL("https://a.example:8443/x/y?q=1&q=2#f"); console.log(' +
+    '[u.protocol,u.hostname,u.port,u.pathname,u.searchParams.getAll("q").join("|"),u.hash].join(" "));');
+check("URL parses a real URL into its parts",
+    /https: a\.example 8443 \/x\/y 1\|2 #f/.test(r.out), r.out);
+
+r = js('try { new URL("not a url"); console.log("accepted"); } ' +
+    'catch (e) { console.log("refused", e instanceof TypeError); }');
+check("a malformed URL throws TypeError", /refused true/.test(r.out), r.out);
+
+r = js('const p = new URLSearchParams("a=1&a=2&b=x+y"); ' +
+    'console.log(p.getAll("a").join(","), p.get("b"), p.toString());');
+check("URLSearchParams handles repeats and + decoding",
+    /1,2 x y a=1&a=2&b=x\+y/.test(r.out), r.out);
+
+r = js('const h = new Headers({ "Content-Type": "text/plain" }); ' +
+    'h.append("x-a","1"); h.append("x-a","2"); ' +
+    'console.log(h.get("content-type"), h.get("X-A"), h.has("nope"));');
+check("Headers are case-insensitive and combine repeats",
+    /text\/plain 1, 2 false/.test(r.out), r.out);
+
+r = js("const res = Response.json({a:1},{status:201}); " +
+    'res.json().then(v => console.log(res.status, res.ok, res.headers.get("content-type"), v.a));');
+check("Response.json sets status, ok and content-type",
+    /201 true application\/json 1/.test(r.out), r.out);
+
+r = js('const a = { n: [1,2], d: new Date(0), m: new Map([["k",1]]), s: new Set([3]) }; ' +
+    "a.self = a; const b = structuredClone(a); " +
+    'console.log(b !== a, b.self === b, b.n[1], b.d instanceof Date, b.m.get("k"), b.s.has(3));');
+check("structuredClone deep-copies, and handles cycles, Date, Map and Set",
+    /true true 2 true 1 true/.test(r.out), r.out);
+
+r = js("try { structuredClone({ f: () => 1 }); console.log(\"cloned\"); } " +
+    'catch (e) { console.log("refused"); }');
+check("...and refuses a function rather than dropping it", /refused/.test(r.out), r.out);
+
+r = js('setTimeout(() => console.log("later"), 10); ' +
+    'setTimeout(() => console.log("sooner"), 0); ' +
+    'queueMicrotask(() => console.log("micro"));');
+check("microtasks run before timers, and timers run in delay order",
+    /micro[\s\S]*sooner[\s\S]*later/.test(r.out), r.out);
+
+r = js('const id = setTimeout(() => console.log("SHOULD NOT RUN"), 0); ' +
+    'clearTimeout(id); console.log("cleared");');
+check("clearTimeout actually cancels", !/SHOULD NOT RUN/.test(r.out), r.out);
+
+r = js("const c = new AbortController(); " +
+    'c.signal.addEventListener("abort", () => console.log("listener", c.signal.aborted)); ' +
+    'c.abort(); console.log("reason", c.signal.reason instanceof Error);');
+check("AbortController fires its listener and carries a reason",
+    /listener true[\s\S]*reason true/.test(r.out), r.out);
+
+// The narrow door: the whole platform surface stands on ONE object, and
+// this gate is what keeps the list of capabilities short as it grows.
+r = js("console.log(Object.keys(__host).sort().join(\",\"));");
+check("the host door stays narrow — nine primitives, no more",
+    r.out.trim() === "b64Decode,b64Encode,clearTimeout,nowMs,randomBytes," +
+        "servCall,setTimeout,utf8Decode,utf8Encode",
+    r.out.trim());
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

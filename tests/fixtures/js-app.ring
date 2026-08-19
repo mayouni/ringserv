@@ -17,6 +17,9 @@ RingServ([
 		# The JS guest answers this one.
 		:greeter = [ :js = "jssvc/greeter.js" ],
 
+		# ...and this one calls back out through serv.call.
+		:orchestra = [ :js = "jssvc/orchestra.js" ],
+
 		# ...and a Ring service answers the same shape beside it.
 		:ringgreeter = [
 			:greet = func aReq {
@@ -48,6 +51,7 @@ Topology([
 	:app = "js-fixture",
 	:services = [
 		:greeter     = [ :site = :server ],
+		:orchestra   = [ :site = :server ],
 		:ringgreeter = [ :site = :server ],
 		:notes       = [ :site = :local, :authority = :server ]
 	]

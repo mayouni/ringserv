@@ -214,6 +214,10 @@ fn drainJobs(ctx: *c.JSContext) void {
     while (guard < 10_000) : (guard += 1) {
         var pctx: ?*c.JSContext = null;
         const rc = c.JS_ExecutePendingJob(rt, &pctx);
+        // No promise job left, but a timer may still be owed one — and a
+        // timer callback can queue further promises, which is why this
+        // loops rather than draining each once.
+        if (rc == 0 and runTimers(ctx)) continue;
         if (rc <= 0) {
             if (rc < 0 and pctx != null) captureException(pctx.?);
             return;
@@ -367,6 +371,30 @@ fn installHost(ctx: *c.JSContext) i32 {
     _ = c.JS_SetPropertyStr(ctx, console, "warn", c.JS_DupValue(ctx, log));
     _ = c.JS_SetPropertyStr(ctx, console, "error", c.JS_DupValue(ctx, log));
     _ = c.JS_SetPropertyStr(ctx, global, "console", console);
+
+    // The one door out of the guest. Narrow on purpose — see the host
+    // surface section below for what that buys and how it is kept true.
+    const host = c.JS_NewObject(ctx);
+    installOne(ctx, host, "utf8Encode", hostUtf8Encode, 1);
+    installOne(ctx, host, "utf8Decode", hostUtf8Decode, 1);
+    installOne(ctx, host, "b64Encode", hostB64Encode, 1);
+    installOne(ctx, host, "b64Decode", hostB64Decode, 1);
+    installOne(ctx, host, "randomBytes", hostRandomBytes, 1);
+    installOne(ctx, host, "nowMs", hostNowMs, 0);
+    installOne(ctx, host, "setTimeout", hostSetTimeout, 2);
+    installOne(ctx, host, "clearTimeout", hostClearTimeout, 1);
+    installOne(ctx, host, "servCall", hostServCall, 3);
+    _ = c.JS_SetPropertyStr(ctx, global, "__host", host);
+
+    // The platform surface itself, written once in ringlib/prelude.js and
+    // evaluated into every context. A failure here is a build defect, not
+    // an application error, so it is reported as loudly as one.
+    const pv = c.JS_Eval(ctx, prelude_src, prelude_src.len, "prelude.js", c.JS_EVAL_TYPE_GLOBAL);
+    defer c.JS_FreeValue(ctx, pv);
+    if (c.JS_IsException(pv)) {
+        captureException(ctx);
+        return 1;
+    }
     return 0;
 }
 
@@ -536,33 +564,42 @@ pub export fn js_service_call(
     }
     defer c.JS_FreeValue(ctx, arg);
 
+    // The frame is opened BEFORE the action runs, because `serv.call`
+    // happens DURING it: a frame pushed afterwards would not exist at the
+    // moment the guest needs somewhere to queue its request. It is closed
+    // again below if the action turns out to be synchronous.
+    g_frames.append(alloc, .{ .promise = rs_js_undefined() }) catch {
+        setError("out of memory opening a service frame", .{});
+        return "";
+    };
+
     // `this` is the service object, so an action may call a sibling as
     // `this.other(...)` — the same reach a Ring class-form service has.
     const ret = c.JS_Call(ctx, fn_val, obj, 1, @ptrCast(&arg));
     defer c.JS_FreeValue(ctx, ret);
     if (c.JS_IsException(ret)) {
+        clearAwaited(ctx);
         captureException(ctx);
         return "";
     }
     drainJobs(ctx);
-    if (g_err.items.len != 0) return "";
-
-    const settled = settle(ctx, ret) orelse return "";
-    defer c.JS_FreeValue(ctx, settled);
-
-    const encoded = c.JS_JSONStringify(ctx, settled, rs_js_undefined(), rs_js_undefined());
-    defer c.JS_FreeValue(ctx, encoded);
-    if (c.JS_IsException(encoded)) {
-        captureException(ctx);
+    if (g_err.items.len != 0) {
+        clearAwaited(ctx);
         return "";
     }
-    if (c.JS_ToCString(ctx, encoded)) |s| {
-        defer c.JS_FreeCString(ctx, s);
-        g_result.appendSlice(alloc, std.mem.span(s)) catch {};
+
+    // A plain value is done here, and its frame closes with it. A promise
+    // goes through the trampoline, because it may be waiting on a
+    // `serv.call` that only Ring can perform.
+    if (c.JS_PromiseState(ctx, ret) == c.JS_PROMISE_NOT_A_PROMISE) {
+        clearAwaited(ctx);
+        return encodeValue(ctx, ret);
     }
-    g_result.append(alloc, 0) catch return "";
-    defer _ = g_result.pop();
-    return @ptrCast(g_result.items.ptr);
+    if (topFrame()) |frame| {
+        c.JS_FreeValue(ctx, frame.promise);
+        frame.promise = rs_js_dup_value(ctx, ret);
+    }
+    return finishAwaited(ctx);
 }
 
 /// A JS string literal, for building the wrapper safely. The service name
@@ -584,4 +621,570 @@ fn appendJsString(out: *std.ArrayList(u8), s: []const u8) void {
         },
     };
     out.append(alloc, '"') catch return;
+}
+
+// -------------------------------------------------------- the host surface
+//
+// `__host` is the ONLY door out of the guest, and it is deliberately
+// narrow: randomness, base64, UTF-8 transcoding, a clock and timers.
+// Everything else in the platform surface — URL, Headers, Request,
+// Response, structuredClone, events — is pure computation over those, and
+// lives in ringlib/prelude.js where it is written once and shared by every
+// worker.
+//
+// The rule that keeps this honest: if a capability is not here, the guest
+// cannot have it. There is no path-taking function, no process, no socket,
+// so "the JS guest cannot reach the machine" is checkable by reading this
+// one section rather than by auditing a library.
+
+/// The prelude, evaluated into every context at creation.
+const prelude_src = @embedFile("ringlib/prelude.js");
+
+fn hostUtf8Encode(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    if (argc < 1) return rs_js_undefined();
+    const s = c.JS_ToCString(ctx, argv[0]) orelse return rs_js_undefined();
+    defer c.JS_FreeCString(ctx, s);
+    const bytes = std.mem.span(s);
+
+    // A plain array; the prelude wraps it in a Uint8Array. Building the
+    // typed array here would tie this file to QuickJS's buffer API for no
+    // gain — the copy is one pass over a string that was already copied.
+    const arr = c.JS_NewArray(ctx);
+    for (bytes, 0..) |b, i| {
+        _ = c.JS_SetPropertyUint32(ctx, arr, @intCast(i), c.JS_NewInt32(ctx, b));
+    }
+    return arr;
+}
+
+fn hostUtf8Decode(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    if (argc < 1) return c.JS_NewString(ctx, "");
+    var len: u32 = 0;
+    const len_v = c.JS_GetPropertyStr(ctx, argv[0], "length");
+    defer c.JS_FreeValue(ctx, len_v);
+    _ = c.JS_ToUint32(ctx, &len, len_v);
+
+    var buf: std.ArrayList(u8) = .empty;
+    defer buf.deinit(alloc);
+    var i: u32 = 0;
+    while (i < len) : (i += 1) {
+        const v = c.JS_GetPropertyUint32(ctx, argv[0], i);
+        defer c.JS_FreeValue(ctx, v);
+        var n: u32 = 0;
+        _ = c.JS_ToUint32(ctx, &n, v);
+        buf.append(alloc, @truncate(n)) catch return rs_js_undefined();
+    }
+    // Invalid UTF-8 is replaced rather than refused: a decoder that throws
+    // on a truncated multi-byte sequence turns a partial read into a
+    // crash, which is the opposite of what a decoder is for.
+    return c.JS_NewStringLen(ctx, buf.items.ptr, buf.items.len);
+}
+
+const b64_alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn hostB64Encode(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    if (argc < 1) return c.JS_NewString(ctx, "");
+    const s = c.JS_ToCString(ctx, argv[0]) orelse return rs_js_undefined();
+    defer c.JS_FreeCString(ctx, s);
+    const in = std.mem.span(s);
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(alloc);
+    var i: usize = 0;
+    while (i + 2 < in.len) : (i += 3) {
+        const n = (@as(u32, in[i]) << 16) | (@as(u32, in[i + 1]) << 8) | in[i + 2];
+        out.appendSlice(alloc, &.{
+            b64_alphabet[(n >> 18) & 63], b64_alphabet[(n >> 12) & 63],
+            b64_alphabet[(n >> 6) & 63],  b64_alphabet[n & 63],
+        }) catch return rs_js_undefined();
+    }
+    if (i < in.len) {
+        const rem = in.len - i;
+        var n: u32 = @as(u32, in[i]) << 16;
+        if (rem == 2) n |= @as(u32, in[i + 1]) << 8;
+        out.appendSlice(alloc, &.{
+            b64_alphabet[(n >> 18) & 63],
+            b64_alphabet[(n >> 12) & 63],
+            if (rem == 2) b64_alphabet[(n >> 6) & 63] else '=',
+            '=',
+        }) catch return rs_js_undefined();
+    }
+    return c.JS_NewStringLen(ctx, out.items.ptr, out.items.len);
+}
+
+fn b64Value(ch: u8) ?u8 {
+    return switch (ch) {
+        'A'...'Z' => ch - 'A',
+        'a'...'z' => ch - 'a' + 26,
+        '0'...'9' => ch - '0' + 52,
+        '+' => 62,
+        '/' => 63,
+        else => null,
+    };
+}
+
+fn hostB64Decode(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    if (argc < 1) return rs_js_null();
+    const s = c.JS_ToCString(ctx, argv[0]) orelse return rs_js_null();
+    defer c.JS_FreeCString(ctx, s);
+
+    var quad: [4]u8 = undefined;
+    var have: usize = 0;
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(alloc);
+
+    for (std.mem.span(s)) |ch| {
+        if (ch == '=' or ch == '\n' or ch == '\r' or ch == ' ' or ch == '\t') continue;
+        const v = b64Value(ch) orelse return rs_js_null(); // the prelude throws
+        quad[have] = v;
+        have += 1;
+        if (have == 4) {
+            const n = (@as(u32, quad[0]) << 18) | (@as(u32, quad[1]) << 12) |
+                (@as(u32, quad[2]) << 6) | quad[3];
+            out.appendSlice(alloc, &.{
+                @truncate(n >> 16), @truncate(n >> 8), @truncate(n),
+            }) catch return rs_js_null();
+            have = 0;
+        }
+    }
+    if (have == 1) return rs_js_null(); // a single leftover sextet is never valid
+    if (have >= 2) {
+        const n = (@as(u32, quad[0]) << 18) | (@as(u32, quad[1]) << 12) |
+            (@as(u32, if (have > 2) quad[2] else 0) << 6);
+        out.append(alloc, @truncate(n >> 16)) catch return rs_js_null();
+        if (have == 3) out.append(alloc, @truncate(n >> 8)) catch return rs_js_null();
+    }
+    return c.JS_NewStringLen(ctx, out.items.ptr, out.items.len);
+}
+
+fn hostRandomBytes(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    var n: u32 = 0;
+    if (argc >= 1) _ = c.JS_ToUint32(ctx, &n, argv[0]);
+    if (n > 65536) n = 65536;
+
+    var buf: [65536]u8 = undefined;
+    // The OS CSPRNG, never a seeded PRNG: a guest whose randomness is
+    // reproducible by anyone who can read the application is worse than
+    // no randomness, because it looks like randomness.
+    std.crypto.random.bytes(buf[0..n]);
+
+    const arr = c.JS_NewArray(ctx);
+    var i: u32 = 0;
+    while (i < n) : (i += 1) {
+        _ = c.JS_SetPropertyUint32(ctx, arr, i, c.JS_NewInt32(ctx, buf[i]));
+    }
+    return arr;
+}
+
+fn hostNowMs(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    _ = argc;
+    _ = argv;
+    const ns = std.time.nanoTimestamp();
+    return c.JS_NewFloat64(ctx, @as(f64, @floatFromInt(ns)) / std.time.ns_per_ms);
+}
+
+// ------------------------------------------------------------- timers
+//
+// A timer here does not mean a thread. The guest runs inside one request
+// on one worker, so a timer is a callback held until the host drains
+// jobs — `setTimeout(fn, 0)` yields, and a longer delay is honoured by
+// ORDER, not by sleeping. A server that actually slept would be a server
+// holding a worker hostage on a guest's say-so.
+//
+// docs/JS.md states this plainly rather than letting someone discover it
+// from a stopwatch.
+
+const Timer = struct { id: u32, due_ms: f64, fn_val: c.JSValue };
+threadlocal var g_timers: std.ArrayList(Timer) = .empty;
+threadlocal var g_timer_seq: u32 = 0;
+
+fn hostSetTimeout(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    if (argc < 1 or !c.JS_IsFunction(ctx, argv[0])) return c.JS_NewInt32(ctx, 0);
+    var ms: f64 = 0;
+    if (argc >= 2) _ = c.JS_ToFloat64(ctx, &ms, argv[1]);
+    g_timer_seq += 1;
+    g_timers.append(alloc, .{
+        .id = g_timer_seq,
+        .due_ms = ms,
+        .fn_val = rs_js_dup_value(ctx.?, argv[0]),
+    }) catch return c.JS_NewInt32(ctx, 0);
+    return c.JS_NewInt32(ctx, @intCast(g_timer_seq));
+}
+
+fn hostClearTimeout(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    if (argc < 1) return rs_js_undefined();
+    var id: u32 = 0;
+    _ = c.JS_ToUint32(ctx, &id, argv[0]);
+    var i: usize = 0;
+    while (i < g_timers.items.len) : (i += 1) {
+        if (g_timers.items[i].id == id) {
+            c.JS_FreeValue(ctx, g_timers.items[i].fn_val);
+            _ = g_timers.orderedRemove(i);
+            return rs_js_undefined();
+        }
+    }
+    return rs_js_undefined();
+}
+
+/// Run every due timer, earliest delay first. Called from drainJobs, so a
+/// timer and a promise settle in the same drain and neither starves.
+fn runTimers(ctx: *c.JSContext) bool {
+    if (g_timers.items.len == 0) return false;
+    // Earliest first; ties keep insertion order, which is what setTimeout
+    // guarantees and what a test will notice if it is wrong.
+    var best: usize = 0;
+    for (g_timers.items, 0..) |t, i| {
+        if (t.due_ms < g_timers.items[best].due_ms) best = i;
+    }
+    const t = g_timers.orderedRemove(best);
+    defer c.JS_FreeValue(ctx, t.fn_val);
+    const r = c.JS_Call(ctx, t.fn_val, rs_js_undefined(), 0, null);
+    defer c.JS_FreeValue(ctx, r);
+    if (c.JS_IsException(r)) captureException(ctx);
+    return true;
+}
+
+fn installOne(
+    ctx: *c.JSContext,
+    host: c.JSValue,
+    name: [*:0]const u8,
+    f: *const fn (?*c.JSContext, c.JSValue, c_int, [*c]c.JSValue) callconv(.c) c.JSValue,
+    argc: c_int,
+) void {
+    _ = c.JS_SetPropertyStr(ctx, host, name, c.JS_NewCFunction(ctx, f, name, argc));
+}
+
+// ------------------------------------------------- serv.call, by trampoline
+//
+// A JS service must be able to call other services — that is what makes
+// the guest a citizen rather than a leaf. The obstacle is that dispatch
+// lives in RING, and by the time JS is running we are already INSIDE a
+// Ring VM call. Calling back into the VM from here would be re-entrancy
+// on a runtime that guards against exactly that, and the guard exists
+// because the buffers of the outer call would be clobbered.
+//
+// So the control flow is inverted, and Ring stays the outer loop:
+//
+//   1. JS calls `serv.call(...)`, which returns a PROMISE and queues a
+//      request. Nothing re-enters anything.
+//   2. The action returns; its promise is still pending. Instead of
+//      reporting "never settled", the host answers the sentinel below.
+//   3. Ring sees the sentinel, drains the queued requests, dispatches
+//      each ONE AT A TIME through its own ordinary `__dispatch` — with
+//      contracts, placement and everything else intact — and hands each
+//      result back.
+//   4. Ring asks the host to continue. Promises resume, the action may
+//      queue more calls, and the loop repeats until the action settles.
+//
+// The guest never sees the trampoline: it awaits a promise, like anything
+// else. What it buys is that `serv.call` from JS is the SAME dispatch a
+// Ring service gets, rather than a second, weaker path that would drift.
+
+/// What `js_service_call` answers when the action is waiting on a
+/// `serv.call`. Not JSON, and not a value any service could return —
+/// JSON.stringify never produces a bare identifier.
+pub const PENDING = "__RS_PENDING__";
+
+const PendingCall = struct {
+    id: u32,
+    service: []u8,
+    action: []u8,
+    payload: []u8,
+    resolve: c.JSValue,
+    reject: c.JSValue,
+};
+
+/// One suspended action: its own promise, and the calls it is waiting on.
+///
+/// A STACK, not a slot, and a gate is why. A JS service may call another
+/// JS service, which suspends in turn — so while the inner one is being
+/// dispatched there are two actions in flight on this worker. A single
+/// slot let the inner action overwrite the outer one's promise, and the
+/// outer call then waited forever on something nobody held. Frames make
+/// the nesting explicit and make the lifetime obvious: the top frame is
+/// always the one Ring is currently trampolining.
+const Frame = struct {
+    promise: c.JSValue,
+    calls: std.ArrayList(PendingCall) = .empty,
+};
+
+threadlocal var g_frames: std.ArrayList(Frame) = .empty;
+threadlocal var g_call_seq: u32 = 0;
+
+fn topFrame() ?*Frame {
+    if (g_frames.items.len == 0) return null;
+    return &g_frames.items[g_frames.items.len - 1];
+}
+
+fn hostServCall(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    const cx = ctx.?;
+    if (argc < 2) {
+        return c.JS_Throw(cx, c.JS_NewString(cx, "serv.call(service, action, payload)"));
+    }
+
+    var funcs: [2]c.JSValue = undefined;
+    const promise = c.JS_NewPromiseCapability(cx, &funcs);
+    if (c.JS_IsException(promise)) return promise;
+
+    const svc = dupArgString(cx, argv[0]) orelse return promise;
+    const act = dupArgString(cx, argv[1]) orelse return promise;
+    // The payload crosses as JSON, exactly as it does on the wire — so a
+    // value that could not survive the wire cannot survive this either,
+    // and a service cannot accidentally depend on being called in-process.
+    const payload = if (argc >= 3) blk: {
+        const enc = c.JS_JSONStringify(cx, argv[2], rs_js_undefined(), rs_js_undefined());
+        defer c.JS_FreeValue(cx, enc);
+        break :blk dupArgString(cx, enc) orelse alloc.dupe(u8, "{}") catch return promise;
+    } else alloc.dupe(u8, "{}") catch return promise;
+
+    const frame = topFrame() orelse {
+        // A `serv.call` outside any service action — from `js-eval`, say.
+        // There is no trampoline to run it, and saying so beats a promise
+        // that never settles.
+        alloc.free(svc);
+        alloc.free(act);
+        alloc.free(payload);
+        c.JS_FreeValue(cx, funcs[0]);
+        c.JS_FreeValue(cx, funcs[1]);
+        c.JS_FreeValue(cx, promise);
+        return c.JS_Throw(cx, c.JS_NewString(cx,
+            "serv.call is only available inside a service action"));
+    };
+
+    g_call_seq += 1;
+    frame.calls.append(alloc, .{
+        .id = g_call_seq,
+        .service = svc,
+        .action = act,
+        .payload = payload,
+        .resolve = funcs[0],
+        .reject = funcs[1],
+    }) catch return promise;
+
+    return promise;
+}
+
+fn dupArgString(ctx: *c.JSContext, v: c.JSValue) ?[]u8 {
+    const s = c.JS_ToCString(ctx, v) orelse return null;
+    defer c.JS_FreeCString(ctx, s);
+    return alloc.dupe(u8, std.mem.span(s)) catch null;
+}
+
+/// How many service actions are suspended on this worker right now.
+///
+/// The nesting counter the Ring side needs, kept HERE because here is
+/// where it is already correct: every frame is pushed and popped by
+/// js_service_call itself, including on the error paths, so it cannot
+/// drift the way a counter maintained across a `raise` would.
+pub export fn js_depth() u32 {
+    return @intCast(g_frames.items.len);
+}
+
+/// The queued requests, as JSON, and the queue is emptied. Ring dispatches
+/// them and hands each result back through `js_resolve_call`.
+pub export fn js_pending_calls() [*:0]const u8 {
+    g_result.clearRetainingCapacity();
+    g_result.appendSlice(alloc, "[") catch return "[]";
+    const frame = topFrame() orelse {
+        g_result.appendSlice(alloc, "]") catch {};
+        g_result.append(alloc, 0) catch return "[]";
+        defer _ = g_result.pop();
+        return @ptrCast(g_result.items.ptr);
+    };
+    for (frame.calls.items, 0..) |call, i| {
+        if (i > 0) g_result.appendSlice(alloc, ",") catch {};
+        g_result.writer(alloc).print(
+            "{{\"id\":{d},\"service\":\"{s}\",\"action\":\"{s}\",\"payload\":{s}}}",
+            .{ call.id, call.service, call.action, call.payload },
+        ) catch {};
+    }
+    g_result.appendSlice(alloc, "]") catch {};
+    g_result.append(alloc, 0) catch return "[]";
+    defer _ = g_result.pop();
+    return @ptrCast(g_result.items.ptr);
+}
+
+fn takeCall(id: u32) ?PendingCall {
+    // Searched across every frame, not just the top one: a result may
+    // arrive for an outer frame while an inner one is still open, and an
+    // id is unique for the life of the worker.
+    for (g_frames.items) |*frame| {
+        for (frame.calls.items, 0..) |call, i| {
+            if (call.id == id) return frame.calls.orderedRemove(i);
+        }
+    }
+    return null;
+}
+
+fn freeCall(ctx: *c.JSContext, call: PendingCall) void {
+    alloc.free(call.service);
+    alloc.free(call.action);
+    alloc.free(call.payload);
+    c.JS_FreeValue(ctx, call.resolve);
+    c.JS_FreeValue(ctx, call.reject);
+}
+
+/// Hand one dispatch result back to the guest.
+pub export fn js_resolve_call(id: u32, json: [*:0]const u8) i32 {
+    const ctx = g_ctx orelse return 1;
+    const call = takeCall(id) orelse return 1;
+    defer freeCall(ctx, call);
+
+    const src = std.mem.span(json);
+    var value = c.JS_ParseJSON(ctx, src.ptr, src.len, "<reply>");
+    if (c.JS_IsException(value)) {
+        c.JS_FreeValue(ctx, value);
+        value = c.JS_NewString(ctx, "the service reply was not JSON");
+        const r = c.JS_Call(ctx, call.reject, rs_js_undefined(), 1, @ptrCast(&value));
+        c.JS_FreeValue(ctx, r);
+        c.JS_FreeValue(ctx, value);
+        return 1;
+    }
+    const r = c.JS_Call(ctx, call.resolve, rs_js_undefined(), 1, @ptrCast(&value));
+    c.JS_FreeValue(ctx, r);
+    c.JS_FreeValue(ctx, value);
+    return 0;
+}
+
+/// Fail one pending call — a dispatch that raised on the Ring side becomes
+/// a rejected promise in the guest, so `try/catch` works across the seam.
+pub export fn js_reject_call(id: u32, message: [*:0]const u8) i32 {
+    const ctx = g_ctx orelse return 1;
+    const call = takeCall(id) orelse return 1;
+    defer freeCall(ctx, call);
+    var err = c.JS_NewError(ctx);
+    _ = c.JS_SetPropertyStr(ctx, err, "message", c.JS_NewString(ctx, message));
+    const r = c.JS_Call(ctx, call.reject, rs_js_undefined(), 1, @ptrCast(&err));
+    c.JS_FreeValue(ctx, r);
+    c.JS_FreeValue(ctx, err);
+    return 0;
+}
+
+/// Encode the awaited action's result, or answer PENDING again.
+///
+/// Shared by `js_service_call` and `js_continue` so there is exactly one
+/// place that decides what "done" means.
+fn finishAwaited(ctx: *c.JSContext) [*:0]const u8 {
+    const frame = topFrame() orelse {
+        setError("nothing is awaiting continuation", .{});
+        return "";
+    };
+    const promise = frame.promise;
+    switch (c.JS_PromiseState(ctx, promise)) {
+        c.JS_PROMISE_PENDING => {
+            if (frame.calls.items.len > 0) return PENDING;
+            clearAwaited(ctx);
+            setError("the service returned a promise that never settled — " ++
+                "it is awaiting something this host does not provide", .{});
+            return "";
+        },
+        c.JS_PROMISE_REJECTED => {
+            const reason = c.JS_PromiseResult(ctx, promise);
+            defer c.JS_FreeValue(ctx, reason);
+            _ = c.JS_Throw(ctx, rs_js_dup_value(ctx, reason));
+            captureException(ctx);
+            clearAwaited(ctx);
+            return "";
+        },
+        else => {
+            const value = c.JS_PromiseResult(ctx, promise);
+            defer c.JS_FreeValue(ctx, value);
+            clearAwaited(ctx);
+            return encodeValue(ctx, value);
+        },
+    }
+}
+
+fn clearAwaited(ctx: *c.JSContext) void {
+    var frame = g_frames.pop() orelse return;
+    c.JS_FreeValue(ctx, frame.promise);
+    // Abandon anything still queued in THIS frame: the action is over, and
+    // resolving a call whose caller has gone would run guest code with no
+    // one waiting for it. An outer frame's queue is untouched.
+    for (frame.calls.items) |call| freeCall(ctx, call);
+    frame.calls.deinit(alloc);
+}
+
+/// Resume a service that was waiting on `serv.call` results.
+pub export fn js_continue() [*:0]const u8 {
+    g_result.clearRetainingCapacity();
+    g_err.clearRetainingCapacity();
+    const ctx = g_ctx orelse {
+        setError("no JS context", .{});
+        return "";
+    };
+    drainJobs(ctx);
+    if (g_err.items.len != 0) return "";
+    return finishAwaited(ctx);
+}
+
+/// JSON-encode a settled value into the result buffer.
+fn encodeValue(ctx: *c.JSContext, value: c.JSValue) [*:0]const u8 {
+    g_result.clearRetainingCapacity();
+    const encoded = c.JS_JSONStringify(ctx, value, rs_js_undefined(), rs_js_undefined());
+    defer c.JS_FreeValue(ctx, encoded);
+    if (c.JS_IsException(encoded)) {
+        captureException(ctx);
+        return "";
+    }
+    if (c.JS_ToCString(ctx, encoded)) |s| {
+        defer c.JS_FreeCString(ctx, s);
+        g_result.appendSlice(alloc, std.mem.span(s)) catch {};
+    }
+    g_result.append(alloc, 0) catch return "";
+    defer _ = g_result.pop();
+    return @ptrCast(g_result.items.ptr);
 }

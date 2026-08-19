@@ -160,7 +160,7 @@ table and the `must-refetch` control exist and are honoured; nothing yet
 moves the floor. Phase 8. RingScript-side store integration is
 RingScript's, and belongs to that repository's plan.
 
-## Phase 7 — The JS guest — in progress
+## Phase 7 — The JS guest ✅ (passed 2026-08-19)
 
 **Part 1 — the resident runtime ✅ (passed 2026-08-18).** quickjs-ng
 v0.16.1 vendored (four translation units; **quickjs-libc deliberately
@@ -183,9 +183,22 @@ one being that a JS service and a Ring service answering the same shape
 are compared **as data** — envelope, contract, placement, status codes
 and catalog identical.
 
-**Still ahead:** the ECMA-429 minimum surface implemented once in Zig and
-exposed to the guest, `serv.call` from JS on the server, and the WinterTC
-conformance subset.
+**Part 3 — the host surface and the seam ✅ (passed 2026-08-19).** The
+ECMA-429 / WinterTC minimum surface, written once and shared by every
+worker: `__host` holds **nine** primitives in Zig, and everything that is
+pure computation over them lives in `ringlib/prelude.js`. `serv.call` from
+JS reaches other services through the SAME dispatch a Ring service gets,
+by a trampoline that keeps Ring as the outer loop rather than re-entering
+the VM. Full account in [JS.md](JS.md).
+**Gate — passed:** conformance is graded against `tests/wintertc.json` —
+someone else's list — in **both directions**: every name claimed present
+must exist, and every name recorded absent must genuinely be absent, each
+absence carrying a reason. 45 gates in `js-gates.js`, 33 in
+`jsserv-gates.js`.
+
+**Phase 7 is complete.** Still open and recorded rather than implied:
+`crypto.subtle`, streams, `Blob` and `WebSocket`, each with its reason in
+`wintertc.json`.
 
 ## Phase 8 — Hardening toward 0.9
 
