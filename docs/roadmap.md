@@ -200,14 +200,35 @@ absence carrying a reason. 45 gates in `js-gates.js`, 33 in
 `crypto.subtle`, streams, `Blob` and `WebSocket`, each with its reason in
 `wintertc.json`.
 
-## Phase 8 — Hardening toward 0.9
+## Phase 8 — Hardening toward 0.9 — four of five delivered
 
-TLS decision (native vs. documented-proxy), auth backends beyond
-JWT-shaped tokens, compaction for shape logs, load benchmarks
-published with methodology, and the docs rewritten from blueprint
-into didactic guides (the RingScript documentation culture).
-**Gate:** RingServ carries one real application of the author's — the
-same bar RingScript's 0.9 met before its API froze.
+**Compaction ✅ (2026-08-19).** `SyncCompact` trims a shape and moves its
+floor **in one transaction**, because two statements would leave a window
+where the rows are gone and the floor still says they are there. Closes
+the gap phase 6 recorded rather than implied. 53 sync gates.
+
+**The TLS decision ✅ (2026-08-19).** RingServ terminates no TLS and says
+why in four places ([TLS.md](TLS.md)) — the decisive one being that a TLS
+stack is the single dependency that cannot be vendored honestly. Made
+**executable**: binding a non-loopback address refuses to start without
+`:behindproxy`, and the refusal names both ways forward. 17 gates.
+
+**The actor seam ✅ (2026-08-19).** `Actor()` plus `:auth` in the contract.
+The host verifies a token (HS256, signature before claims, constant-time,
+`alg: none` refused by allowlist); Ring decides what an actor may do,
+because permissions are an application's vocabulary. 401 and 403 stay
+distinct. 25 gates, most of them refusals. **C5 is deliberately not
+guessed at** — this is the seam it plugs into.
+
+**Benchmarks published ✅ (2026-08-19).** [BENCHMARKS.md](BENCHMARKS.md),
+with the method beside the numbers and one finding published *unresolved*
+rather than benchmarked around.
+
+**Still ahead:** the docs rewritten from blueprint into didactic guides
+(the RingScript documentation culture).
+**Gate — the Principal's to open:** RingServ carries one real application
+of the author's — the same bar RingScript's 0.9 met before its API froze.
+No session can open that gate for him.
 
 ## Standing risks (tracked, not hidden)
 
