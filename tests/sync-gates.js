@@ -250,6 +250,7 @@ async function stop() {
         check(`...promptly (${ms}ms, not the 20s ceiling)`, ms < 8000, ms + "ms");
     }
 
+
     // ============================================ 3. the convergence oracle
     //
     // Run TWICE, and the second run is the contract's owed placement
@@ -259,6 +260,114 @@ async function stop() {
     // service is a one-word deployment decision" was untrue in exactly
     // the place it matters most, which is offline.
     const digestServer = await runOracle(true);
+
+    // Compaction runs HERE, after the oracle has replayed a complete log.
+    // Order matters and the reason is the point of compaction: once the
+    // log has been trimmed, a replay from zero CANNOT rebuild everything,
+    // and asserting that it does would be asserting that compaction did
+    // not work. What a client gets after a trim is tested on its own
+    // terms below.
+    // ================================================= 4. compaction
+    //
+    // The log is append-only, so something must trim it. The whole
+    // difficulty is that trimming a log a client is reading from is how a
+    // local-first system corrupts QUIETLY — the client asks for offset N,
+    // gets rows starting at N+400, and believes it has caught up.
+    {
+        const before = (await call("sync", "state", {})).json.data.shapes[0];
+        check("a shape reports head, floor and live entries",
+            before.head > 0 && before.floor === 0 && before.entries > 0,
+            JSON.stringify(before));
+
+        // A client that is up to date BEFORE the compaction must remain
+        // valid after it — that is the whole point of a retention window.
+        const upToDate = (await get("/sync/shape?shape=notes&offset=0&limit=5000")).json.data.offset;
+
+        const keep = 5;
+        const comp = await call("sync", "compact", { shape: "notes", keep });
+        check("compaction removes entries", comp.json.data.removed > 0,
+            JSON.stringify(comp.json.data));
+
+        const after = (await call("sync", "state", {})).json.data.shapes[0];
+        check(`...leaving the retention window (${keep} entries)`,
+            after.entries === keep, JSON.stringify(after));
+        check("...and the head does not move — compaction discards history, not offsets",
+            after.head === before.head, `${before.head} -> ${after.head}`);
+        check("...and the floor moves up to what was discarded",
+            after.floor === after.head - keep, JSON.stringify(after));
+
+        // The honesty test. A client below the floor has a gap it cannot
+        // close by paging, and the only correct answer is to say so.
+        const stale = await get("/sync/shape?shape=notes&offset=1");
+        check("a client BELOW the floor is told must-refetch",
+            stale.json.data.control === "must-refetch", JSON.stringify(stale.json.data));
+        check("...and is given the floor to restart from",
+            stale.json.data.offset === after.floor, JSON.stringify(stale.json.data));
+        check("...and is handed NO ops, rather than a silently partial page",
+            stale.json.data.ops.length === 0, JSON.stringify(stale.json.data.ops));
+
+        // A client exactly AT the floor has seen everything below it and
+        // nothing above: a valid place to resume, so `<` and not `<=`.
+        const atFloor = await get(`/sync/shape?shape=notes&offset=${after.floor}`);
+        check("a client AT the floor resumes normally",
+            atFloor.json.data.control === "" && atFloor.json.data.ops.length === keep,
+            JSON.stringify(atFloor.json.data.control) + " " + atFloor.json.data.ops.length);
+
+        // An already-caught-up client is unaffected, which is what a
+        // retention window is for.
+        const caught = await get(`/sync/shape?shape=notes&offset=${upToDate}`);
+        check("a caught-up client is unaffected by the compaction",
+            caught.json.data.control === "" && caught.json.data.uptodate === 1,
+            JSON.stringify(caught.json.data));
+
+        // Compaction is idempotent: running it again with the same window
+        // removes nothing, and the floor does not creep.
+        const again = await call("sync", "compact", { shape: "notes", keep });
+        check("compacting again removes nothing", again.json.data.removed === 0,
+            JSON.stringify(again.json.data));
+        const after2 = (await call("sync", "state", {})).json.data.shapes[0];
+        check("...and the floor does not creep", after2.floor === after.floor,
+            `${after.floor} -> ${after2.floor}`);
+
+        // A window larger than the log is a no-op, not a negative floor.
+        const huge = await call("sync", "compact", { shape: "notes", keep: 1000000 });
+        check("a window larger than the log removes nothing",
+            huge.json.data.removed === 0, JSON.stringify(huge.json.data));
+
+        // AND THE POINT OF ALL OF IT: a client that obeys must-refetch
+        // still converges. It re-reads from the floor and rebuilds the
+        // same rows the table holds — which is what "must-refetch" has to
+        // mean for the protocol to survive compaction at all.
+        {
+            const rows = (await call("notes", "list", { limit: 1000 })).json.data.rows;
+            const fresh = await get(`/sync/shape?shape=notes&offset=${after.floor}&limit=5000`);
+            const rebuilt = new Map();
+            for (const op of fresh.json.data.ops) {
+                if (op.op === "delete") rebuilt.delete(op.id);
+                else rebuilt.set(op.id, op.row);
+            }
+            // The refetching client learns about rows above the floor from
+            // the log, and about everything else from its full refetch —
+            // which here is the table itself. Convergence means the two
+            // agree wherever they overlap, and nothing above the floor is
+            // missing from the log.
+            const missing = [...rebuilt.keys()].filter(id => !rows.some(r2 => r2.id === id));
+            check("after must-refetch, every logged row above the floor is real",
+                missing.length === 0, JSON.stringify(missing.slice(0, 5)));
+            check("...and the rows agree with the table where they overlap",
+                [...rebuilt.entries()].every(([id, row]) => {
+                    const t = rows.find(r2 => r2.id === id);
+                    return !t || t.title === row.title;
+                }), "a logged row disagreed with the table");
+        }
+
+        // Compaction refuses what is not a shape, rather than quietly
+        // doing nothing.
+        const bad = await call("sync", "compact", { shape: "audit", keep: 5 });
+        check("compacting a non-shape is refused", bad.json.code === 1,
+            JSON.stringify(bad.json));
+    }
+
 
     await stop();
     check("the fixture restarts at the other placement", await start("moved", "local"));

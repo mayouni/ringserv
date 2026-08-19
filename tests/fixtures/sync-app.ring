@@ -34,6 +34,11 @@ RingServ([
 	:services = [
 		:notes = [ :table = "notes" ],
 		:audit = [ :table = "audit" ],
+		# The sync operations service, opted into explicitly — compaction
+		# discards history, so it is never registered for an app that did
+		# not ask for it.
+		:sync  = RsSyncService(),
+
 		:boom  = [
 			:now = func aReq {
 				# A service that fails hard, so a mutation raising inside
@@ -63,6 +68,7 @@ Topology([
 	:services = [
 		:notes = aNotesPlacement,
 		:audit = [ :site = :server ],
-		:boom  = [ :site = :server ]
+		:boom  = [ :site = :server ],
+		:sync  = [ :site = :server ]
 	]
 ])

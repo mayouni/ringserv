@@ -442,3 +442,130 @@ func RsSyncNumber pValue
 		ok
 	ok
 	return 0
+
+# ----------------------------------------------------------- compaction
+#
+# The shape log is append-only, so it grows forever unless something
+# trims it. Compaction is that something, and the whole difficulty is
+# that trimming a log a client is reading from is how a local-first
+# system corrupts QUIETLY: the client asks for offset N, gets rows that
+# start at N+400, and believes it has caught up.
+#
+# So compaction and the floor move TOGETHER, in one transaction, and the
+# floor is what `/sync/shape` checks before it answers. A client below
+# the floor is told `must-refetch` — the honest answer, and the only one
+# that cannot silently lose a row.
+#
+# WHAT IS KEPT. Not "the last N entries" but "everything a live client
+# could still ask for": the retention window is expressed in ENTRIES
+# behind the head, and the default is generous because the cost of
+# keeping too much is disk, while the cost of keeping too little is every
+# slow client refetching its whole shape.
+
+# Ring: SyncCompact(cShape, nKeep) — trim one shape, move its floor.
+#
+# Returns how many entries were removed. Safe to call at any time from
+# any worker: it is one transaction on the single writer, so a reader
+# paging through the log either sees the log before the trim or after it,
+# never halfway.
+func SyncCompact cShape, nKeep
+	if not RsValidName(cShape)
+		raise("SyncCompact(): not a shape name: " + cShape)
+	ok
+	if find(RsSyncedTables(), cShape) = 0
+		raise("SyncCompact(): `" + cShape + "` is not a synced shape")
+	ok
+	if not isnumber(nKeep) or nKeep < 1
+		nKeep = 10000
+	ok
+
+	nRemoved = 0
+	__db_write_begin()
+	try
+		nHead = RsSyncNumber(DataValue(
+			"select max(offset) as m from __rs_shape_log where shape = ?",
+			[ cShape ], 0))
+
+		# The new floor is the highest offset we are about to DISCARD.
+		# A client at exactly the floor has seen everything below it and
+		# nothing above, which is a valid place to resume from — so the
+		# refetch test in __rs_sync_shape is `<`, not `<=`.
+		nFloor = nHead - nKeep
+		if nFloor <= 0
+			__db_write_rollback()
+			return 0
+		ok
+
+		nRemoved = __db_exec(
+			"delete from __rs_shape_log where shape = ? and offset <= ?",
+			[ cShape, nFloor ])
+
+		# The floor moves in the SAME transaction as the delete. Two
+		# statements would leave a window in which the rows are gone and
+		# the floor still says they are there, and a client reading in
+		# that window is handed a gap it will never know about.
+		__db_exec("INSERT INTO __rs_shape_floor (shape, floor) VALUES (?, ?) " +
+			"ON CONFLICT(shape) DO UPDATE SET floor = excluded.floor " +
+			"WHERE excluded.floor > __rs_shape_floor.floor",
+			[ cShape, nFloor ])
+	catch
+		__db_write_rollback()
+		raise(cCatchError)
+	done
+	__db_write_commit()
+	return nRemoved
+
+# Compact every synced shape. What an application calls from a scheduled
+# job, or what `SyncMaintain()` calls for it.
+func SyncCompactAll nKeep
+	nTotal = 0
+	for cShape in RsSyncedTables()
+		nTotal += SyncCompact(cShape, nKeep)
+	next
+	return nTotal
+
+# What a shape looks like right now: head, floor, and how many entries
+# are live. The number an operator needs before deciding to compact, and
+# the number a gate needs to prove compaction happened.
+func SyncShapeState cShape
+	return [
+		:shape = cShape,
+		:head  = RsSyncNumber(DataValue(
+			"select max(offset) as m from __rs_shape_log where shape = ?",
+			[ cShape ], 0)),
+		:floor = RsSyncNumber(DataValue(
+			"select floor from __rs_shape_floor where shape = ?", [ cShape ], 0)),
+		:entries = RsSyncNumber(DataValue(
+			"select count(*) as n from __rs_shape_log where shape = ?",
+			[ cShape ], 0))
+	]
+
+# The service an application may expose to operate its own sync layer.
+# NOT registered automatically: compaction discards history, and a server
+# that let anyone who can reach /api/v1 discard history would be a server
+# with a denial-of-service endpoint. An application opts in:
+#
+#     :sync = [ :table = "", :actions = [] ]   # no
+#     :sync = RsSyncService()                  # yes, and place it :server
+func RsSyncService
+	return [
+		:state = func aReq {
+			aOut = []
+			for cShape in RsSyncedTables()
+				add(aOut, SyncShapeState(cShape))
+			next
+			return Reply(:ok, [ :shapes = aOut ])
+		},
+		:compact = func aReq {
+			aP = aReq[:payload]
+			nKeep = 10000
+			if islist(aP) and isnumber(RsDeclGet(aP, "keep", ""))
+				nKeep = RsDeclGet(aP, "keep", 10000)
+			ok
+			cShape = "" + RsDeclGet(aP, "shape", "")
+			if cShape != ""
+				return Reply(:ok, [ :removed = SyncCompact(cShape, nKeep) ])
+			ok
+			return Reply(:ok, [ :removed = SyncCompactAll(nKeep) ])
+		}
+	]

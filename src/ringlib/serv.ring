@@ -170,6 +170,11 @@ func __rs_serv_config aIgnored
 	return [
 		:serv     = 1,
 		:port     = RsDeclGet(aRsServDecl, "port", 8080),
+		# Loopback by default, always. Reaching the network is a
+		# deliberate act, and :behindproxy is where the operator says
+		# they have put TLS in front — see docs/TLS.md.
+		:host       = "" + RsDeclGet(aRsServDecl, "host", "127.0.0.1"),
+		:behindproxy = RsBool(RsDeclGet(aRsServDecl, "behindproxy", 0)),
 		:workers  = RsDeclGet(aRsServDecl, "workers", 0),
 		:database = RsDeclGet(aRsServDecl, "database", ":memory:"),
 		:static   = RsStaticRoutes()
@@ -231,6 +236,22 @@ func RsDeclGet aList, cKey, pDefault
 
 # Service and action names are identifiers: letters, digits, underscore.
 # Enforced BEFORE any name reaches an eval or a call.
+# A declaration value read as a flag. Ring has no boolean literal type,
+# so true / 1 / "yes" all have to mean the same thing — an operator who
+# writes the wrong one should get the behaviour they meant, not a silent
+# no.
+func RsBool pValue
+	if isnumber(pValue)
+		if pValue != 0 return 1 else return 0 ok
+	ok
+	if isstring(pValue)
+		cV = lower(pValue)
+		if cV = "1" or cV = "true" or cV = "yes" or cV = "on"
+			return 1
+		ok
+	ok
+	return 0
+
 func RsValidName cName
 	if not isstring(cName)
 		return 0

@@ -12,8 +12,24 @@ const js = bridge.js;
 
 extern fn fflush(stream: ?*anyopaque) c_int;
 
+/// Is this address only reachable from this machine?
+///
+/// The TLS decision (docs/TLS.md) in one predicate. RingServ speaks plain
+/// HTTP and terminates no TLS, so binding anything a network can reach is
+/// a decision about exposure — and it is made HERE, once, rather than
+/// left to whoever writes the deployment.
+fn isLoopback(host: []const u8) bool {
+    if (std.mem.eql(u8, host, "127.0.0.1")) return true;
+    if (std.mem.eql(u8, host, "::1")) return true;
+    if (std.mem.eql(u8, host, "localhost")) return true;
+    // The whole 127/8 block, since 127.0.0.2 is as local as 127.0.0.1.
+    return std.mem.startsWith(u8, host, "127.");
+}
+
 const ServDecl = struct {
     port: u16,
+    host: []const u8,
+    behind_proxy: bool,
     workers: u32,
     database: []const u8,
     statics: []const serve.StaticRoute,
@@ -52,8 +68,14 @@ fn servConfig(arena: std.mem.Allocator) ?ServDecl {
             }
         }
     }
+    const host = switch (obj.get("host") orelse std.json.Value{ .string = "127.0.0.1" }) {
+        .string => |h| if (h.len == 0) "127.0.0.1" else h,
+        else => "127.0.0.1",
+    };
     return .{
         .port = if (port_f >= 1 and port_f <= 65535) @intFromFloat(port_f) else 8080,
+        .host = host,
+        .behind_proxy = (jsonNum(obj.get("behindproxy")) orelse 0) != 0,
         .workers = @intFromFloat(@max(1, @min(64, workers_f))),
         .database = database,
         .statics = statics.items,
@@ -243,8 +265,42 @@ pub fn main() !u8 {
         const db_path = try arena.dupe(u8, cfg.database);
         bridge.db.setDisplayPath(db_path);
         try bridge.db.configure(db_path);
+
+        // THE TLS DECISION, ENFORCED (docs/TLS.md). RingServ terminates no
+        // TLS: it speaks plain HTTP and expects a reverse proxy in front.
+        // A decision that lives only in a document is a decision somebody
+        // will miss at 2am, so binding an address a network can reach
+        // requires saying out loud that TLS is handled — and the refusal
+        // names the two ways forward rather than only the problem.
+        if (!isLoopback(cfg.host) and !cfg.behind_proxy) {
+            std.debug.print(
+                \\ringserv: refusing to serve plain HTTP on {s}:{d}.
+                \\
+                \\RingServ terminates no TLS. Binding an address the network can
+                \\reach would publish every request and every token in clear text.
+                \\
+                \\Either put a TLS-terminating proxy in front — caddy, nginx,
+                \\traefik — and tell RingServ you have:
+                \\
+                \\    RingServ([ :host = "{s}", :behindproxy = true, ... ])
+                \\
+                \\or leave :host alone and reach it through the proxy on loopback,
+                \\which is the arrangement docs/TLS.md recommends.
+                \\
+            , .{ cfg.host, cfg.port, cfg.host });
+            return 1;
+        }
+        if (!isLoopback(cfg.host)) {
+            std.debug.print(
+                "ringserv: serving plain HTTP on {s}:{d} — :behindproxy is set, " ++
+                    "so TLS is the proxy's job.\n",
+                .{ cfg.host, cfg.port },
+            );
+        }
+
         try serve.start(.{
             .port = cfg.port,
+            .host = try arena.dupe(u8, cfg.host),
             .workers = cfg.workers,
             .app_source = code,
             .statics = cfg.statics,

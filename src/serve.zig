@@ -17,6 +17,9 @@ pub const StaticRoute = struct { prefix: []const u8, dir: []const u8 };
 
 pub const Config = struct {
     port: u16,
+    /// The address to bind. Loopback unless the application asked
+    /// otherwise AND acknowledged what that means — see main.zig.
+    host: []const u8 = "127.0.0.1",
     workers: u32,
     app_source: [:0]const u8,
     statics: []const StaticRoute = &.{},
@@ -340,7 +343,10 @@ pub fn start(config: Config) !void {
     }
 
     var server = try httpz.Server(void).init(alloc, .{
-        .address = .localhost(config.port),
+        .address = if (std.mem.eql(u8, config.host, "127.0.0.1"))
+            .localhost(config.port)
+        else
+            .{ .ip = .{ .host = config.host, .port = config.port } },
         .request = .{ .max_body_size = 4 * 1024 * 1024 },
     }, {});
     var router = try server.router(.{});
@@ -357,8 +363,8 @@ pub fn start(config: Config) !void {
     }
 
     std.debug.print(
-        "RingServ {s} — serving on http://127.0.0.1:{d}/api/v1  ({d} workers)\n",
-        .{ bridge.RINGSERV_VERSION, config.port, config.workers },
+        "RingServ {s} — serving on http://{s}:{d}/api/v1  ({d} workers)\n",
+        .{ bridge.RINGSERV_VERSION, config.host, config.port, config.workers },
     );
     try server.listen();
 }

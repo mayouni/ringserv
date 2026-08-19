@@ -37,6 +37,7 @@ const suites = [
     { name: "sync + convergence", node: "sync-gates.js" },
     { name: "JS guest          ", node: "js-gates.js" },
     { name: "JS services       ", node: "jsserv-gates.js" },
+    { name: "TLS decision      ", node: "tls-gates.js" },
 ];
 
 if (full) {
