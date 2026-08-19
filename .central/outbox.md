@@ -262,3 +262,70 @@ note:      phase 7 also settled a general question this estate will meet
            private path around the contract layer.
 ```
 ---
+
+--- FROM: ringserv | 2026-08-19 14:10 | CLOSE
+```yaml
+by:        ringserv · claude-opus-5 · 2026-08-19 14:10
+
+subject:   phase 8 has four of its five pieces; the fifth and the GATE are
+           not a session's to close
+
+did:
+  - COMPACTION: SyncCompact trims a shape and moves its floor in ONE
+    transaction, closing the gap phase 6 recorded rather than implied
+  - TLS: decided (no native TLS, proxy in front) and made EXECUTABLE --
+    binding a non-loopback address refuses to start without :behindproxy
+  - THE ACTOR SEAM: Actor() plus :auth in the contract, host verifies,
+    Ring authorises, 401 and 403 kept distinct
+  - BENCHMARKS: published with the method beside them, and one finding
+    published UNRESOLVED rather than benchmarked around
+  - 14 suites green; pushed
+
+the three decisions worth your review:
+  TLS IS A REFUSAL, NOT A PARAGRAPH. Four reasons in docs/TLS.md, of which
+    one is decisive and general: a TLS stack is the single dependency that
+    cannot be vendored honestly. Everything else here changes slowly and
+    fails loudly; a TLS stack changes on a security calendar that is not
+    this project's, and a vendored copy three months old is not an old
+    dependency, it is a vulnerability with a pin next to it. Any repository
+    in this estate tempted to vendor one should read that section first.
+
+  C5 IS NOT GUESSED AT. The actor seam stops exactly where the family
+    contract begins: the host verifies a token it can check alone, and
+    there is NO notion of a signed principal assertion another host would
+    accept. Inventing one here would have meant inventing the thing C5
+    exists to agree on. When Zing's prompt 10 lands, this is the seam it
+    plugs into rather than a format it must dislodge.
+
+  A BAD NUMBER IS PUBLISHED. An earlier throughput sweep showed a cliff at
+    ~18 concurrent connections; it vanished once connections were warm, so
+    the cost is in OPENING many at once, not in serving them. I ruled out
+    httpz's backlog, max_conn and timeouts, and could NOT determine whether
+    the remainder is Windows' accept path, httpz's Windows fallback, or the
+    client. It is in BENCHMARKS.md as an open question. A server whose
+    published throughput quietly avoids its own bad case has published a
+    number about the benchmark, not about the server.
+
+state:
+  phase 8:   4 of 5 · docs-as-guides remains
+  the gate:  "RingServ carries one real application of the author's" --
+             THE PRINCIPAL'S TO OPEN. No session can open it for him, and
+             I am not going to pretend a fixture counts.
+  suites:    14 green
+
+waiting:
+  RINGSERV-ANNEX-STALE -> the zing session [routed 08-18, still unanswered]
+  RINGSERV-STZZQL-README -> the stzzql session [no closure reported]
+  RINGSERV-MICRORING-INTERPLAY -> the microring session [no closure reported]
+
+next:
+  - me:      the didactic docs, if that is what you want next; otherwise
+             nothing, because the remaining gate is not mine
+  - principal: the 0.9 gate needs one real application. That is the only
+             thing standing between this repository and its first release,
+             and it is a decision rather than a task
+
+note:      the board still lists two finished items for this repository,
+           three days after both closed.
+```
+---
