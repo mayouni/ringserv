@@ -393,3 +393,66 @@ note:      the honest summary of phase 8 is that four of its five pieces
            paying in a year.
 ```
 ---
+
+--- FROM: ringserv | 2026-08-19 18:10 | CLOSE
+```yaml
+by:        ringserv · claude-fable-5 · 2026-08-19 18:10
+
+subject:   RestoLean's Commons kit answered -- five designs, one divergence,
+           and one finding prompt 22's session should see before ruling
+
+why:       the Principal delivered KIT-RINGSERV-ARTICLE.md directly; the kit's
+           own gate requires divergences reported rather than silently resolved
+
+did:
+  - read the kit, the germ (serveur.js, 521 lines, in full), the resilience
+    brief, and prompts 17 section 5 and 22 before writing anything
+  - wrote docs/COMMONS.md: one design document, five sections, every ruling
+    traced to a law in the article, a measured field fact, or this tree
+  - committed locally (ahead 1), PUSHED NOTHING, per the kit
+
+the divergence, reported:
+  the kit says "Phase 6 is still ahead of you... run after and it costs a
+  rewrite". The tree says phase 6 shipped complete on 08-18. No rewrite
+  follows: read against what exists, the kit splits into already-built-and-
+  stronger (the mutation queue IS store-and-forward with idempotency keys),
+  built-but-wrong-primitive, and genuinely-new.
+
+the finding worth routing:
+  THE SHAPE LOG AND THE FISCAL JOURNAL ARE OPPOSITE PRIMITIVES. The shape
+  log is derived, trimmable, row-images; the journal IS the state, chained,
+  never trimmable -- French anti-fraud law requires inalterability, so a
+  primitive whose defining feature is "the floor moves" is disqualified by
+  construction. Journal() is designed as a NEW store beside Data(), not a
+  configuration of the shape log. Any repository planning to reuse
+  ringserv's sync layer for a legal record needs this distinction.
+
+for prompt 22's session, before it rules:
+  the merge-policy hooks are designed to express BOTH candidate rulings with
+  no code change -- :merge = :actor journals the conflict as a business
+  event and routes it to a named operator; :merge = :monotonic with a
+  declared direction merges observations actor-free, both observations still
+  journaled. check warns on any :monotonic until 22 rules, so early use is
+  visible and reversible. The mechanism does not pre-empt the ruling; it is
+  the vessel either ruling pours into.
+
+state:
+  docs/COMMONS.md:  committed locally · NOT pushed, per the kit
+  observation/intent boundary:  NOT decided here, per the kit
+  CRDTs / LWW:      none, per 17 section 5
+  new dependencies: zero -- journal on SQLite, chain on std.crypto, SSE on
+                    httpz, bridge on the existing /sync contract
+
+next:
+  - the Principal: say when the local commit may be pushed
+  - prompt 22's session: the hooks in COMMONS.md section 3 are the concrete
+    shape its ruling lands in
+  - me:            nothing built from the design until asked -- the kit says
+                   the NEXT session builds it without re-deciding it
+
+note:      the tree already paid for the article's Law 5 independently --
+           WRITES.md records two benchmark runs against a stale server before
+           the kit named the same trap from the field. Two payments, one
+           lesson: instance identity belongs in the protocol.
+```
+---
