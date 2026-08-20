@@ -71,6 +71,7 @@ way no test reproduces twice.
 | an **absolute** path at any depth | itself; the whole graph below it anchors per file | fixture, from an unrelated cwd |
 | `load "x.ring"` in the **application file** | the **process working directory** | fixture, both ways |
 | a bare name not found relative | `<exe folder>/x.ring`, then `<exe folder>/load/x.ring` — Ring's own fallback, unchanged | not gated (see below) |
+| `load "/../../x.ring"` — Ring's own leading-separator form | the exe folder, concatenated; unchanged from the VM | not gated (see below) |
 | `ringserv check` | identically to `ringserv run` — same parse | fixture |
 | Ring's `currentdir()` | the virtual directory (was: uninitialised memory) | fixture |
 | Ring's `chdir()` | moves the virtual directory only, never the process | fixture |
@@ -90,9 +91,19 @@ static executable with its own library embedded.
 This is a **library search root** question, not an anchoring one, and
 answering it means deciding whether a RingServ binary may depend on an
 installed Ring. That decision has not been made, and this page does not
-make it. Measured on 2026-08-20: staging a Ring `bin/load/` plus
-`libraries/` next to `ringserv.exe` makes them all resolve, so nothing but
-the search root is missing.
+make it.
+
+**Measured on 2026-08-20, in a pristine directory**, because the shape of
+the answer matters: copy `ringserv.exe` into `<X>/bin/` and stage a Ring
+installation's `bin/load/`, `libraries/` and `extensions/` around it in
+**Ring's own layout**, and `load "stdlib.ring"` resolves its entire graph
+— not one `Can't open file` remains. The layout is not incidental: Ring's
+bundled files load their dependencies as `load "/../../libraries/..."`, a
+leading-separator form that only lands correctly when the VM concatenates
+it onto the exe folder, so a flat `load/` dropped beside the binary is not
+enough.
+
+Note what that measurement does **not** say — see 3 below.
 
 **2. A name RingServ's own embedded library already defines.**
 
@@ -118,7 +129,22 @@ this one name is the only remaining namespace blocker for that library.
 The fix is probably to load `testing.ring` only for `ringserv test`; that
 is its own change, with its own gates.
 
-**3. Symbolic links.** `..` is resolved textually, not through the
+**3. `loadlib`, and therefore every Ring extension.**
+
+Reached only once the search root above is solved, and found by the same
+measurement. With the whole graph resolving, `load "stdlib.ring"` then
+dies with `Error (R3) : Calling Function without definition: loadlib` —
+because `ringvm/src/dll_e.c` is deliberately **not** in `build.zig`'s
+source list (`RING_NODLL`), so a RingServ binary cannot load a native
+extension at all. That is a considered property of a single static
+executable, not an oversight.
+
+It is recorded here because it bounds the previous item: solving the
+search root would make every Ring **library** resolve, and would still
+not make Ring's bundled `stdlib.ring` run. Anything asking for the
+search root should be told both halves.
+
+**4. Symbolic links.** `..` is resolved textually, not through the
 filesystem, so a path crossing a symlink normalises to somewhere a real
 `chdir` would not have gone. This is the only place the virtual directory
 differs from the interpreter's real one.

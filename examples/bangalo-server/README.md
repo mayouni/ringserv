@@ -134,11 +134,16 @@ the loader.**
 
 1. **RingServ ships no Ring installation**, so stzlib's `load
    "stdlibcore.ring"` — a bare name that native `ring` finds under
-   `<ring>/bin/load/` — does not resolve. Measured: staging a Ring
-   `bin/load/` and `libraries/` beside `ringserv.exe` makes every one of
-   them resolve. This is a **library search root** decision, not an
-   anchoring defect, and it is open. `docs/LOADING.md` §"What still does
-   not resolve".
+   `<ring>/bin/load/` — does not resolve. This is a **library search
+   root** decision, not an anchoring defect, and it is open.
+   Re-measured 2026-08-20 in a pristine tree, and the earlier note here
+   was too generous: staging a Ring installation around `ringserv.exe`
+   **in Ring's own layout** (`<X>/bin/` for the binary, with `bin/load/`,
+   `libraries/` and `extensions/` beside it) does make every `load`
+   resolve — and the run then dies on `loadlib`, which RingServ does not
+   provide because `dll_e.c` is deliberately out of the build. So the
+   search root is **not** the only thing between here and a working
+   `stdlib.ring`. `docs/LOADING.md` §"What still does not resolve".
 2. **One name collides.** `src/ringlib/testing.ring` defines `Ask` — the
    `ringserv test` vocabulary — and is loaded into every application's VM,
    including `run` and `serve`, which have no use for it.
