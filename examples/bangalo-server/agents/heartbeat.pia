@@ -1,0 +1,28 @@
+# A pi agent, whole. See stzlib/base/test/agentic/agents/kitchen-bot.pia
+# for the format this was written against.
+#
+# What it is for HERE: the smallest agent that proves the pump moves.
+# It carries no business logic of its own -- a real Bangalo deployment
+# drops its own .pia and .ring files in this folder beside it (that is
+# the whole convention: the folder is the deployment).
+pia: 1
+name: heartbeat
+kind: pi
+coverage: notes that the server is alive, once per interval
+reversibility: reversible
+schedule:
+  timer: 1000
+memory:
+  - server quiet
+governance:
+  authority: delegated
+  risks:
+    note-heartbeat: 1
+  grants:
+    - note-heartbeat
+skills:
+  - name: beat
+    when: fact server quiet
+    does: learn server quiet noted
+    verify: fact server quiet noted
+    effect: note-heartbeat

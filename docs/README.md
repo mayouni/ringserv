@@ -38,6 +38,11 @@ Each one answers "how do I", and says what it refuses to do.
 - **[WORKERS.md](WORKERS.md)** — the N-worker concurrency model, measured.
 - **[WRITES.md](WRITES.md)** — why a write cost 10 ms, what it actually
   was, and the one-writer connection that fixed it.
+- **[`examples/bangalo-server/`](../examples/bangalo-server)** — the
+  profile that adopts an `stzAgentHost` from stzlib, agents-folder
+  convention and read-only surface included. Code-complete against
+  stzlib's real API; **does not run yet** — its own README explains the
+  boundary this hit and why the fix is not this profile's to make.
 - **[GATES.md](GATES.md)** — every suite, one command, and what is still
   thin.
 
