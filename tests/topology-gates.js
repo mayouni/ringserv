@@ -39,6 +39,18 @@ function check(name, cond, detail) {
     else { failed++; console.log("FAIL  " + name + (detail ? "  — " + detail : "")); }
 }
 
+/** The codes in a `check --json` report.
+ *
+ * C2 v1.1 puts the diagnostics inside a report object rather than a
+ * top-level array — Ring's own jsonlib misreads a bare array, so the
+ * outer object is the contract's, not a preference. The array form is
+ * still accepted here so this helper reads either. */
+function codesOf(stdout) {
+    const parsed = JSON.parse(stdout);
+    const list = Array.isArray(parsed) ? parsed : parsed.diagnostics;
+    return (list || []).map(x => x.code);
+}
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ringserv-topo-"));
 
 function startServer(fixture, port, env) {
@@ -278,7 +290,7 @@ function variant(name, fixture, subs) {
         ]);
         const r = spawnSync(RINGSERV, ["check", v.file, "--json"], { encoding: "utf8", cwd: v.dir });
         let found = [];
-        try { found = JSON.parse(r.stdout).map(x => x.code); } catch {}
+        try { found = codesOf(r.stdout); } catch {}
         for (const code of [
             "RS_TOPOLOGY_UNKNOWN_SITE",
             "RS_TOPOLOGY_UNKNOWN_SERVICE",
@@ -294,7 +306,7 @@ function variant(name, fixture, subs) {
         const clean = variant("clean", "topo-app.ring", []);
         const rc = spawnSync(RINGSERV, ["check", clean.file, "--json"], { encoding: "utf8", cwd: clean.dir });
         let cleanCodes = [];
-        try { cleanCodes = JSON.parse(rc.stdout).map(x => x.code); } catch {}
+        try { cleanCodes = codesOf(rc.stdout); } catch {}
         check("a correct topology produces no placement findings",
             !cleanCodes.some(c => c.startsWith("RS_TOPOLOGY_")), cleanCodes.join(","));
     }

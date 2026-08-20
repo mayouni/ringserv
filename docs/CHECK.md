@@ -68,20 +68,27 @@ parse the markdown.
 
 ## `check --json` speaks the Diagnostic Contract
 
-**RingServ pins C2 v1.0** — `stzzui/doc/diagnostic-contract.md` and the
-schema beside it, of 2026-08-08, vendored here at
+**RingServ pins C2 v1.1** — `stzzui/doc/diagnostic-contract.md` and the
+schema beside it, of 2026-08-20, vendored here at
 `vendor/c2/diagnostic-contract.schema.json`. This paragraph is not
 decoration: §3.3 of the contract makes recording the pinned version a
-condition of conformance, and §4 puts moving off v1.0 under RingServ's own
-decision rather than upstream's.
+condition of conformance, and §4 puts the move under RingServ's own
+decision rather than upstream's — which is why v1.0 held from 08-18 until
+this repository chose to move, and `vendor/VENDOR.md` records why it did.
 
-`--json` emits one envelope per finding:
+`--json` emits a **report object** — never a top-level array, which is
+v1.1's whole point and a measured one: Ring 1.27's own jsonlib returns a
+one-element list for a bare JSON array, so a court emitting one emits
+something the family cannot read, and it fails quietly. `diagnostics` is
+present even when empty, so clean is distinguishable from no output:
 
 ```json
-{ "code": "RS_SERVICE_UNANSWERABLE", "severity": "error",
-  "message": "service `notes` declares no actions and no table …",
-  "span": { "file": "app.ring", "line": 0 },
-  "cites": [], "language": "ringserv" }
+{ "diagnostics": [
+    { "code": "RS_SERVICE_UNANSWERABLE", "severity": "error",
+      "message": "service `notes` declares no actions and no table …",
+      "span": { "file": "app.ring", "line": 0 },
+      "cites": [], "language": "ringserv" }
+] }
 ```
 
 Seven stable codes — `RS_SYNTAX_ERROR`, `RS_SYNTAX_MISSING`,
@@ -105,7 +112,7 @@ Three details the contract decides and this implementation obeys:
   §2.5 forbids citing. Where no law applies, `[]` is the conforming answer,
   and the reader's pointer travels in `message`, where wording is free.
 
-Conformance is executable: `node tests/c2-gates.js` (40 gates) drives all
+Conformance is executable: `node tests/c2-gates.js` (51 gates) drives all
 seven codes and validates every envelope against the vendored schema — the
 validator *reads* the schema rather than restating it, so a version bump is
 felt here instead of being agreed with. It also asserts the vendored copy is

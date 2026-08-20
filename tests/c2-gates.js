@@ -31,7 +31,7 @@ const RINGSERV = path.join(ROOT, "zig-out", "bin",
     process.platform === "win32" ? "ringserv.exe" : "ringserv");
 const SCHEMA_FILE = path.join(ROOT, "vendor", "c2", "diagnostic-contract.schema.json");
 const UPSTREAM = path.join(ROOT, "..", "stzzui", "doc", "diagnostic-contract.schema.json");
-const PINNED = "1.0";
+const PINNED = "1.1";
 
 let passed = 0, failed = 0;
 function check(name, cond, detail) {
@@ -101,7 +101,14 @@ function envelopes(label, mutate, target) {
     const r = spawnSync(RINGSERV, ["check", "--json"], { cwd: dir, encoding: "utf8" });
     let parsed = null, parseError = null;
     try { parsed = JSON.parse(r.stdout); } catch (e) { parseError = e.message; }
-    return { label, status: r.status, raw: r.stdout, parsed, parseError };
+    // v1.1: the diagnostics live inside a REPORT OBJECT. `parsed` stays the
+    // list every gate below already reasons about; `report` is the outer
+    // object, so the shape itself can be asserted rather than assumed.
+    const report = parsed;
+    if (report && !Array.isArray(report) && Array.isArray(report.diagnostics)) {
+        parsed = report.diagnostics;
+    }
+    return { label, status: r.status, raw: r.stdout, parsed, report, parseError };
 }
 
 try {
@@ -110,6 +117,18 @@ try {
 
     check(`the vendored schema is the version RingServ pins (v${PINNED})`,
         schema.version === PINNED, "vendored says v" + schema.version);
+
+    // v1.1's whole point, asserted directly: NEVER a top-level array.
+    // Ring 1.27's jsonlib returns a one-element list for a bare JSON array,
+    // so a court emitting one emits something the family cannot read — and
+    // it fails quietly, which is why this is a gate and not a style note.
+    {
+        const r = envelopes("shape", s2 => s2 + "\naX = )\n");
+        check("the machine output is a report OBJECT, not a top-level array",
+            r.report !== null && !Array.isArray(r.report), r.raw.slice(0, 120));
+        check("...carrying its diagnostics under `diagnostics`",
+            r.report && Array.isArray(r.report.diagnostics), r.raw.slice(0, 120));
+    }
 
     // Drift against the normative home, when the home is on this disk.
     if (fs.existsSync(UPSTREAM)) {
@@ -229,8 +248,12 @@ try {
         const r = spawnSync(RINGSERV, ["check", "--json"], { cwd: dir, encoding: "utf8" });
         let parsed = null;
         try { parsed = JSON.parse(r.stdout); } catch {}
-        check("a clean app emits [] in machine form",
-            Array.isArray(parsed) && parsed.length === 0, r.stdout.slice(0, 200));
+        check("a clean app emits a REPORT OBJECT, never a bare array",
+            parsed !== null && !Array.isArray(parsed) && typeof parsed === "object",
+            r.stdout.slice(0, 200));
+        check("...whose `diagnostics` key is present and empty",
+            parsed && Array.isArray(parsed.diagnostics) && parsed.diagnostics.length === 0,
+            r.stdout.slice(0, 200));
         check("...and succeeds", r.status === 0, "exit " + r.status);
     }
 } finally {

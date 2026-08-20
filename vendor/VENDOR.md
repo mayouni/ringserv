@@ -13,10 +13,17 @@ pinned:
 
 pinned instruments (law, not code — vendored so a gate can run with no sibling
 repository present, and held byte-identical to upstream by tests/c2-gates.js):
-- c2/diagnostic-contract.schema.json: the Diagnostic Contract envelope, **v1.0**
-  of 2026-08-08, normative home stzzui/doc/diagnostic-contract.md
-  @ 328c08aa42ec82f5c570391369f55f1c417667ef. RingServ pins v1.0 and moves by
-  its own decision, per §4 "Consumers pin".
+- c2/diagnostic-contract.schema.json: the Diagnostic Contract envelope, **v1.1**
+  of 2026-08-20, normative home stzzui/doc/diagnostic-contract.md. RingServ
+  pinned v1.0 from 2026-08-18 and **moved to v1.1 on 2026-08-20 by its own
+  decision**, per §4 "Consumers pin" — the decision Central returned unruled
+  because this repository had reserved it.
+  WHY MOVE, since a pin exists to be kept: v1.1 adds `definitions.report` and
+  forbids a top-level array, on a MEASURED ground — Ring 1.27's own jsonlib
+  returns a one-element list for a bare JSON array, so a court emitting one
+  emits something the rest of the family cannot read, and it fails quietly.
+  `ringserv check --json` emitted exactly that shape. Staying on v1.0 would
+  have meant keeping a defect that had been demonstrated.
 
 vendored from RingScript (same author, same project family), not from a third party:
 - src/rs_json.c: the C JSON codec, held byte-identical to src/ringlib/json.ring by tests/gates.zig
