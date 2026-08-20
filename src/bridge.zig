@@ -408,7 +408,35 @@ pub fn probeFunction(name: []const u8) bool {
 
 /// The embedded pure-Ring library, in load order, each paired with a
 /// function it MUST define. Verified after loading (see rs_init).
-const RingLibFile = struct { name: []const u8, src: [:0]const u8, provides: []const u8 };
+const RingLibFile = struct {
+    name: []const u8,
+    src: [:0]const u8,
+    provides: []const u8,
+    /// Loaded only when the host asks for the test vocabulary.
+    ///
+    /// EVERY FILE IN ringlib/ IS LOADED INTO EVERY APPLICATION'S VM, so a
+    /// name defined here occupies the APPLICATION's global namespace —
+    /// which is fine for `__dispatch` and fatal for `Ask`. An application
+    /// with its own `Ask` verb (an ordinary English word) could not define
+    /// one, and Ring reports that as C22 function redefinition with
+    /// nothing saying where the other definition came from.
+    ///
+    /// Ruled SCOPED, NOT RENAMED (RINGSERV-RINGLIBNS-01, 2026-08-20): the
+    /// collision goes away by removing the EXPOSURE rather than the word,
+    /// so `Ask` keeps its name and no RingServ user pays a compatibility
+    /// cost for a scope defect that was never theirs.
+    testing_only: bool = false,
+};
+
+/// True when this process is running `ringserv test`.
+///
+/// Set BEFORE rs_init, and read by it — `run`, `dev` and `serve` never
+/// set it, so a served application never sees the test vocabulary at all.
+var g_want_testing: bool = false;
+
+pub fn enableTestVocabulary() void {
+    g_want_testing = true;
+}
 
 const ringlib_files = [_]RingLibFile{
     .{ .name = "json_c.ring", .src = json_ring_src, .provides = "jsonencode" },
@@ -420,7 +448,7 @@ const ringlib_files = [_]RingLibFile{
     .{ .name = "sync.ring", .src = sync_ring_src, .provides = "__rs_sync_push" },
     .{ .name = "jsserv.ring", .src = jsserv_ring_src, .provides = "rsjsdispatch" },
     .{ .name = "actor.ring", .src = actor_ring_src, .provides = "rsactorcheck" },
-    .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask" },
+    .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask", .testing_only = true },
 };
 
 /// Non-empty when rs_init could not build a usable state — the name of
@@ -489,6 +517,7 @@ pub export fn rs_init() i32 {
     // caught only because an unrelated command broke. So after each file,
     // ask the VM whether the function it promises actually exists.
     for (ringlib_files) |f| {
+        if (f.testing_only and !g_want_testing) continue;
         ring_state_runcode(st, f.src);
         if (!functionExists(st, f.provides)) {
             setInitError("ringlib/{s} failed to load (no {s})", .{ f.name, f.provides });

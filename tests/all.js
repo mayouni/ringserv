@@ -41,6 +41,7 @@ const suites = [
     { name: "TLS decision      ", node: "tls-gates.js" },
     { name: "actor / auth      ", node: "auth-gates.js" },
     { name: "the guides        ", node: "guide-gates.js" },
+    { name: "ringlib namespace ", node: "ringlibns-gates.js" },
 ];
 
 if (full) {

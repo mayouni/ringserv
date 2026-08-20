@@ -69,6 +69,33 @@ pub fn new(arena: std.mem.Allocator, name: []const u8) !u8 {
     return 0;
 }
 
+/// The verbs `testing.ring` puts into the application's namespace under
+/// `ringserv test`, and only there. Kept beside the check that uses them
+/// so adding a verb and forgetting the diagnostic is one edit, not two.
+const test_vocabulary = [_][]const u8{
+    "ask", "expect", "expectok", "expectcode",
+    "expectstatus", "expecttrue", "laststatus",
+};
+
+/// Does this source define one of those names? Ring function names are
+/// case-insensitive, so the comparison is too.
+fn definesVocabulary(src: []const u8) bool {
+    var i: usize = 0;
+    while (std.mem.indexOfPos(u8, src, i, "func ")) |at| {
+        i = at + 5;
+        var j = i;
+        while (j < src.len and (src[j] == ' ' or src[j] == '\t')) j += 1;
+        var k = j;
+        while (k < src.len and (std.ascii.isAlphanumeric(src[k]) or src[k] == '_')) k += 1;
+        if (k > j) {
+            for (test_vocabulary) |v| {
+                if (std.ascii.eqlIgnoreCase(src[j..k], v)) return true;
+            }
+        }
+    }
+    return false;
+}
+
 // ----------------------------------------------------------------- test
 
 /// Run every tests/*.ring against the app, in process. The database is
@@ -82,6 +109,11 @@ pub fn runTests(arena: std.mem.Allocator, app_path: []const u8) !u8 {
     };
 
     bridge.setAppDir(std.fs.path.dirname(app_path) orelse ".");
+    // The ONE command that gets the test vocabulary. Asked for before
+    // rs_init, because that is when ringlib is loaded — see the
+    // `testing_only` note in bridge.zig for why `Ask` may not exist in a
+    // served application's namespace.
+    bridge.enableTestVocabulary();
     try bridge.db.configure(":memory:");
     bridge.db.setDisplayPath(":memory:");
     bridge.rs_set_echo(1);
@@ -90,7 +122,34 @@ pub fn runTests(arena: std.mem.Allocator, app_path: []const u8) !u8 {
         return 1;
     }
     if (bridge.rs_eval(app_src) != 0) {
-        std.debug.print("ringserv test: {s}\n", .{bridge.rs_last_error()});
+        const err = std.mem.span(bridge.rs_last_error());
+        std.debug.print("ringserv test: {s}\n", .{err});
+        // The one collision the scoping ruling deliberately leaves standing.
+        // `Ask` and the Expect verbs exist ONLY under this command, so an
+        // application that defines one of them serves perfectly and fails
+        // here — and Ring reports that as a bare "Function redefinition"
+        // with nothing saying where the other definition came from. Naming
+        // it is the difference between a diagnosis and an afternoon.
+        // Detected from the APP'S OWN SOURCE, not from the error text: the
+        // C22 message is printed by the VM's C parser straight to stdout,
+        // so it reaches neither rs_last_error nor the output buffer. A
+        // source scan is deterministic, and this is a hint — a false
+        // positive costs a paragraph nobody needed, which is cheap beside
+        // the afternoon a missing one costs.
+        if (definesVocabulary(app_src)) {
+            std.debug.print(
+                \\
+                \\  `ringserv test` loads the test vocabulary into your application's
+                \\  namespace: Ask, Expect, ExpectOk, ExpectCode, ExpectStatus,
+                \\  ExpectTrue. Your app defines one of those names itself.
+                \\
+                \\  It is a problem only HERE — `run`, `dev` and `serve` never load
+                \\  the vocabulary, so the application itself is fine. Rename yours
+                \\  for the tests to run.
+                \\
+                \\
+            , .{});
+        }
         return 1;
     }
     // Materialize the declared schema against this process's connection.

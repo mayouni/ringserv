@@ -127,7 +127,7 @@ test "gate: rs_init reports no error on a healthy runtime" {
     try std.testing.expectEqualStrings("", std.mem.span(bridge.rs_init_error()));
 }
 
-test "gate: every embedded ringlib file is loaded and callable" {
+test "gate: every SERVED ringlib file is loaded and callable" {
     try fresh();
     // One live call per file — not merely isfunction(), which a stub
     // would also satisfy. If a file failed to compile, these raise.
@@ -138,7 +138,27 @@ test "gate: every embedded ringlib file is loaded and callable" {
     try std.testing.expectEqualStrings("1", try evalOk("see len(DataQuery(\"select 1\", []))"));
     try std.testing.expectEqualStrings("1", try evalOk("see RsHasGeneric([ :table = \"probe\" ], \"list\")"));
     try std.testing.expectEqualStrings("", try evalOk("see RsContractCheck(\"nope\", \"nope\", [])"));
+
+    // `Ask` is DELIBERATELY ABSENT here. testing.ring loads for
+    // `ringserv test` only (RINGSERV-RINGLIBNS-01, ruled 2026-08-20):
+    // every ringlib file occupies the APPLICATION's namespace, and an app
+    // with its own `Ask` — an ordinary English word — could not otherwise
+    // define one. The next gate holds the other half of that ruling.
+}
+
+test "gate: the test vocabulary is absent when serving and present under test" {
+    try fresh();
+    // Absent: this is the half that makes an application's own `Ask` legal.
+    try std.testing.expect(!bridge.probeFunction("ask"));
+    try std.testing.expect(!bridge.probeFunction("expectok"));
+
+    // Present: and this is the half that keeps `ringserv test` working.
+    // Same process, same bridge — only the host's request differs.
+    bridge.enableTestVocabulary();
+    try fresh();
+    try std.testing.expect(bridge.probeFunction("ask"));
     _ = try evalOk("aRs = Ask(:x, :y, [])");
+    try std.testing.expectEqualStrings("", std.mem.span(bridge.rs_init_error()));
 }
 
 test "gate: the region-terminator counter does not grow on plain evals" {
@@ -155,7 +175,8 @@ test "gate: the region-terminator counter does not grow on plain evals" {
 test "gate: the load detector discriminates present from absent" {
     try fresh();
     // Every file's sentinel is really there...
-    for ([_][]const u8{ "jsonencode", "__dispatch", "dataquery", "rsrungeneric", "rscontractcheck", "ask" }) |name| {
+    // `ask` is not in this list on purpose — see the scoping gate above.
+    for ([_][]const u8{ "jsonencode", "__dispatch", "dataquery", "rsrungeneric", "rscontractcheck" }) |name| {
         try std.testing.expect(bridge.probeFunction(name));
     }
     // ...and the check would notice if one were not. Without this, a
