@@ -74,15 +74,7 @@
 
 const char *rs_path_resolve(const char *cPath, char *cOut, int nOut);
 
-/*
-** The base every thread seeds from. Written at most once, by rs_path_anchor(),
-** before any worker thread exists; read-only thereafter, which is why it needs
-** no lock.
-*/
-static char g_base[RS_PATH_SIZE];
-static int g_base_ready = 0;
-
-/* This thread's virtual working directory, seeded from g_base on first use. */
+/* This thread's virtual working directory, seeded on first use. */
 static _Thread_local char g_here[RS_PATH_SIZE];
 static _Thread_local int g_here_ready = 0;
 
@@ -205,10 +197,6 @@ static const char *rs_path_here(void) {
 	}
 	g_here_ready = 1;
 	g_here[0] = '\0';
-	if (g_base_ready) {
-		memcpy(g_here, g_base, strlen(g_base) + 1);
-		return g_here;
-	}
 	if (RS_PATH_GETCWD(cReal, RS_PATH_SIZE) == NULL) {
 		return g_here;
 	}
@@ -216,44 +204,6 @@ static const char *rs_path_here(void) {
 		g_here[0] = '\0';
 	}
 	return g_here;
-}
-
-/*
-** Fix the base every thread seeds from. Called once, from the main thread,
-** before any worker exists; a later call is ignored so a running server can
-** never hold two bases. NULL or "" publishes the process's own directory,
-** which is what a thread would have found for itself anyway.
-*/
-void rs_path_anchor(const char *cDir) {
-	char cReal[RS_PATH_SIZE];
-	char cJoin[RS_PATH_SIZE];
-	size_t nReal;
-	if (g_base_ready) {
-		return;
-	}
-	if ((cDir == NULL) || (cDir[0] == '\0')) {
-		if (RS_PATH_GETCWD(cReal, RS_PATH_SIZE) == NULL) {
-			return;
-		}
-		cDir = cReal;
-	} else if (!rs_path_isabs(cDir)) {
-		if (RS_PATH_GETCWD(cReal, RS_PATH_SIZE) == NULL) {
-			return;
-		}
-		nReal = strlen(cReal);
-		if ((nReal + strlen(cDir) + 2) >= RS_PATH_SIZE) {
-			return;
-		}
-		memcpy(cJoin, cReal, nReal);
-		cJoin[nReal] = RS_PATH_SEP;
-		strcpy(cJoin + nReal + 1, cDir);
-		cDir = cJoin;
-	}
-	if (rs_path_norm(cDir, g_base, RS_PATH_SIZE) != 0) {
-		g_base[0] = '\0';
-		return;
-	}
-	g_base_ready = 1;
 }
 
 /* ring_general_currentdir's body — see the marked patch in ringvm/src/general.c. */
