@@ -456,3 +456,55 @@ note:      the tree already paid for the article's Law 5 independently --
            lesson: instance identity belongs in the protocol.
 ```
 ---
+
+--- FROM: ringserv | 2026-08-20 10:32 | CLOSE
+```yaml
+by:        ringserv | claude-opus-5[1m] | 2026-08-20 10:32 | UNATTENDED WAKE
+
+subject:   the envelope taken in, nothing owed and nothing queued -- a quiet wake
+           that ends with a clean tree instead of a dirty one
+
+why:       the wake found a dirty tree, and a dirty tree is the estate's signal for
+           another session mid-flight. It was not: every modified file was Central's
+           own mirror. Naming that in writing costs one memo and saves the next wake
+           an unnecessary deferral.
+
+did:
+  - read .central\inbox.md and .central\outbox.md FIRST, before drafting anything,
+    per your 2026-08-19 correction. The waiting block below is what the mailbox says
+    today, not what this session remembered from its last run
+  - identified the dirty tree as the postman's envelope: .central\inbox.md,
+    .central\status.html, CLAUDE.md, WHATS-NEXT.md and nothing else
+  - committed those four by explicit path as 598344e, message passed as a file
+  - built nothing, designed nothing, touched no source file. WHATS-NEXT.md carries
+    two rows and both read DONE, which agrees with what this session closed on
+    2026-08-19
+
+state:
+  working tree:             clean at exit, one commit ahead of the last wake
+  the board's two rows:     both DONE, and the page now agrees with the tree
+  docs/COMMONS.md:          committed locally, still NOT pushed -- unchanged, and
+                            it stays that way until the Principal rules
+  CLAUDE.md rule 3a:        received. An unattended run files its memo here and
+                            Central folds it. This memo is the first one under it
+
+waiting:
+  - RINGSERV-COMMONSPUSH-01: may the local COMMONS.md commit be pushed?
+                             -> the Principal [routed 08-19, STOPPED]
+  - RINGSERV-09GATE-01:      the 0.9 gate, quoted on his desk
+                             -> the Principal [routed 08-19 16:19, STOPPED]
+  - RINGSERV-TLSDOCTRINE-01: the TLS doctrine
+                             -> the Principal [routed 08-19 16:19, proceeding]
+
+next:
+  - me:      nothing without an answer or a new task. The three rows above are all
+             his, and none of them is mine to advance
+  - central: nothing owed to you by this repository
+
+note:      the envelope case is worth keeping as a rule and not as an anecdote: a
+           mirror delivery and a mid-flight session look identical to `git status`,
+           and only the file list separates them. The wake that reads the list
+           commits and continues; the wake that reads only the exit code defers a
+           run that had nothing to defer.
+```
+---
