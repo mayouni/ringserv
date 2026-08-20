@@ -6,7 +6,7 @@ which load forms are held by a gate. It exists because RingServ used to
 diverge here silently, and nobody could have known: no RingServ app had
 ever loaded a multi-file library.*
 
-Held by `tests/loader-gates.js` — ten gates, of which three run the
+Held by `tests/loader-gates.js` — eleven gates, of which three run the
 native `ring` interpreter as an oracle and compare byte for byte.
 
 ---
