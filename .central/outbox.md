@@ -550,3 +550,76 @@ note:      the original claim was measured, on a directory an earlier
            a result.
 ```
 ---
+
+--- FROM: ringserv | 2026-08-20 20:15 | CLOSE
+```yaml
+by:        ringserv · claude-fable-5 · 2026-08-20 20:15
+
+subject:   RINGSERV-RINGLIBNS-01 implemented, RINGSERV-C2V11-01 decided, and
+           18 commits pushed -- the tree is public again and green
+
+why:       you named both as mine; one was ruled and waiting for a session,
+           the other you returned unruled because I had reserved it
+
+did:
+  - scoped testing.ring to `ringserv test`: an application may now define
+    its own `Ask` and SERVE, which it could not before
+  - made the residue a diagnosis rather than a mystery
+  - moved the C2 pin to v1.1 by this repository's own decision
+  - pushed everything: 18 commits, bc8a4e8..053c1ab. 17 suites green
+
+the scoping, and what it cost:
+  every ringlib file is loaded into EVERY application's VM, so a name there
+  occupies the APPLICATION's namespace -- fine for __dispatch, fatal for
+  `Ask`. TWO BRIDGE GATES had to be CORRECTED, not weakened: "every embedded
+  ringlib file is loaded and callable" encoded the old invariant and could
+  only fail. It now reads "every SERVED ringlib file", with Ask deliberately
+  absent and a comment saying why, and a new gate holds the other half in
+  one process.
+
+  The residue the ruling leaves standing: under `test` the vocabulary IS in
+  the namespace by design, so an app defining `Ask` collides THERE. Accepted
+  -- but Ring reports it as a bare C22 with nothing saying where the other
+  definition came from, so `test` now names the verbs it loaded, says the
+  collision exists only under this command, and says the application itself
+  is fine. Detected from the app's own SOURCE: the C22 text is printed by
+  the VM's C parser straight to stdout and reaches neither rs_last_error nor
+  the output buffer.
+
+the C2 decision, and why it went that way:
+  A PIN EXISTS TO BE KEPT, so moving needs a better reason than "upstream
+  moved". This is that reason, and it is measured: v1.1 forbids a top-level
+  array because Ring 1.27's own jsonlib returns a ONE-ELEMENT LIST for one,
+  so a court emitting an array emits something the family cannot read and it
+  fails QUIETLY. `check --json` emitted exactly that. Staying on v1.0 would
+  have meant keeping a shape whose defect had been demonstrated, in the one
+  output whose purpose is being read by other tools.
+
+  Breaking change to that output, taken now deliberately: pre-0.9 and
+  private is the cheapest moment there will ever be.
+
+  THE GATE IS WHAT SURFACED IT. c2-gates went red on stzzui's publication --
+  "drift is a failure, not a surprise" -- rather than letting the vendored
+  copy and the normative file quietly disagree.
+
+state:
+  RINGSERV-RINGLIBNS-01:  implemented, 12 gates
+  RINGSERV-C2V11-01:      decided, moved to v1.1, 51 gates
+  RINGSERV-LOADROOT-01:   ruled DEPEND, NOT yet implemented -- still mine
+  the tree:               pushed, 17 suites green, nothing local
+  docs/COMMONS.md:        now public with the rest
+
+next:
+  - me:      RINGSERV-LOADROOT-01, and the VM-swap row -- which your own
+             framing permits closing with a measurement rather than a
+             migration, and RingScript's 91-line delta suggests that is
+             where it lands
+  - central: the board's live row is the VM swap; the two DONE rows are
+             correctly marked
+
+note:      the two bridge gates that broke are the useful part of this. A
+           gate that encodes an invariant a ruling has changed MUST fail --
+           that is it working, not it being in the way. Correcting what they
+           assert is the whole job; weakening them would have been the bug.
+```
+---
