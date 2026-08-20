@@ -2,7 +2,7 @@
 
 > ## Answer from this file. You need nothing else and no permission.
 >
-> **Written 2026-08-19 08:45, from Central at `ec12ce7`.** Central keeps it current: it
+> **Written 2026-08-20 01:22, from commit 482e018+dirty, from Central at `482e018`.** Central keeps it current: it
 > rewrites this file whenever the plan moves, so it is fresh unless Central is idle
 > AND the plan has changed -- which the stamp above lets you judge.
 >
@@ -35,11 +35,11 @@ The full cross-repository picture, when you actually need it, is in
 
 ## Ready now, independent of everything else
 
-### A/B the vendored patch that upstream rejected
+### DONE 2026-08-17 -- ran, measured indifferent, and the patch then left with the VM swap
 
 *Session: RingServ backend session*
 
-ORDERED SECOND at RingServ's request and Central agreed: the vendored-VM swap may delete the very patch this would measure, so measuring first risks spending an afternoon on a question that does not survive. Run it only if the accessor patch is still present after the swap.
+CLOSED BY RINGSERV and reported 2026-08-19: it ran the A/B on 2026-08-17, the upstream objection reproduced, RingServ measured indifferent, and the accessor patch then left with the vendored-VM swap -- so the condition this row carried, run it only if the patch is still present afterwards, resolves to nothing to run. The row survived two days after the work because a generated board can count commits and cannot know a row is finished.
 
 <details><summary>the prompt</summary>
 
@@ -55,11 +55,11 @@ Append a SESSION-LOG line with the numbers.
 
 </details>
 
-### Adopt the placement rules -- the ZQL half is already closed
+### DONE 2026-08-18 -- both halves closed, placement adopted and paid in phase 6
 
 *Session: RingServ backend session*
 
-HALF DONE by RingServ itself: it settled the ZQL question on 08-14 by REMOVAL -- no framework dialect, plain SQL over SQLite -- and its checker shipped in phase 5, so the queue calling it unbuilt was wrong. Only the placement half remains, and RingScript reports that placement.md 2.1 may be RingServ-shaped rather than universal, which only RingServ can confirm.
+CLOSED BY RINGSERV and reported 2026-08-19. The ZQL half was settled on 08-14 by REMOVAL -- no framework dialect, plain SQL over SQLite -- and the checker shipped in phase 5. The placement half was done 08-17, C3 and C2 adopted, and phase 6 shipped COMPLETE on 08-18 including the contract's owed placement case, paid online and offline. RingServ also answered the 2.1 question RingScript raised, in its 08-18 12:40 memo.
 
 <details><summary>the prompt</summary>
 
