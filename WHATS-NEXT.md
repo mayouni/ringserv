@@ -2,7 +2,7 @@
 
 > ## Answer from this file. You need nothing else and no permission.
 >
-> **Written 2026-08-20 01:22, from commit 482e018+dirty, from Central at `482e018`.** Central keeps it current: it
+> **Written 2026-08-20 11:26, from commit cece083+dirty, from Central at `cece083`.** Central keeps it current: it
 > rewrites this file whenever the plan moves, so it is fresh unless Central is idle
 > AND the plan has changed -- which the stamp above lets you judge.
 >
@@ -34,6 +34,26 @@ The full cross-repository picture, when you actually need it, is in
 **Where a prompt disagrees with this repository, this repository is right.**
 
 ## Ready now, independent of everything else
+
+### Swap the vendored VM for a patched Ring -- RingScript already did, and measured it
+
+*Session: RingServ session*
+
+ringvm/ here is still the official Ring 1.27 distribution, per your own docs/VENDOR_PATCHES.md, carrying local patches that upstream has since absorbed. RingScript shipped this same swap on 2026-08-16 and is now on master 8a89cc00c2 with its patch set down from seven to four. This row existed since 2026-08-17 but was addressed to RingScript and named you only in its prose, so it never reached your board -- that is Central's error and it is stated here rather than backdated.
+
+<details><summary>the prompt</summary>
+
+```text
+Your vendored ringvm is the official Ring 1.27 distribution and is missing fixes that landed upstream after it -- private-in-eval, strtod/musl, memcpy zero-byte, empty-catch stack, name folding, operator overloading among them.
+
+Treat it as one swap rather than several errands: move to a patched base, re-apply the patches docs/VENDOR_PATCHES.md marks as yours, run your gates, and record what moved.
+
+TWO MEASUREMENTS FROM RINGSCRIPT, WHICH ARE ITS TREE AND NOT YOURS -- check them against your own before you rely on either. The delta it measured was ELEVEN fixes, not the six this row said for three days. And stock-1.27-against-master is 91 lines with no feature in it, which is small enough that the swap may cost less than the tracking. Three of its seven local patches became upstream code and were deleted rather than re-applied; yours are documented separately and may or may not have.
+
+If your own reading says the swap is not worth it, that is a complete answer -- say so with the numbers and the row closes.
+```
+
+</details>
 
 ### DONE 2026-08-17 -- ran, measured indifferent, and the patch then left with the VM swap
 
