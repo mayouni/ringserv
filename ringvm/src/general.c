@@ -2,7 +2,33 @@
 
 #include "ring.h"
 
+/*
+**  RINGSERV: the load anchor. RingServ builds with -DRING_LIMITEDSYS=1, which
+**  makes RING_CURRENTDIRFUNCTIONS zero and leaves ring_general_chdir() a no-op
+**  and ring_general_currentdir() a function that fills in nothing -- so the
+**  per-file anchoring the VM performs around every nested `load` did nothing,
+**  and relative loads collapsed to the process directory. The three functions
+**  below live in src/rs_path.c and give the VM a PER-THREAD VIRTUAL working
+**  directory instead of a process-wide chdir (N workers, one process). The
+**  reasoning in full is at the top of that file. Re-apply on vendor swaps:
+**  losing it silently reverts nested `load` to the broken behaviour.
+*/
+#define RING_RS_PATHSIZE 8192
+extern int rs_path_getcwd(char *cOut, int nSize);
+extern int rs_path_chdir(const char *cDir);
+extern const char *rs_path_resolve(const char *cPath, char *cOut, int nOut);
+
 RING_API RING_FILE ring_general_fopen(const char *cFileName, const char *cMode) {
+	/*
+	**  RINGSERV: resolve against the virtual directory first. The Windows
+	**  branch below calls _wfopen directly, which the -Dfopen=rs_fopen
+	**  redirection in build.zig never reaches, so the anchor has to be
+	**  applied here or nested `load` breaks on Windows only.
+	*/
+	char cResolved[RING_RS_PATHSIZE];
+	if (cFileName != NULL) {
+		cFileName = rs_path_resolve(cFileName, cResolved, RING_RS_PATHSIZE);
+	}
 #if defined(_WIN32) && !defined(__TINYC__)
 	/* Code For MS-Windows */
 	RING_FILE pFile;
@@ -45,11 +71,15 @@ RING_API int ring_general_fexists(const char *cFileName) {
 RING_API int ring_general_currentdir(char *cDirPath) {
 	int nSize;
 	nSize = RING_PATHSIZE;
-#if RING_CURRENTDIRFUNCTIONS
-	if (!GetCurrentDir(cDirPath, nSize)) {
-		return errno;
+	/*
+	**  RINGSERV: the virtual directory, not the process one. Upstream reads
+	**  the real cwd here, and under RING_LIMITEDSYS it read nothing at all --
+	**  callers got an uninitialised buffer, which is also why the Ring-level
+	**  currentdir() returned garbage in this build.
+	*/
+	if (rs_path_getcwd(cDirPath, nSize) != 0) {
+		cDirPath[0] = '\0';
 	}
-#endif
 	cDirPath[nSize - 1] = '\0';
 	return RING_FALSE;
 }
@@ -88,23 +118,12 @@ RING_API int ring_general_exefilename(char *cDirPath) {
 }
 
 RING_API int ring_general_chdir(const char *cDir) {
-#if RING_CURRENTDIRFUNCTIONS
-	/* Check OS */
-	#ifdef _WIN32
-		/* Windows only */
-		#ifdef __BORLANDC__
-	/* Borland C/C++ */
-	return chdir(cDir);
-		#else
-	/* Modern Compilers Like Visual C/C++ */
-	return _chdir(cDir);
-		#endif
-	#else
-	return chdir(cDir);
-	#endif
-#else
-	return RING_ZERO;
-#endif
+	/*
+	**  RINGSERV: moves THIS THREAD's virtual directory and never the
+	**  process's. Upstream chdir's for real; under RING_LIMITEDSYS it did
+	**  nothing and returned success, which is the whole load-anchor defect.
+	*/
+	return rs_path_chdir(cDir);
 }
 
 RING_API int ring_general_justfilepath(char *cFileName) {

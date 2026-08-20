@@ -28,6 +28,9 @@ Each one answers "how do I", and says what it refuses to do.
 - **[cli.md](cli.md)** — every command and its reasoning.
 - **[CHECK.md](CHECK.md)** — how `check` and `docs` know things, and what
   the young grammar cannot see.
+- **[LOADING.md](LOADING.md)** — where `load` looks for a file: the
+  per-file anchor, every form it covers, and the two things that still do
+  not resolve.
 
 ## Running it for real
 
@@ -42,7 +45,8 @@ Each one answers "how do I", and says what it refuses to do.
   profile that adopts an `stzAgentHost` from stzlib, agents-folder
   convention and read-only surface included. Code-complete against
   stzlib's real API; **does not run yet** — its own README explains the
-  boundary this hit and why the fix is not this profile's to make.
+  boundary this hit, the loader half that is now fixed (LOADING.md), and
+  the two that are not.
 - **[GATES.md](GATES.md)** — every suite, one command, and what is still
   thin.
 

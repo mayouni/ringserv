@@ -80,14 +80,21 @@ const SKIP_PATHS = [
  *
  * Every entry here is a real limitation of `ringserv run`, which
  * evaluates a program's SOURCE where native `ring` compiles a FILE.
+ *
+ * `Language\SyntaxFiles\start.ring` LEFT this list on 2026-08-20, and how it
+ * got here is worth keeping. It was recorded as "multi-file sample whose
+ * loaded siblings produce no output under eval" — a reason that sounded right
+ * and was wrong. The siblings produced no output because they were never
+ * LOADED: a nested `load` had no anchor to resolve against (src/rs_path.c,
+ * docs/LOADING.md). The entry sat here describing the symptom of a defect
+ * nobody had named. That is the argument for this ledger and the warning
+ * about it in one line: an entry with a plausible reason stops being read.
  */
 const KNOWN_DIVERGENCES = new Map([
     ["Language\\OptionalFunc\\Answer.ring",
         "optionalFunc(): a later definition of the optional function is rejected as a redefinition under eval"],
     ["Language\\OptionalFunc\\Question.ring",
         "optionalFunc(): calling an undefined optional function does not no-op under eval"],
-    ["Language\\SyntaxFiles\\start.ring",
-        "multi-file sample whose loaded siblings produce no output under eval"],
     ["Language\\MagicMenu\\magicmenu.ring",
         "interactive menu: input handling diverges from native under canned stdin"],
     // Same optionalFunc root cause, found independently in the

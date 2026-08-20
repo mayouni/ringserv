@@ -20,10 +20,11 @@ none stops the others: a full picture beats an early exit.
 | **data fuzz** (9, 400 payloads) | the payload-key **SQL boundary**, hostile shapes, and proof the database is untouched afterwards |
 | **check + docs** (21) | seeded defects: syntax shapes, contracts naming things that do not exist, services that can never answer — each must be NAMED and fail; plus the clean scaffold staying silent |
 | **CLI gates** (16) | new → test → dev → edit → reload → where, including that a failing expectation *fails the run* |
+| **load anchor** (11) | a nested `load` resolving against the **file that contains it** and not the working directory — sibling, child and `../cousin` forms, `load package` and `load again`, an absolute path from an unrelated cwd, the top-level form staying cwd-relative on purpose, and **eight workers walking the same load graph at once** returning one answer. Three of the eleven run the native `ring` interpreter as an **oracle** and compare byte for byte, including on the case both must refuse; they are SKIPPED BY NAME when no interpreter is installed |
 | **soak** (`--full`) | 3,000 requests with flat memory |
 | **soak — data layer** (`--full`) | sustained mixed CRUD on a file database: connections, prepared statements, WAL, and the per-cell allocation path — flat memory, bounded WAL, an exact final row count, and survival across a restart |
 | **native oracle** (`--full`) | the 24 shared playground examples, byte-identical to native `ring.exe` |
-| **wide sweep — samples** (`--full`) | **249 of Ring's own sample programs** byte-identical, 62 more required to run cleanly |
+| **wide sweep — samples** (`--full`) | **250 of Ring's own sample programs** byte-identical, 62 more required to run cleanly. One of them, `Language\SyntaxFiles\start.ring`, joined that count on 2026-08-20 when the load anchor landed — it had sat on the known-divergence list under a plausible wrong reason |
 | **wide sweep — docs** (`--full`) | the same, over ~500 snippets extracted from Ring's documentation |
 
 ## Two gates that exist because of specific bugs

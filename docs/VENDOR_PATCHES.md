@@ -277,6 +277,42 @@ saying so, because this is exactly the edit the next swap will drop.
   That is the swap visibly working, and a live demonstration that the
   differential oracle is now behind the VM it checks.
 
+## 9. `ringvm/src/general.c` — the load anchor, given somewhere to point
+
+Three functions, marked `RINGSERV`. `ring_general_chdir()` and
+`ring_general_currentdir()` delegate to `src/rs_path.c`, and
+`ring_general_fopen()` resolves its path through it first.
+
+**Why it is needed.** RingServ builds with `-DRING_LIMITEDSYS=1`, which
+sets `RING_CURRENTDIRFUNCTIONS` to `0` — upstream's own switch for
+platforms without them. That leaves `ring_general_chdir()` a no-op
+returning success and `ring_general_currentdir()` a function that writes
+one NUL and nothing else. But **`chdir` is how Ring anchors a nested
+`load`**: `ring_state_runfile()` switches into a loaded file's folder
+while it is scanned, and the caller switches back. With the switch off,
+every anchor move did nothing, so every nested relative `load` collapsed
+to the process directory and **no multi-file Ring library could be loaded
+at all**. `currentdir()` called from Ring returned uninitialised memory
+for the same reason.
+
+**Why not just turn the switch on.** `chdir` is process-wide and RingServ
+runs N workers that each evaluate the app at boot; two of them anchoring
+into different library folders at once is a failure nothing reproduces
+twice. `src/rs_path.c` gives each thread a **virtual** working directory
+instead, and the real one is never moved.
+
+**Why `ring_general_fopen` too, and not only the stub layer.** Its
+Windows branch calls `_wfopen` directly, which the `-Dfopen=rs_fopen`
+redirection in `build.zig` does not reach — without this line the fix
+would work everywhere except Windows.
+
+Not upstreamable as written: it is RingServ-specific. What *is* worth
+raising upstream is the coupling itself — that `RING_LIMITEDSYS`, whose
+name is about `system()` and `chdir()` as *user-facing functions*,
+silently disables `load` path anchoring as a side effect, with no
+diagnostic. Held by `tests/loader-gates.js`, which runs native `ring` as
+an oracle over the same fixture.
+
 # Upstream fixes to pick up at the next vendor swap
 
 Bugs fixed in Ring **after 1.27** that this vendored tree still has. These

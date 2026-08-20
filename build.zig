@@ -166,7 +166,10 @@ fn addVm(mod: *std.Build.Module, b: *std.Build) void {
     mod.addCSourceFiles(.{ .files = &vm_sources, .flags = base });
     mod.addCSourceFiles(.{ .files = &vm_hot_sources, .flags = hot });
     mod.addCSourceFiles(.{
-        .files = &.{ "src/native_stubs.c", "src/rs_oop.c", "src/rs_json.c" },
+        // rs_path.c is HERE and not with the VM sources on purpose: it must be
+        // compiled without -Dfopen=rs_fopen, or its own getcwd/fopen calls
+        // would recurse back into the stub layer it exists to serve.
+        .files = &.{ "src/native_stubs.c", "src/rs_oop.c", "src/rs_json.c", "src/rs_path.c" },
         .flags = &stub_cflags,
     });
     mod.addCSourceFiles(.{ .files = &.{"vendor/sqlite/sqlite3.c"}, .flags = &sqlite_cflags });

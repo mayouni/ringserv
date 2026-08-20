@@ -109,6 +109,57 @@ reads the host), which is the rule the ask actually cares about; the
 HTTP verb carrying it is a RingServ wire-contract fact
 (`docs/services.md`), not a decision this profile made.
 
+## UPDATE, 2026-08-20 — the loader was fixed; this profile still does not run, for two other reasons
+
+*The finding below stands as written and is what routed prompt 45. That
+prompt is done: `src/rs_path.c` and one marked patch in
+`ringvm/src/general.c` give the VM a per-thread virtual working directory,
+so a nested `load` now anchors against the file that contains it, exactly
+as native `ring` does. `docs/LOADING.md` states the coverage;
+`tests/loader-gates.js` holds it, with native `ring` as an oracle.*
+
+**What the fix changed for this profile, measured rather than assumed.**
+`ringserv check examples/bangalo-server/app.ring` no longer dies at
+`base/stzBase.ring`. The load walks four directories deep through
+stzlib — `stzLib.ring` → `base/stzBase.ring` → `base/../core/stzCore.ring`
+→ `core/common/stkRingLibs.ring` — with the `..` form resolving correctly.
+The diagnosis in THE FINDING was right about the symptom and about whose
+concern it was; it was wrong about the mechanism in one detail worth
+recording, because the detail is the whole bug: the VM never seeing a real
+path is **not** what broke it. Ring anchors by `chdir`, and RingServ's
+`-DRING_LIMITEDSYS=1` had quietly turned `chdir` into a no-op.
+
+**Two things now stand between this profile and running, and neither is
+the loader.**
+
+1. **RingServ ships no Ring installation**, so stzlib's `load
+   "stdlibcore.ring"` — a bare name that native `ring` finds under
+   `<ring>/bin/load/` — does not resolve. Measured: staging a Ring
+   `bin/load/` and `libraries/` beside `ringserv.exe` makes every one of
+   them resolve. This is a **library search root** decision, not an
+   anchoring defect, and it is open. `docs/LOADING.md` §"What still does
+   not resolve".
+2. **One name collides.** `src/ringlib/testing.ring` defines `Ask` — the
+   `ringserv test` vocabulary — and is loaded into every application's VM,
+   including `run` and `serve`, which have no use for it.
+   `stzNodePlane.ring:42` also defines `Ask`, so the load dies with `C22`.
+   Measured on 2026-08-20 with a throwaway build in which `Ask` was
+   renamed: **all of stzlib then loaded with no errors whatsoever.** One
+   name is the only remaining namespace blocker. (A second collision,
+   `split` against Ring's own stdlib, WAS removed — it is now
+   `RsSplitOn`.)
+
+**And a machine fact that outranks both.** With those two cleared in the
+throwaway build, `ringserv run examples/bangalo-server/app.ring` fails at
+`line 666: Error (R3) : Calling Function without definition:
+stzenginestring` — and **native `ring` fails at the same line with the
+same error**, because stzlib's Zig engine DLLs are not built on this
+machine. "The agent host ticks" is therefore not reachable here by either
+interpreter, and that is nothing RingServ can fix.
+
+---
+
+
 ## THE FINDING: this profile does not run yet, and the reason is RingServ's own loader
 
 Checked directly, not assumed. `stzLib.ring`'s own header explains that
@@ -206,5 +257,6 @@ commands above before assuming a local mistake.
 - **model / LLM access.** This profile wires no model integration —
   that is `stzLLMAgent`'s and the agent author's concern, not the
   host's or this profile's
-- **running today.** See the finding above — this is the honest
-  headline, not a footnote
+- **running today.** See the UPDATE and the finding above — this is the
+  honest headline, not a footnote. The loader half is fixed; a library
+  search root and one colliding name are not

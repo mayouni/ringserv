@@ -26,6 +26,16 @@
 extern const unsigned char *rs_find_embedded(const char *cPath, size_t *pLen);
 
 /*
+** The load anchor (src/rs_path.c): a relative path the VM hands us is
+** relative to the file that named it, not to the process. The embedded map is
+** still probed with the path AS WRITTEN — `load "ringlib/json.ring"` names a
+** baked-in file, not one on disk — and only the fall-through to the real
+** filesystem is resolved.
+*/
+extern const char *rs_path_resolve(const char *cPath, char *cOut, int nOut);
+#define RS_STUB_PATHSIZE 8192
+
+/*
 ** tmpfile() is unusable on Windows: it creates in the drive root, which is
 ** access-denied for ordinary users. UCRT's fopen accepts the "D" mode flag
 ** (delete on last close), which with _tempnam gives the same
@@ -53,6 +63,7 @@ FILE *rs_fopen(const char *cPath, const char *cMode) {
 	size_t nLen;
 	const unsigned char *pData;
 	FILE *pFile;
+	char cResolved[RS_STUB_PATHSIZE];
 	if (cMode != NULL && cMode[0] == 'r') {
 		pData = rs_find_embedded(cPath, &nLen);
 		if (pData != NULL) {
@@ -68,12 +79,13 @@ FILE *rs_fopen(const char *cPath, const char *cMode) {
 			return pFile;
 		}
 	}
-	return fopen(cPath, cMode);
+	return fopen(rs_path_resolve(cPath, cResolved, RS_STUB_PATHSIZE), cMode);
 }
 
 int rs_stat(const char *cPath, struct stat *pBuf) {
 	size_t nLen;
 	const unsigned char *pData;
+	char cResolved[RS_STUB_PATHSIZE];
 	if (pBuf == NULL) {
 		errno = EFAULT;
 		return -1;
@@ -86,7 +98,7 @@ int rs_stat(const char *cPath, struct stat *pBuf) {
 		pBuf->st_nlink = 1;
 		return 0;
 	}
-	return stat(cPath, pBuf);
+	return stat(rs_path_resolve(cPath, cResolved, RS_STUB_PATHSIZE), pBuf);
 }
 
 /*

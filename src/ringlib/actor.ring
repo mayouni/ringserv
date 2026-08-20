@@ -142,7 +142,7 @@ func RsActorCheck cService, cAction, pActor
 func RsActorHas pActor, cNeed
 	pScope = RsDeclGet(pActor, "scope", "")
 	if isstring(pScope) and pScope != ""
-		for cPart in split(pScope, " ")
+		for cPart in RsSplitOn(pScope, " ")
 			if lower(cPart) = cNeed
 				return 1
 			ok
@@ -163,7 +163,15 @@ func RsActorHas pActor, cNeed
 # Split on a single-character separator. Ring's own split takes a string
 # separator in some builds and a character in others; doing it here keeps
 # this file working whichever way the vendored VM leans.
-func split cText, cSep
+#
+# NAMED RsSplitOn, not `split`, and that matters: every file in this folder
+# is loaded into EVERY application's VM, so a bare name here occupies the
+# application's own global namespace. `split` collided with Ring's OWN
+# stdlib (libraries/stdlib/stdlibcore.ring defines Func Split), so an app
+# that did `load "stdlib.ring"` -- the most ordinary line in Ring -- died
+# with C22 function redefinition and nothing said why. Keep new names in
+# this folder prefixed.
+func RsSplitOn cText, cSep
 	aOut = []
 	cCur = ""
 	for i = 1 to len(cText)
