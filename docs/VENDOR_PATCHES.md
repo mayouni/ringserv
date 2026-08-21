@@ -1,11 +1,61 @@
 # Vendor patches to ringvm/
 
-`ringvm/` is the vendored Ring VM source (currently **1.27**, from
-the official 1.27 distribution). It carries two deliberate RingScript patches, both marked
-with `RINGSCRIPT PATCH` comments at the site. **Any future vendor swap
-must re-apply them** — then run `zig build -Drelease=true` and
-`node tests/gates.js` (the P2 line-number gates fail if either patch is
-missing).
+`ringvm/` is the vendored Ring VM source, **Ring master at
+[`8a89cc00c2`](https://github.com/ring-lang/ring/commit/8a89cc00c2)** —
+the same base RingScript took on 2026-08-16. Patches are marked with
+`RINGSERV` or `RINGSCRIPT PATCH` comments at the site. **Any future vendor
+swap must re-apply the live ones** — then run `zig build` and
+`node tests/all.js`.
+
+## The base, measured — and a correction this file owes
+
+**The line above used to say "currently 1.27, from the official 1.27
+distribution", and that was wrong.** It stayed wrong long enough to
+generate a board row asking this repository to perform a swap it had
+already performed on 2026-08-17, and Central carried that row for days on
+the strength of this sentence. A vendored-source file whose first
+paragraph names the wrong base is worse than one that names none: it is
+believed.
+
+`RING_VERSION_MINOR` says **27**, and that is not evidence of anything —
+it says 27 *because a patch makes it say 27* (RingScript's state.h patch,
+carried here). Reading the macro is how the wrong claim survived.
+
+Measured 2026-08-21, ignoring line endings, over the files `build.zig`
+actually compiles:
+
+| against | files differing | lines |
+|---|---:|---:|
+| the official **1.27** distribution (`D:\Ring127/language/src`) | 16 | 631 |
+| **master**, as vendored by RingScript | 3 | 91 |
+
+And all three of those files are **this repository's own work** —
+`ring.h` (4 lines of declarations), `general.c` (78, patches 9 and 10) and
+`vmerror.c` (9, the thread-local variant of patch 2). There is no upstream
+delta left to take.
+
+## Which of the patches below are still ours
+
+The audit the swap makes possible, and the one RingScript ran on itself
+(three of its seven became upstream code and were deleted rather than
+re-applied). Ours:
+
+| # | file | status |
+|---|---|---|
+| 1 | `vmeval.c` | **live**, and shared — RingScript carries the same one |
+| 2 | `vmerror.c` | **live**, and RingServ-only in its thread-local form |
+| 3 | `stmt.c` | **UPSTREAM NOW** — the file is master's; nothing to re-apply |
+| 4 | `vmexpr.c` | **UPSTREAM NOW** — the strtod guard is in master |
+| 5 | `vm.c` | **live**, and shared (the computed-goto loop) |
+| 6 | `vmoop.c` | **live**, and shared (the object template cache) |
+| 7 | `rlist.c` sort | **UPSTREAM NOW** |
+| 8 | `rlist.c` accessor | **gone** — withdrawn on evidence, and master does not carry it |
+| 9 | `general.c` | **live**, RingServ-only (the load anchor) |
+| 10 | `general.c` | **live**, RingServ-only (the library search root) |
+
+Sections 3, 4, 7 and 8 below are kept as **history, not as instructions**:
+they record why a change was made and how it was measured, and a future
+swap must not try to re-apply them.
 
 ## 1. `ringvm/src/vmeval.c` — keep line numbers in eval'd bytecode
 
