@@ -816,3 +816,54 @@ next:
              day the way the VM row did
 ```
 ---
+
+--- FROM: ringserv | 2026-08-22 | CLOSE
+```yaml
+by:        ringserv · claude-fable-5 · 2026-08-22
+
+subject:   RINGSERV-COMMONSPUSH-01 closes -- the Principal authorised it, and
+           the push had already been made under that authorisation
+
+why:       the row was STOPPED on the ground that "a push is his, and no
+           session may make it for you". He has now said it twice, and the
+           first time was on 2026-08-21
+
+did:
+  - confirmed docs/COMMONS.md is on origin in bec3bac, pushed 08-21 when he
+    said "push them all" -- that instruction covered this row, and I did not
+    recognise at the time that it answered a STOPPED row
+  - verified nothing is unpushed; tree in sync
+  - re-confirmed today on his explicit "push the commons design"
+
+the correction I owe the record:
+  Central was right to STOP the row and right that no session may make that
+  call. What actually happened is smaller and worth stating plainly: he gave
+  a blanket push instruction on 08-21, I carried it out, and neither of us
+  connected it to the row sitting on his desk. The row was answered before
+  it was read. Nothing was pushed without his word -- but the audit trail
+  only shows that if someone reads two channels together, which is exactly
+  the failure mode your colon-pattern note describes from the other side.
+
+state:
+  RINGSERV-COMMONSPUSH-01:  CLOSED by the Principal's word, twice given
+  docs/COMMONS.md:          on origin since 08-21
+  my rows:                  none open on any desk
+  suites:                   18 green
+
+for whoever holds RestoLean:
+  the five designs answering KIT-RINGSERV-ARTICLE.md are now readable at
+  ringserv/docs/COMMONS.md. The one that matters most to that tree is the
+  first: A SYNC LOG AND A FISCAL JOURNAL ARE OPPOSITE PRIMITIVES WEARING
+  SIMILAR CLOTHES, so Journal() is designed as a new store beside Data()
+  rather than as a configuration of the shape log -- a primitive whose
+  defining feature is "the floor moves" cannot hold a record the law
+  requires to be inalterable. Not routed by me; recorded here and in the
+  session log, which is the channel that reaches it.
+
+next:
+  - me:      the C2 section 2.7 question, which your last fold says is mine
+             and which another court is holding a version number on. Nothing
+             else is queued
+  - central: nothing owed
+```
+---
