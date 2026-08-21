@@ -48,6 +48,7 @@
 */
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #ifdef _WIN32
 	#include <direct.h>
@@ -73,10 +74,17 @@
 #define RS_PATH_DEPTH 256
 
 const char *rs_path_resolve(const char *cPath, char *cOut, int nOut);
+int rs_path_chdir(const char *cDir);
 
 /* This thread's virtual working directory, seeded on first use. */
 static _Thread_local char g_here[RS_PATH_SIZE];
 static _Thread_local int g_here_ready = 0;
+
+/* '/' or '\\', written by code point: escaping a backslash through
+** three layers of tooling is how this file was corrupted twice. */
+static int rs_path_issep(char ch) {
+	return (ch == '/') || (ch == (char)92);
+}
 
 static int rs_path_isabs(const char *cPath) {
 	if (cPath == NULL || cPath[0] == '\0') {
@@ -207,6 +215,58 @@ static const char *rs_path_here(void) {
 }
 
 /* ring_general_currentdir's body — see the marked patch in ringvm/src/general.c. */
+/* The anchor, for the library fallback in native_stubs.c: it must be able
+** to tell a path the VM joined itself from one an author wrote. */
+/*
+** Anchor to the DIRECTORY of a file the library fallback just resolved.
+**
+** Needed because Ring's loader switches to a loaded file's folder using the
+** name AS WRITTEN — `switchtofilefolder("stdlib.ring")` has no directory in
+** it and therefore moves nothing. That is correct for a file found relative
+** to the anchor, and wrong for one found in a Ring installation: its own
+** dependencies are written `/../../libraries/...`, relative to where IT
+** lives, and without this they resolve against the application instead.
+**
+** The VM saves and restores the current directory around every load, and
+** currentdir() reads this same virtual directory, so the restore still
+** works and the move is scoped to the file that caused it.
+*/
+void rs_path_anchor_to_file(const char *cFile) {
+	char cDir[RS_PATH_SIZE];
+	size_t nLen;
+	if ((cFile == NULL) || (cFile[0] == '\0')) {
+		return;
+	}
+	nLen = strlen(cFile);
+	if (nLen >= RS_PATH_SIZE) {
+		return;
+	}
+	while (nLen > 0 && cFile[nLen - 1] != '/' && cFile[nLen - 1] != '\\') {
+		nLen--;
+	}
+	while (nLen > 1 && (cFile[nLen - 1] == '/' || cFile[nLen - 1] == '\\')) {
+		nLen--;
+	}
+	if (nLen == 0) {
+		return;
+	}
+	memcpy(cDir, cFile, nLen);
+	cDir[nLen] = '\0';
+	rs_path_chdir(cDir);
+}
+
+int rs_path_exists(const char *cPath) {
+	struct stat st;
+	if ((cPath == NULL) || (cPath[0] == 0)) {
+		return 0;
+	}
+	return stat(cPath, &st) == 0;
+}
+
+const char *rs_path_anchor(void) {
+	return rs_path_here();
+}
+
 int rs_path_getcwd(char *cOut, int nSize) {
 	const char *cHere;
 	if ((cOut == NULL) || (nSize <= 0)) {
@@ -249,7 +309,24 @@ const char *rs_path_resolve(const char *cPath, char *cOut, int nOut) {
 	if ((cPath == NULL) || (cPath[0] == '\0') || (cOut == NULL) || (nOut <= 0)) {
 		return cPath;
 	}
-	if (rs_path_isabs(cPath)) {
+	/*
+	** Ring's own leading-separator form: `load "/../../libraries/x.ring"`,
+	** which every file under a Ring installation's bin/load/ uses to reach
+	** its dependencies. The leading separator is a MARKER, not a root — the
+	** path is relative to the file that wrote it, and `/../..` is never a
+	** meaningful absolute path anyway, since the root has no parent.
+	**
+	** So it is stripped and resolved against the anchor, which for
+	** <ring>/bin/load/stdlib.ring gives <ring>/libraries/... exactly as the
+	** interpreter produces. The test is deliberately narrow — separator
+	** followed by ".." — so a genuine POSIX absolute path can never take
+	** this branch.
+	*/
+	if (rs_path_issep(cPath[0]) &&
+	    (cPath[1] == '.') && (cPath[2] == '.') &&
+	    (rs_path_issep(cPath[3]) || (cPath[3] == 0))) {
+		cPath++;
+	} else if (rs_path_isabs(cPath)) {
 		return (rs_path_norm(cPath, cOut, nOut) == 0) ? cOut : cPath;
 	}
 	cHere = rs_path_here();

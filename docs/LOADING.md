@@ -76,34 +76,61 @@ way no test reproduces twice.
 | Ring's `currentdir()` | the virtual directory (was: uninitialised memory) | fixture |
 | Ring's `chdir()` | moves the virtual directory only, never the process | fixture |
 
-## What still does not resolve, and why
+## What resolves now, and what still does not
 
-**1. Ring's own bundled libraries — `load "stdlib.ring"`, `load
-"jsonlib.ring"`, anything under a Ring installation's `bin/load/`.**
+**1. ~~Ring's own bundled libraries.~~ RESOLVED 2026-08-21 — a found
+search root.**
 
-The VM's fallback for a bare name is `<exe folder>/` and then
-`<exe folder>/load/`, where *exe folder* is the folder of the running
-binary. For native `ring` that is `<ring>/bin/`, which is exactly where
-those files live. For RingServ it is wherever `ringserv` was installed,
-and a RingServ binary ships **no Ring installation beside it** — it is one
-static executable with its own library embedded.
+`RINGSERV-LOADROOT-01` was **ruled DEPEND** on 2026-08-20: *a general Ring
+application server MAY require a Ring installation to be present and NEED
+NOT carry its own search root.* So RingServ does not carry one — it
+**finds** one:
 
-This is a **library search root** question, not an anchoring one, and
-answering it means deciding whether a RingServ binary may depend on an
-installed Ring. That decision has not been made, and this page does not
-make it.
+1. `RINGSERV_RING_HOME`, if set. The explicit answer, taken as given, and
+   the only one an operator can rely on where PATH is minimal.
+2. otherwise `ring` on PATH, whose parent is the home — a Ring
+   installation puts its binary in `<home>/bin/`.
 
-**Measured on 2026-08-20, in a pristine directory**, because the shape of
-the answer matters: copy `ringserv.exe` into `<X>/bin/` and stage a Ring
-installation's `bin/load/`, `libraries/` and `extensions/` around it in
-**Ring's own layout**, and `load "stdlib.ring"` resolves its entire graph
-— not one `Can't open file` remains. The layout is not incidental: Ring's
-bundled files load their dependencies as `load "/../../libraries/..."`, a
-leading-separator form that only lands correctly when the VM concatenates
-it onto the exe folder, so a flat `load/` dropped beside the binary is not
-enough.
+`ringserv where` prints what was found, or says plainly that nothing was.
+A search root nobody can see is a search root nobody can debug.
 
-Note what that measurement does **not** say — see 3 below.
+A bare name that does not resolve against the anchor is then looked for at
+`<home>/bin/` and `<home>/bin/load/` — the same two places, in the same
+order, that native `ring` searches. **Only after the ordinary answer has
+failed**, so an application's own file of the same name always wins, and a
+path the author wrote with a directory in it (`load "mylib/util.ring"`) is
+never satisfied from the installation.
+
+Two things had to be fixed for the graph to follow, and both are worth
+recording because neither was visible from the outside:
+
+- **The leading-separator form.** Ring's bundled files reach their
+  dependencies as `load "/../../libraries/stdlib/stdlib.rh"`. That leading
+  separator is a *marker*, not a root — the path is relative to the file
+  that wrote it, and `/../..` is never a meaningful absolute path since the
+  root has no parent. It is now stripped and anchored. The test is narrow
+  (separator followed by `..`) so a genuine POSIX absolute path cannot take
+  that branch.
+- **The anchor has to follow the file into the installation.** Ring's
+  loader switches to a loaded file's folder using the name *as written*,
+  which for a bare name moves nothing. Correct for a file found next to the
+  anchor; wrong for one found in an installation, whose own dependencies
+  are written relative to where *it* lives. Resolving from the home now
+  anchors there too, and the VM's own save/restore around each load scopes
+  the move to the file that caused it.
+
+**Both halves, stated together, because a routing memo once said this
+"makes every one of them resolve" and that was one half:** every Ring
+LIBRARY now resolves, and Ring's bundled `stdlib.ring` still does not
+**run** — its graph ends at `loadlib`, and `dll_e.c` is deliberately absent
+from `build.zig` (`RING_NODLL`). See item 3, which is unchanged.
+
+Measured 2026-08-21: `load "stdlibcore.ring"` — a real Ring library, by
+bare name — loads and runs; `load "stdlib.ring"` resolves its entire graph
+and stops exactly at `loadlib`. Held by `tests/loadroot-gates.js`, which
+**skips itself entirely when no Ring is installed** — the ruling says MAY,
+and a suite that failed without an installation would have quietly turned
+that into MUST.
 
 **2. A name RingServ's own embedded library already defines.**
 
@@ -119,15 +146,24 @@ library forced it: `actor.ring` defined a bare `split`, and
 `load "stdlib.ring"`, the most ordinary line in Ring, was fatal. It is
 now `RsSplitOn`. **Keep new names in `src/ringlib/` prefixed.**
 
-One collision remains and is *not* fixed here, because it is a decision
-about a documented surface rather than a defect: `testing.ring` defines
-`Ask`, the `ringserv test` vocabulary, and it is loaded into every VM —
-including `run`, `serve` and `check`, which have no use for it. Measured
-on 2026-08-20 against stzlib: with `Ask` renamed in a throwaway build, a
-~dozen-directory third-party library loaded **with no errors at all**, so
-this one name is the only remaining namespace blocker for that library.
-The fix is probably to load `testing.ring` only for `ringserv test`; that
-is its own change, with its own gates.
+That collision is **also closed, on 2026-08-21**, and by the better of the
+two available fixes. `testing.ring` defines `Ask` — an ordinary English
+word — and was loaded into every VM, including `run`, `serve` and `check`,
+which have no use for it.
+
+`RINGSERV-RINGLIBNS-01` was **ruled SCOPED, NOT RENAMED**: the vocabulary
+now loads for `ringserv test` and nothing else, so `Ask` **keeps its name**
+and no RingServ user pays a compatibility cost for a scope defect that was
+never theirs. The collision went away by removing the *exposure* rather
+than the word.
+
+What that leaves, deliberately: an application that defines its own `Ask`
+now **serves perfectly** and collides only under `ringserv test`. Ring
+reports that as a bare `C22 Function redefinition` with no hint where the
+other definition came from, so `test` recognises it and names the whole
+vocabulary — `Ask`, `Expect`, `ExpectOk`, `ExpectCode`, `ExpectStatus`,
+`ExpectTrue` — and says the application itself is fine. A diagnosis rather
+than an afternoon.
 
 **3. `loadlib`, and therefore every Ring extension.**
 
@@ -139,10 +175,12 @@ source list (`RING_NODLL`), so a RingServ binary cannot load a native
 extension at all. That is a considered property of a single static
 executable, not an oversight.
 
-It is recorded here because it bounds the previous item: solving the
-search root would make every Ring **library** resolve, and would still
-not make Ring's bundled `stdlib.ring` run. Anything asking for the
-search root should be told both halves.
+It is recorded here because it **bounds item 1, which is now done**: the
+search root makes every Ring *library* resolve, and still does not make
+Ring's bundled `stdlib.ring` run. That is not a defect to be fixed later —
+a static binary that cannot load a native extension is a considered
+property. Anything reporting the search root must report both halves, and
+`ringserv where` does.
 
 **4. Symbolic links.** `..` is resolved textually, not through the
 filesystem, so a path crossing a symlink normalises to somewhere a real

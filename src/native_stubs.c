@@ -59,6 +59,262 @@ static FILE *rs_tmpfile(void) {
 #endif
 }
 
+
+/*
+** ─────────────────────────────────────────────────────────────────────
+** THE LIBRARY SEARCH ROOT — found, never carried.
+**
+** RINGSERV-LOADROOT-01, ruled DEPEND on 2026-08-20: a general Ring
+** application server MAY require a Ring installation to be present and
+** NEED NOT carry its own search root.
+**
+** So RingServ ships no Ring library and looks for an installed one:
+**
+**   1. RINGSERV_RING_HOME, if set — the explicit answer, and the only one
+**      an operator can rely on in a container where PATH is minimal;
+**   2. otherwise `ring` on PATH, whose parent directory is the home
+**      (a Ring installation puts its binary in <home>/bin/).
+**
+** Found once and cached: this is asked on every failed open of a bare
+** name, and walking PATH each time would put a directory scan on the
+** load path of every library a program touches.
+**
+** WHAT THIS BUYS, AND WHAT IT DOES NOT — both halves, because Central's
+** routing memo once said "makes every one of them resolve" and the desk
+** found that was one half:
+**
+**   it buys   every Ring LIBRARY resolving — stdlib.ring, jsonlib.ring,
+**             and the whole graph each pulls in;
+**   it does   NOT make Ring's bundled stdlib.ring RUN, because that graph
+**             ends at `loadlib`, and dll_e.c is deliberately absent from
+**             build.zig (RING_NODLL). A static binary that cannot load a
+**             native extension is a considered property, not an oversight.
+**
+** Anything that reports this feature must report both. docs/LOADING.md does.
+** ─────────────────────────────────────────────────────────────────────
+*/
+
+#define RS_HOME_UNSET 0
+#define RS_HOME_NONE 1
+#define RS_HOME_FOUND 2
+
+static int g_home_state = RS_HOME_UNSET;
+static char g_home[RS_STUB_PATHSIZE];
+
+/* Does <cDir>/bin/ring(.exe) exist? The check that makes a directory a
+** Ring home rather than merely a directory. */
+static int rs_home_looks_right(const char *cDir) {
+	char cProbe[RS_STUB_PATHSIZE];
+	struct stat st;
+	int n;
+#ifdef _WIN32
+	n = snprintf(cProbe, sizeof(cProbe), "%s/bin/ring.exe", cDir);
+#else
+	n = snprintf(cProbe, sizeof(cProbe), "%s/bin/ring", cDir);
+#endif
+	if (n <= 0 || (size_t)n >= sizeof(cProbe)) {
+		return 0;
+	}
+	return stat(cProbe, &st) == 0;
+}
+
+/* The directory containing `ring` on PATH, minus the trailing /bin. */
+static int rs_home_from_path(char *cOut, size_t nOut) {
+	const char *cPath = getenv("PATH");
+	const char *p, *q;
+	char cDir[RS_STUB_PATHSIZE];
+	char cProbe[RS_STUB_PATHSIZE];
+	struct stat st;
+	size_t nLen;
+	int n;
+#ifdef _WIN32
+	const char cSep = ';';
+	const char *cExe = "ring.exe";
+#else
+	const char cSep = ':';
+	const char *cExe = "ring";
+#endif
+	if (cPath == NULL) {
+		return 0;
+	}
+	for (p = cPath; *p != '\0'; p = (*q == '\0') ? q : q + 1) {
+		for (q = p; (*q != '\0') && (*q != cSep); q++) {
+		}
+		nLen = (size_t)(q - p);
+		if (nLen == 0 || nLen >= sizeof(cDir)) {
+			continue;
+		}
+		memcpy(cDir, p, nLen);
+		cDir[nLen] = '\0';
+		n = snprintf(cProbe, sizeof(cProbe), "%s/%s", cDir, cExe);
+		if (n <= 0 || (size_t)n >= sizeof(cProbe)) {
+			continue;
+		}
+		if (stat(cProbe, &st) != 0) {
+			continue;
+		}
+		/* Found <home>/bin/ring — the home is one level up. Trailing
+		** separators are trimmed first so ".../bin/" answers the same
+		** as ".../bin". */
+		while (nLen > 0 && (cDir[nLen - 1] == '/' || cDir[nLen - 1] == '\\')) {
+			cDir[--nLen] = '\0';
+		}
+		while (nLen > 0 && cDir[nLen - 1] != '/' && cDir[nLen - 1] != '\\') {
+			nLen--;
+		}
+		while (nLen > 0 && (cDir[nLen - 1] == '/' || cDir[nLen - 1] == '\\')) {
+			nLen--;
+		}
+		if (nLen == 0 || nLen >= nOut) {
+			continue;
+		}
+		memcpy(cOut, cDir, nLen);
+		cOut[nLen] = '\0';
+		return 1;
+	}
+	return 0;
+}
+
+static const char *rs_ring_home(void) {
+	const char *cEnv;
+	if (g_home_state != RS_HOME_UNSET) {
+		return (g_home_state == RS_HOME_FOUND) ? g_home : NULL;
+	}
+	g_home_state = RS_HOME_NONE;
+	g_home[0] = '\0';
+
+	cEnv = getenv("RINGSERV_RING_HOME");
+	if ((cEnv != NULL) && (cEnv[0] != '\0') && (strlen(cEnv) < sizeof(g_home))) {
+		/* Taken AS GIVEN, without the bin/ring probe: an operator who
+		** names a home has answered the question, and second-guessing
+		** them turns an explicit setting into a suggestion. */
+		strcpy(g_home, cEnv);
+		g_home_state = RS_HOME_FOUND;
+		return g_home;
+	}
+	if (rs_home_from_path(g_home, sizeof(g_home)) && rs_home_looks_right(g_home)) {
+		g_home_state = RS_HOME_FOUND;
+		return g_home;
+	}
+	g_home[0] = '\0';
+	return NULL;
+}
+
+/* Exposed so `ringserv where` can report what was found — a search root
+** nobody can see is a search root nobody can debug. */
+const char *rs_ring_home_path(void) {
+	const char *cHome = rs_ring_home();
+	return (cHome == NULL) ? "" : cHome;
+}
+
+/* Does this name carry a directory of its own? A bare name is the only
+** form the installation is searched for — a path the author wrote
+** relative to their own file means their file, not Ring's library. */
+extern const char *rs_path_anchor(void);
+
+/*
+** The bare NAME this path is asking for, or NULL if it is not a library
+** request at all.
+**
+** Two forms count, and the second one cost an afternoon to find:
+**
+**   1. a bare name — `load "stdlib.ring"`, exactly as written;
+**   2. a path the VM ITSELF joined to the current anchor. Ring's loader
+**      checks existence with the bare name and then RE-OPENS with its own
+**      anchor-joined path, so a fallback that knew only form 1 answered
+**      the existence check, watched the real open miss, and produced
+**      `Can't open file` for a file it had just found.
+**
+** Anything else — a path the AUTHOR wrote with a directory in it — is
+** refused, because `load "mylib/util.ring"` means THEIR util.ring and must
+** never be satisfied by an installation's file of the same name.
+*/
+static const char *rs_library_name(const char *cPath) {
+	const char *cBase = NULL;
+	const char *p;
+	const char *cAnchor;
+	size_t nAnchor;
+
+	if ((cPath == NULL) || (cPath[0] == '\0')) {
+		return NULL;
+	}
+	for (p = cPath; *p != '\0'; p++) {
+		if ((*p == '/') || (*p == '\\')) {
+			cBase = p + 1;
+		}
+	}
+	if (cBase == NULL) {
+		return cPath;                 /* form 1: bare, as written */
+	}
+	if (cBase[0] == '\0') {
+		return NULL;                  /* a directory, not a file */
+	}
+	cAnchor = rs_path_anchor();
+	if ((cAnchor == NULL) || (cAnchor[0] == '\0')) {
+		return NULL;
+	}
+	nAnchor = strlen(cAnchor);
+	/* form 2: exactly <anchor><sep><name>, and nothing deeper. */
+	if ((size_t)(cBase - cPath) != nAnchor + 1) {
+		return NULL;
+	}
+	if (strncmp(cPath, cAnchor, nAnchor) != 0) {
+		return NULL;
+	}
+	return cBase;
+}
+
+/*
+** The fallback: <home>/bin/<name>, then <home>/bin/load/<name>.
+**
+** The same two places, in the same order, that native Ring searches — its
+** exe folder and that folder's load/. Writes the winner into cOut and
+** returns it, or NULL when there is nothing to try or nothing matched.
+*/
+static const char *rs_home_lookup(const char *cPath, char *cOut, size_t nOut) {
+	const char *cHome;
+	struct stat st;
+	int n;
+	cPath = rs_library_name(cPath);
+	if (cPath == NULL) {
+		return NULL;
+	}
+	cHome = rs_ring_home();
+	if (cHome == NULL) {
+		return NULL;
+	}
+	n = snprintf(cOut, nOut, "%s/bin/%s", cHome, cPath);
+	if (n > 0 && (size_t)n < nOut && stat(cOut, &st) == 0) {
+		return cOut;
+	}
+	n = snprintf(cOut, nOut, "%s/bin/load/%s", cHome, cPath);
+	if (n > 0 && (size_t)n < nOut && stat(cOut, &st) == 0) {
+		return cOut;
+	}
+	return NULL;
+}
+
+/*
+** The library fallback, for callers that CANNOT go through rs_fopen.
+**
+** ring_general_fopen() calls _wfopen directly on Windows — the
+** -Dfopen=rs_fopen redirection never reaches it — which is why the vendor
+** patch for the load anchor already lives inside that function. The same
+** is true here: the existence check reached rs_fopen and found the file,
+** the real open went straight to _wfopen and did not, and the loader
+** reported "Can't open file" for a file it had just located.
+**
+** Returns a home-resolved path in cOut, or cPath unchanged.
+*/
+const char *rs_library_resolve(const char *cPath, char *cOut, int nOut) {
+	const char *cFound;
+	if ((cPath == NULL) || (cOut == NULL) || (nOut <= 0)) {
+		return cPath;
+	}
+	cFound = rs_home_lookup(cPath, cOut, (size_t)nOut);
+	return (cFound == NULL) ? cPath : cFound;
+}
+
 FILE *rs_fopen(const char *cPath, const char *cMode) {
 	size_t nLen;
 	const unsigned char *pData;
@@ -79,7 +335,28 @@ FILE *rs_fopen(const char *cPath, const char *cMode) {
 			return pFile;
 		}
 	}
-	return fopen(rs_path_resolve(cPath, cResolved, RS_STUB_PATHSIZE), cMode);
+	pFile = fopen(rs_path_resolve(cPath, cResolved, RS_STUB_PATHSIZE), cMode);
+	if ((pFile == NULL) && (cMode != NULL) && (cMode[0] == 'r')) {
+		/* Only after the ordinary answer has failed: an application's own
+		** file must always win over an installation's, or a library
+		** upgrade could silently take over a name the author owns. */
+		char cHome[RS_STUB_PATHSIZE];
+		const char *cFound = rs_home_lookup(cPath, cHome, sizeof(cHome));
+		if (cFound != NULL) {
+			pFile = fopen(cFound, cMode);
+			if (pFile != NULL) {
+				/* Anchor to where it actually lives. Ring's loader
+				** switches folders using the name AS WRITTEN, which for a
+				** bare name moves nothing — so a library found in the
+				** installation would have its own `/../../libraries/...`
+				** dependencies resolved against the APPLICATION. The VM
+				** saves and restores the directory around each load, so
+				** this is scoped to the file that caused it. */
+				rs_path_anchor_to_file(cFound);
+			}
+		}
+	}
+	return pFile;
 }
 
 int rs_stat(const char *cPath, struct stat *pBuf) {
@@ -98,7 +375,20 @@ int rs_stat(const char *cPath, struct stat *pBuf) {
 		pBuf->st_nlink = 1;
 		return 0;
 	}
-	return stat(rs_path_resolve(cPath, cResolved, RS_STUB_PATHSIZE), pBuf);
+	if (stat(rs_path_resolve(cPath, cResolved, RS_STUB_PATHSIZE), pBuf) == 0) {
+		return 0;
+	}
+	{
+		/* Same fallback as rs_fopen, and for the same reason it must be
+		** the same: a VM that can stat a file it cannot open, or the
+		** reverse, reports "missing" for something that is there. */
+		char cHome[RS_STUB_PATHSIZE];
+		const char *cFound = rs_home_lookup(cPath, cHome, sizeof(cHome));
+		if (cFound != NULL) {
+			return stat(cFound, pBuf);
+		}
+	}
+	return -1;
 }
 
 /*

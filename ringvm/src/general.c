@@ -26,8 +26,26 @@ RING_API RING_FILE ring_general_fopen(const char *cFileName, const char *cMode) 
 	**  applied here or nested `load` breaks on Windows only.
 	*/
 	char cResolved[RING_RS_PATHSIZE];
+	char cLibrary[RING_RS_PATHSIZE];
 	if (cFileName != NULL) {
+		/*
+		**  RINGSERV PATCH 10: the library search root. If the anchored path
+		**  does not exist, ask whether an installed Ring has this name --
+		**  RINGSERV-LOADROOT-01, ruled DEPEND. Tried only AFTER the ordinary
+		**  answer fails, so an application's own file always wins.
+		*/
+		const char *cOriginal = cFileName;
 		cFileName = rs_path_resolve(cFileName, cResolved, RING_RS_PATHSIZE);
+		if (!rs_path_exists(cFileName)) {
+			const char *cFromHome = rs_library_resolve(cOriginal, cLibrary, RING_RS_PATHSIZE);
+			if (cFromHome != cOriginal) {
+				/*  Anchor to where it actually lives, or its own
+				**  `/../../libraries/...` dependencies resolve against the
+				**  application instead of against the installation. */
+				cFileName = cFromHome;
+				rs_path_anchor_to_file(cFileName);
+			}
+		}
 	}
 #if defined(_WIN32) && !defined(__TINYC__)
 	/* Code For MS-Windows */

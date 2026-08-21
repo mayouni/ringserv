@@ -143,6 +143,11 @@
 #define RING_OBJFILEWRONGVERSION "\nError (E6) : The Ring Object File version is not correct!\n"
 #define RING_SSCANFERROR "\nError (E7) : Internal error in using sscanf() function!\n"
 #define RING_FSCANFERROR "\nError (E8) : Internal error in using fscanf() function!\n"
+/* RINGSERV: the library search root (src/native_stubs.c, src/rs_path.c). */
+RING_API const char *rs_library_resolve(const char *cPath, char *cOut, int nOut);
+RING_API int rs_path_exists(const char *cPath);
+RING_API void rs_path_anchor_to_file(const char *cFile);
+
 #define RING_CANTOPENFILE "\nError (E9) : Can't open file"
 #define RING_STRINGSIZEOVERFLOW "\nError (E10) : String size overflow!\n"
 #define RING_LISTSIZEOVERFLOW "\nError (E11) : List size overflow!\n"

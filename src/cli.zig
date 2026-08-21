@@ -271,7 +271,25 @@ pub fn where(arena: std.mem.Allocator) !u8 {
     try out.print("SQLite    {s} (vendored, compiled in)\n", .{bridge.db.versionString()});
     try out.print("binary    {s}\n", .{exe});
     try out.print("cwd       {s}\n", .{cwd});
-    try out.print("\nNothing else is required: no Ring install, no runtime, no toolchain.\n", .{});
+
+    // The library search root, if one was found. A search root nobody can
+    // see is a search root nobody can debug — and this one is OPTIONAL, so
+    // its absence has to read as a fact rather than as a fault.
+    const home = std.mem.span(bridge.ringHome());
+    if (home.len == 0) {
+        try out.print("Ring home (none — no RINGSERV_RING_HOME, no `ring` on PATH)\n", .{});
+    } else {
+        try out.print("Ring home {s}\n", .{home});
+    }
+
+    try out.print(
+        \\
+        \\Nothing else is required to RUN an application: no Ring install, no
+        \\runtime, no toolchain. A Ring installation is needed only to `load`
+        \\Ring's own bundled libraries — and even then `loadlib` is absent, so
+        \\see docs/LOADING.md for both halves.
+        \\
+    , .{});
     try out.flush();
     return 0;
 }

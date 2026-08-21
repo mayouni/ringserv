@@ -138,6 +138,15 @@ pub export fn rs_set_echo(on: u32) void {
 /// app.ring` must work under `ringserv run /elsewhere/app.ring` too.
 var g_app_dir: []const u8 = "";
 
+extern fn rs_ring_home_path() [*:0]const u8;
+
+/// The Ring installation the loader falls back to, or "". Optional by
+/// ruling (RINGSERV-LOADROOT-01, DEPEND): a general Ring application
+/// server MAY require an installation and need not carry a search root.
+pub fn ringHome() [*:0]const u8 {
+    return rs_ring_home_path();
+}
+
 pub fn setAppDir(dir: []const u8) void {
     g_app_dir = dir;
 }

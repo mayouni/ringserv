@@ -277,6 +277,40 @@ saying so, because this is exactly the edit the next swap will drop.
   That is the swap visibly working, and a live demonstration that the
   differential oracle is now behind the VM it checks.
 
+## 10. `ringvm/src/general.c` — the library search root
+
+One block inside `ring_general_fopen()`, marked `RINGSERV PATCH 10`, and
+it sits immediately after patch 9's anchor resolution: if the anchored
+path does not exist, ask whether an installed Ring has this name, and if
+it does, open THAT and anchor to where it lives.
+
+**Why it is needed.** `RINGSERV-LOADROOT-01` was ruled DEPEND — a general
+Ring application server may require a Ring installation and need not carry
+its own search root. The fallback itself lives in `src/native_stubs.c`
+(`rs_library_resolve`), reached through `rs_fopen` for every ordinary
+open. This function is the exception: **on Windows it calls `_wfopen`
+directly**, which the `-Dfopen=rs_fopen` redirection never reaches. That
+is the same reason patch 9 exists here rather than in the stub layer.
+
+**The symptom it cured, which is worth keeping.** With the fallback in
+`rs_fopen` alone, Ring's loader checked existence through the redirect
+(found the file), then opened through `_wfopen` (did not), and reported
+`Can't open file` **for a file it had just located**. Two different
+answers to the same question, from two paths that must agree.
+
+**And the anchor half.** Ring's loader switches to a loaded file's folder
+using the name *as written*, so a bare name moves nothing. Correct for a
+file beside the anchor, wrong for one found in an installation — its own
+dependencies are written `/../../libraries/...`, relative to where it
+lives, and without the move they resolve against the application. So a
+home-resolved open anchors to that file's directory; the VM's own
+save/restore around each load scopes it.
+
+**Verification**: `node tests/loadroot-gates.js` — nine gates, and they
+**skip themselves entirely when no Ring is installed**, because the ruling
+says MAY and a suite that failed without an installation would have turned
+that into MUST.
+
 ## 9. `ringvm/src/general.c` — the load anchor, given somewhere to point
 
 Three functions, marked `RINGSERV`. `ring_general_chdir()` and

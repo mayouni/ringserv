@@ -29,8 +29,8 @@ Each one answers "how do I", and says what it refuses to do.
 - **[CHECK.md](CHECK.md)** — how `check` and `docs` know things, and what
   the young grammar cannot see.
 - **[LOADING.md](LOADING.md)** — where `load` looks for a file: the
-  per-file anchor, every form it covers, and the two things that still do
-  not resolve.
+  per-file anchor, the found (never carried) search root for Ring's own
+  libraries, and the one boundary that remains — `loadlib`.
 
 ## Running it for real
 

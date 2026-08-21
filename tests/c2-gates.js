@@ -132,9 +132,48 @@ try {
 
     // Drift against the normative home, when the home is on this disk.
     if (fs.existsSync(UPSTREAM)) {
-        check("the vendored copy is byte-identical to stzzui's normative file",
-            fs.readFileSync(SCHEMA_FILE).equals(fs.readFileSync(UPSTREAM)),
-            "vendor/c2 has drifted from stzzui/doc — re-pin deliberately");
+        // Byte-identity was the first version of this gate, and it was too
+        // strict by the contract's OWN governance (§4): MAJOR.MINOR moves
+        // when substance moves, MAJOR.MINOR.PATCH marks a correction that
+        // changes no requirement, and "a court pinned at x.y loses nothing
+        // by staying there when x.y.z appears."
+        //
+        // It fired on 2026-08-21 when upstream published v1.1.1 — a
+        // correction to the JUSTIFICATION of a rule whose requirement did
+        // not move. A gate that cannot tell that from a real change forces
+        // a re-pin for every wording repair, which is the treadmill that
+        // pinning exists to avoid.
+        const up = JSON.parse(fs.readFileSync(UPSTREAM, "utf8"));
+        const mine = JSON.parse(fs.readFileSync(SCHEMA_FILE, "utf8"));
+        const mm = v => String(v).split(".").slice(0, 2).join(".");
+
+        check(`upstream is the same MAJOR.MINOR as the pin (v${PINNED})`,
+            mm(up.version) === mm(PINNED),
+            `pinned v${PINNED}, upstream v${up.version} — a substantive move needs a decision`);
+
+        // Substance is everything except the human prose. `description` is
+        // explicitly non-normative in C2, so comparing it would make this
+        // gate an editor rather than a court.
+        const strip = o => {
+            if (Array.isArray(o)) return o.map(strip);
+            if (o && typeof o === "object") {
+                const out = {};
+                for (const k of Object.keys(o).sort()) {
+                    if (k === "description" || k === "version") continue;
+                    out[k] = strip(o[k]);
+                }
+                return out;
+            }
+            return o;
+        };
+        check("the pinned schema's SUBSTANCE matches upstream",
+            JSON.stringify(strip(mine)) === JSON.stringify(strip(up)),
+            "a requirement moved — re-pin deliberately, do not paper over it");
+
+        if (up.version !== mine.version) {
+            console.log(`NOTE  upstream is v${up.version}, RingServ pins v${mine.version} — ` +
+                "a patch, and §4 says a court loses nothing by staying");
+        }
     } else {
         console.log("SKIP  drift check — no stzzui checkout beside this repository");
     }
