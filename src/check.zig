@@ -211,10 +211,11 @@ fn reportC2(items: []const Finding) u8 {
 
     // C2 v1.1: the diagnostics travel inside a REPORT OBJECT, never as a
     // top-level array. The reason is measured rather than aesthetic —
-    // Ring 1.27's own jsonlib returns a one-element list for a bare JSON
-    // array, so a court emitting an array emits something the family
-    // cannot read, and it fails QUIETLY. `diagnostics` is present even
-    // when empty, so "clean" is distinguishable from "no output".
+    // Ring 1.27's own jsonlib WRAPS a bare top-level array in one extra
+    // level, so a court emitting an array is read one level deeper than
+    // it meant, SILENTLY. Readable and wrong, which is worse than
+    // unreadable. `diagnostics` is present even when empty, so "clean" is
+    // distinguishable from "no output".
     out.print("{{\n  \"diagnostics\": [", .{}) catch {};
     for (items, 0..) |f, i| {
         if (f.hard) hard += 1;

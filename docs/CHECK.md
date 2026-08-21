@@ -77,10 +77,11 @@ decision rather than upstream's — which is why v1.0 held from 08-18 until
 this repository chose to move, and `vendor/VENDOR.md` records why it did.
 
 `--json` emits a **report object** — never a top-level array, which is
-v1.1's whole point and a measured one: Ring 1.27's own jsonlib returns a
-one-element list for a bare JSON array, so a court emitting one emits
-something the family cannot read, and it fails quietly. `diagnostics` is
-present even when empty, so clean is distinguishable from no output:
+v1.1's whole point and a measured one: Ring 1.27's own jsonlib **wraps** a
+bare top-level array in one extra level, so a court emitting an array is
+read one level deeper than it meant — **silently**, which is the part that
+matters. Not "unreadable": readable and wrong. `diagnostics` is present
+even when empty, so clean is distinguishable from no output:
 
 ```json
 { "diagnostics": [
@@ -90,6 +91,22 @@ present even when empty, so clean is distinguishable from no output:
       "cites": [], "language": "ringserv" }
 ] }
 ```
+
+**And the shape above round-trips.** Measured 2026-08-21 by Central on Ring
+1.27: a whole C2 report encoded, decoded and re-encoded through `jsonlib`
+comes back as the same document. That is the claim worth holding — not that
+some other shape is bad, but that **this** one is read by the family exactly
+as this court wrote it.
+
+One trap that does not touch RingServ but is worth knowing when reading
+other courts' output: inside a list, Ring's `List2JSON` renders a member as
+`key: value` whenever that member is a **2-element list whose first element
+is a string** — so `["line", 12]` collapses into an object key, while
+`[12, 4]` does not. Every published statement of that rule said "two-string
+list", and the second element's type is irrelevant. RingServ is unaffected
+because its spans are objects and its `--json` is written as text by
+`check.zig` rather than by `jsonlib`, but a court rendering attributes as
+`[["k","v"], …]` emits the one shape that silently becomes an object.
 
 Seven stable codes — `RS_SYNTAX_ERROR`, `RS_SYNTAX_MISSING`,
 `RS_CONTRACT_UNKNOWN_SERVICE`, `RS_CONTRACT_UNKNOWN_ACTION`,
@@ -112,13 +129,25 @@ Three details the contract decides and this implementation obeys:
   §2.5 forbids citing. Where no law applies, `[]` is the conforming answer,
   and the reader's pointer travels in `message`, where wording is free.
 
-Conformance is executable: `node tests/c2-gates.js` (51 gates) drives all
+Conformance is executable: `node tests/c2-gates.js` (57 gates) drives all
 seven codes and validates every envelope against the vendored schema — the
 validator *reads* the schema rather than restating it, so a version bump is
-felt here instead of being agreed with. It also asserts the vendored copy is
-byte-identical to the normative file when a `stzzui` checkout sits beside
-this repository, and skips that one check when it does not: RingServ's gates
-must never need a sibling repository on disk.
+felt here instead of being agreed with.
+
+When a `stzzui` checkout sits beside this repository it also checks the pin
+against the normative file — by **substance**, not by bytes. Byte-identity
+was the first version of that gate and it was too strict by the contract's
+own §4: a PATCH marks a correction that changes no requirement, and a court
+pinned at `x.y` loses nothing by staying. It fired on v1.1.1, which corrects
+a justification and moves nothing, so the gate now fails on a MAJOR.MINOR
+difference and merely notes a patch. Absent a sibling checkout it skips:
+RingServ's gates must never need another repository on disk.
+
+**And one gate proves the family can read what this court emits** — the
+whole point of an envelope contract, and the only claim here that is not
+about RingServ alone. It runs `ring` against the real `--json` output,
+decoding and re-encoding it with `jsonlib`, and requires the same document
+back. It skips when no Ring is installed.
 
 ## The honest limits
 

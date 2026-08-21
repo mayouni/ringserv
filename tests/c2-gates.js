@@ -119,9 +119,10 @@ try {
         schema.version === PINNED, "vendored says v" + schema.version);
 
     // v1.1's whole point, asserted directly: NEVER a top-level array.
-    // Ring 1.27's jsonlib returns a one-element list for a bare JSON array,
-    // so a court emitting one emits something the family cannot read — and
-    // it fails quietly, which is why this is a gate and not a style note.
+    // Ring 1.27's jsonlib WRAPS a bare top-level array in one extra level,
+    // so a court emitting one is read one level deeper than it meant —
+    // silently. Readable and wrong, which is why this is a gate and not a
+    // style note.
     {
         const r = envelopes("shape", s2 => s2 + "\naX = )\n");
         check("the machine output is a report OBJECT, not a top-level array",
@@ -294,6 +295,64 @@ try {
             parsed && Array.isArray(parsed.diagnostics) && parsed.diagnostics.length === 0,
             r.stdout.slice(0, 200));
         check("...and succeeds", r.status === 0, "exit " + r.status);
+    }
+
+    // ============================ the family can READ what this court emits
+    //
+    // The whole purpose of an envelope contract, and the only claim in this
+    // suite that is not about RingServ alone: a diagnostic is worth nothing
+    // if the family's own reader gets a different document back.
+    //
+    // So this runs RING — the actual interpreter, not a model of it —
+    // against the actual `--json` output, decodes it with `jsonlib` and
+    // re-encodes it, and requires the same document. It is the positive
+    // half of v1.1's rule; every other gate here states what the shape must
+    // NOT be.
+    //
+    // SKIPS when no Ring is installed. RingServ's gates must never need one
+    // (RINGSERV-LOADROOT-01 ruled the dependency optional), and a gate that
+    // failed without an installation would quietly make it mandatory.
+    {
+        const where = spawnSync(RINGSERV, ["where"], { encoding: "utf8" });
+        const m = /Ring home (.+)/.exec(where.stdout || "");
+        const home = m && !/\(none/.test(m[1]) ? m[1].trim() : null;
+        const ringExe = home
+            ? path.join(home, "bin", process.platform === "win32" ? "ring.exe" : "ring")
+            : null;
+
+        if (!ringExe || !fs.existsSync(ringExe)) {
+            console.log("SKIP  the family can read this court's output — no Ring installed");
+        } else {
+            const r = envelopes("readable", s2 => s2 + "\naX = )\n");
+            const jsonPath = path.join(tmp, "report.json").replace(/\\/g, "/");
+            fs.writeFileSync(jsonPath, r.raw);
+
+            // Written to a file and read back rather than embedded, so the
+            // bytes Ring sees are exactly the bytes RingServ wrote.
+            const prog = path.join(tmp, "readback.ring");
+            fs.writeFileSync(prog,
+                'load "jsonlib.ring"\n' +
+                'cRaw = read("' + jsonPath + '")\n' +
+                'aDoc = JSON2List(cRaw)\n' +
+                'see "TOPLEVEL:" + type(aDoc) + nl\n' +
+                'see "KEYS:" + len(aDoc) + nl\n' +
+                'see "FIRST:" + aDoc[1][1] + nl\n' +
+                'see "NDIAG:" + len(aDoc[1][2]) + nl\n' +
+                'see "CODE:" + aDoc[1][2][1][1][2] + nl\n');
+            const rr = spawnSync(ringExe, [prog], { encoding: "utf8" });
+            const out = (rr.stdout || "") + (rr.stderr || "");
+
+            check("Ring's own jsonlib reads this court's report",
+                /TOPLEVEL:LIST/.test(out) && !/Error/.test(out), out.slice(0, 200));
+            check("...as ONE object, not a wrapped array",
+                /KEYS:1/.test(out), out.slice(0, 200));
+            check("...whose single key is `diagnostics`",
+                /FIRST:diagnostics/.test(out), out.slice(0, 200));
+            check("...carrying the diagnostics the court emitted",
+                /NDIAG:[1-9]/.test(out), out.slice(0, 200));
+            check("...with a code that survived the trip",
+                /CODE:RS_/.test(out), out.slice(0, 200));
+        }
     }
 } finally {
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
