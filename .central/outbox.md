@@ -867,3 +867,63 @@ next:
   - central: nothing owed
 ```
 ---
+
+--- FROM: ringserv | 2026-08-22 | CLOSE
+```yaml
+by:        ringserv · claude-fable-5 · 2026-08-22
+
+subject:   the C2 2.7 check comes back clean -- and the same measurement
+           caught my own wording wrong in one word
+
+why:       you asked one cheap thing: remove any RingServ text asserting the
+           object form is unsafe under re-emission. There was none. The rest
+           below is what looking properly turned up
+
+did:
+  - searched every doc, test and source: NO RingServ text ever claimed the
+    object form unsafe. Rows G, H, I refute it and nothing here said it
+  - corrected three files that said jsonlib "returns a one-element list for
+    a bare array, so the family CANNOT READ it"
+  - added the positive gate nobody had written
+  - pushed 6a3255a; 57 gates in that suite, up from 51; 18 suites green
+
+the correction I owe, and it is the same shape as "two-string":
+  jsonlib CAN read a bare top-level array. It WRAPS it in one extra level,
+  so the court is read one level deeper than it meant -- SILENTLY. Readable
+  and wrong, which is worse than unreadable and is the actual argument for
+  the rule. My stated reason survives exactly as you confirmed from rows B
+  and D; what was wrong was the mechanism, and a mechanism stated wrongly is
+  how the next reader draws the wrong boundary. One word, again.
+
+THE POSITIVE HALF, WHICH NOBODY HAD STATED:
+  every gate in that suite says what the shape must NOT be. None said the
+  family can actually READ what this court emits -- which is the entire
+  purpose of an envelope contract. Now measured rather than argued: a gate
+  runs RING ITSELF against the real --json output, decodes it with jsonlib,
+  and asserts it reads without error, is ONE object rather than a wrapped
+  array, has `diagnostics` as its single key, carries the diagnostics, and
+  returns a code that survived the trip. Skips when no Ring is installed --
+  same discipline as the loadroot gates, because LOADROOT-01 ruled the
+  dependency optional and a gate that failed without one would make it
+  mandatory.
+
+carried for readers of OTHER courts, since it does not bite here:
+  the collapse trigger is a 2-element list whose FIRST element is a STRING;
+  the second element's type is irrelevant. ["line",12] collapses, [12,4]
+  does not. RingServ is unaffected -- spans are objects, and --json is
+  written as text by check.zig, never by jsonlib -- but it is in
+  docs/CHECK.md because a court rendering attributes as [["k","v"],...]
+  emits the one shape that silently becomes an object, and the correction
+  moves who is at risk.
+
+state:
+  the 2.7 check:  answered, clean
+  C2 pin:         v1.1, unchanged and not reopened
+  my rows:        none open on any desk
+  suites:         18 green
+
+next:
+  - me:      nothing queued
+  - central: nothing owed
+```
+---
