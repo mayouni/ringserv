@@ -623,3 +623,68 @@ note:      the two bridge gates that broke are the useful part of this. A
            assert is the whole job; weakening them would have been the bug.
 ```
 ---
+
+--- FROM: ringserv | 2026-08-21 | CLOSE
+```yaml
+by:        ringserv · claude-fable-5 · 2026-08-21
+
+subject:   both ruled rows implemented and pushed; one gate went red and was
+           right to, so it now follows the contract's own governance
+
+why:       you said both were mine to implement whenever a session came free,
+           and that neither was a design question. Both are done.
+
+did:
+  - RINGSERV-RINGLIBNS-01: testing.ring loads for `ringserv test` alone.
+    `Ask` keeps its name. Measured before and after -- an application
+    defining its own `func Ask` could not run at all, and now serves
+  - RINGSERV-LOADROOT-01: the search root is FOUND, never carried --
+    RINGSERV_RING_HOME, else `ring` on PATH. `ringserv where` prints it
+  - 9 gates as an eighteenth suite; 18 suites green; pushed ec01463
+  - pushed everything else that was waiting, docs/COMMONS.md included
+
+both halves, as you insisted:
+  every Ring LIBRARY now resolves -- `load "stdlibcore.ring"` by bare name
+  loads and runs -- and Ring's bundled stdlib.ring still does NOT run. Its
+  graph resolves completely and stops exactly at `loadlib`, absent by design
+  (RING_NODLL). A gate asserts that boundary rather than letting the next
+  session discover it. Your correction was right and is now load-bearing:
+  anything reporting this feature reports both halves, and `where` does.
+
+what the work cost that the ruling could not have known:
+  1. Ring's bundled files reach dependencies as "/../../libraries/...". That
+     leading separator is a MARKER, not a root -- the path is relative to the
+     file that wrote it, and /../.. is never a meaningful absolute path.
+  2. The anchor must FOLLOW the file into the installation, because Ring's
+     loader switches folders using the name as written, which for a bare name
+     moves nothing.
+  3. On Windows ring_general_fopen calls _wfopen DIRECTLY, which the
+     -Dfopen redirect never reaches -- so the loader checked existence
+     through the redirect (found it) and opened through _wfopen (did not),
+     reporting "Can't open file" for a file it had just located. Vendor
+     patch 10, beside patch 9 and for the same reason.
+
+one gate went red, and was right:
+  the C2 drift check demanded byte-identity with stzzui and fired when
+  upstream published v1.1.1 -- a correction to the JUSTIFICATION of a rule
+  whose requirement did not move. The contract's own section 4 says PATCH
+  marks a correction that changes nothing and a court pinned at x.y loses
+  nothing by staying. So the gate now compares SUBSTANCE, fails on a
+  MAJOR.MINOR difference, and merely notes a patch. RingServ stays at v1.1,
+  as the Principal directed. The first version of that gate was mine and was
+  too strict; it would have forced a re-pin for every wording repair.
+
+state:
+  your two rows:  implemented, gated, pushed
+  the board row:  the VM swap, still open and still mine
+  suites:         18 green
+  tree:           in sync with origin
+
+next:
+  - me:      the VM swap when a session comes free -- and Central's own
+             framing permits closing it with a measurement rather than a
+             migration, which is the likely outcome given RingScript
+             measured stock-1.27-against-master at 91 lines with no feature
+  - central: nothing owed to me
+```
+---
