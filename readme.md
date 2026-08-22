@@ -1,6 +1,9 @@
-<h1 align="center">RingServ</h1>
+<p align="center">
+  <a href="https://mayouni.github.io/ringserv/"><img
+    src="site/ringserv-logo.png" alt="RingServ" width="220"></a>
+</p>
 
-<h2 align="center">The Ring language, resident on your server</h2>
+<h2 align="center">A modern server for Ring apps and web services</h2>
 
 <p align="center">
   <strong>0.9</strong> · Ring 1.27 · MIT · a Softanza Project ·

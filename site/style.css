@@ -595,3 +595,9 @@ footer .sp { margin-left: auto; }
         color: transparent;
     }
 }
+
+/* The GitHub mark in the nav: an icon, aligned with the text links,
+   quiet until hovered -- it is a doorway, not a call to action. */
+nav a.gh { display: inline-flex; align-items: center; color: var(--ink-soft); }
+nav a.gh:hover { color: var(--accent); }
+nav a.gh svg { display: block; }
