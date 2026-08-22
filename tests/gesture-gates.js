@@ -248,7 +248,7 @@ function evalRing(code) {
     // The ninety-seconds example is EXTRACTED from docs/gesture.md and
     // driven — the page's own fence, not a copy that can drift.
     const doc = fs.readFileSync(path.join(ROOT, "docs", "gesture.md"), "utf8");
-    const fence = /```ring\n([\s\S]*?)```/.exec(doc);
+    const fence = /```ring\r?\n([\s\S]*?)```/.exec(doc);
     check("gesture.md carries its ring example", !!fence);
     if (fence) {
         const docDir = path.join(tmp, "doc"); fs.mkdirSync(docDir);

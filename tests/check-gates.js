@@ -115,7 +115,10 @@ try {
         const dir = scaffold("nocontract");
         const file = path.join(dir, "app.ring");
         fs.writeFileSync(file, fs.readFileSync(file, "utf8")
-            .replace(/Contract\(:hello[\s\S]*?\n\]\)\n/, ""));
+            // \r?\n throughout: .gitattributes keeps the REPOSITORY on LF,
+            // but a scaffold this gate just generated is whatever the
+            // binary wrote, and a user's tree is whatever they checked out.
+            .replace(/Contract\(:hello[\s\S]*?\r?\n\]\)\r?\n/, ""));
         const rr = run(dir, ["check"]);
         check("a missing contract is a note, not a failure",
             rr.status === 0 && /no Contract/.test(rr.out), rr.out);
