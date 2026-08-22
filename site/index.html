@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <title>RingServ — the Ring language, resident on your server</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="One static binary. Zero dependencies. Ring services, embedded SQLite, a JavaScript guest, a journaled store and local-first sync — with nothing to install.">
+<meta name="description" content="Write your services in Ring and run them from one file you download. A database, a JavaScript engine and a web server are already inside it — nothing to install, nothing to configure.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='11' fill='none' stroke='%238a5a2b' stroke-width='4'/></svg>">
 <style>
   :root {
@@ -92,7 +92,7 @@
       <a class="brand" href="./">Ring<span>Serv</span></a>
       <a href="#start">Start</a>
       <a href="#what">What it does</a>
-      <a href="#proof">Proof</a>
+      <a href="#proof">How we test it</a>
       <a href="https://github.com/mayouni/ringserv/tree/main/docs">Docs</a>
       <span class="grow"></span>
       <a href="https://github.com/mayouni/ringserv">GitHub&nbsp;↗</a>
@@ -104,17 +104,17 @@
 
   <div class="hero">
     <h1>The Ring language,<br>resident on your server.</h1>
-    <p class="tag">One static binary. <b>Zero dependencies.</b> Declarative Ring
-      services, embedded SQLite, a JavaScript guest, an append-only journal and
-      local-first sync — with no Apache, no Node, no runtime to install and
+    <p class="tag">Write your services in Ring. Run them with
+      <b>one file you download</b> — a database, a JavaScript engine and a web
+      server are already inside it. No Apache, no Node, nothing to install and
       nothing to configure.</p>
     <div class="cta">
       <a class="btn p" href="https://github.com/mayouni/ringserv/releases">Download 0.9</a>
       <a class="btn" href="#start">Ninety-second start</a>
       <a class="btn" href="https://github.com/mayouni/ringserv">Source</a>
     </div>
-    <p class="badges">MIT · Ring 1.27 · Linux, macOS, Windows ·
-      <code>625 gates, 22 suites, three platforms, every push</code></p>
+    <p class="badges">Free and open source (MIT) · built on Ring 1.27 ·
+      <code>625 tests, run on Linux, macOS and Windows, on every change</code></p>
   </div>
 
   <section id="start">
@@ -122,16 +122,18 @@
     <div class="cols">
       <div>
         <ol class="steps">
-          <li><b>Write functions.</b><span>No framework, no declarations,
-            no ceremony. A file is enough.</span></li>
-          <li><b>Serve them.</b><span><code>ringserv serve calc.ring</code> —
-            every top-level function becomes an action.</span></li>
-          <li><b>Call them.</b><span>Payload keys map to parameters by name;
-            the return value comes back enveloped.</span></li>
+          <li><b>Write functions.</b><span>Ordinary ones. Nothing to import,
+            nothing to register, nothing to configure first.</span></li>
+          <li><b>Serve them.</b><span>Run <code>ringserv serve calc.ring</code>.
+            Every function in the file is now callable over the web.</span></li>
+          <li><b>Call them.</b><span>The values you send are matched to the
+            function's parameters <i>by their names</i>, and whatever the
+            function returns comes back as the answer.</span></li>
         </ol>
-        <p class="note">Not sure what got exposed? <code>ringserv serve
-          --explain calc.ring</code> prints the exact mapping and exits. The
-          tool states it, so you never have to trust it.</p>
+        <p class="note">Worried about what you just published? Run
+          <code>ringserv serve --explain calc.ring</code> and it prints
+          exactly which functions became callable, and how — then exits
+          without starting anything. You never have to guess.</p>
       </div>
       <div>
 <pre><code><span class="c"># calc.ring — the whole file</span>
@@ -152,7 +154,7 @@ $ curl -X POST localhost:8080/api/v1 \
   </section>
 
   <section id="what">
-    <h2>When you need more than a function</h2>
+    <h2>When you need more than a few functions</h2>
     <div class="overflow">
 <pre><code><span class="k">RingServ</span>([
     :port     = 8110,
@@ -161,90 +163,130 @@ $ curl -X POST localhost:8080/api/v1 \
     :data = [ :menu = [ :name = :text, :price = :number ] ],
 
     :services = [
-        :menu    = [ :table = <span class="s">"menu"</span> ],        <span class="c"># five actions from one line</span>
-        :orders  = <span class="k">new</span> OrdersService,        <span class="c"># a class; Action methods are public</span>
-        :receipt = [ :js = <span class="s">"services/receipt.js"</span> ],  <span class="c"># JavaScript, same envelope</span>
-        :journal = RsJournalService(<span class="s">"ventes"</span>)  <span class="c"># read-only by construction</span>
+        :menu    = [ :table = <span class="s">"menu"</span> ],        <span class="c"># list/add/edit/delete, from one line</span>
+        :orders  = <span class="k">new</span> OrdersService,        <span class="c"># or write it as a class, if you prefer</span>
+        :receipt = [ :js = <span class="s">"services/receipt.js"</span> ],  <span class="c"># this one is written in JavaScript</span>
+        :journal = RsJournalService(<span class="s">"ventes"</span>)  <span class="c"># the sales record: readable, never editable</span>
     ],
 
     :routes = [ [ :static, <span class="s">"/"</span>, <span class="s">"public/"</span> ] ]
 ])
 
-<span class="k">Contract</span>(:orders, [                         <span class="c"># validated at the door, not inside</span>
+<span class="k">Contract</span>(:orders, [                         <span class="c"># checked before your code runs</span>
     :place = [ :in = [ :client = [ :type = :string, :required = <span class="k">true</span> ] ] ]
 ])
 
-<span class="k">Topology</span>([                                 <span class="c"># where each service runs</span>
+<span class="k">Topology</span>([                                 <span class="c"># which machine runs what</span>
     :services = [ :menu = [ :site = :local, :authority = :server ] ]
 ])
 </code></pre>
     </div>
-    <p class="note">Move a service between the page and the server by editing
-      one word in <code>Topology()</code> — not the application.</p>
+    <p class="note">Want a service to run in the browser instead of on the
+      server, or both? Change one word in <code>Topology()</code>. Your
+      application code does not change at all.</p>
   </section>
 
   <section>
-    <h2>What is in the binary</h2>
+    <h2>What is inside the file you download</h2>
     <table>
       <tr><th>Area</th><th>What you get</th></tr>
-      <tr><td>services</td><td>Declarative, class, generic-table, JavaScript —
-        and none at all: <code>ringserv serve</code> hosts a file of plain functions.</td></tr>
-      <tr><td>data</td><td>Embedded SQLite with WAL, one connection per worker,
-        plain SQL, and typed contracts enforced before an action ever runs.</td></tr>
-      <tr><td>history</td><td><code>Journal()</code> — append-only, SHA-256
-        hash-chained, replayed to state, and <b>never compacted</b>. For records
-        that must stay whole.</td></tr>
-      <tr><td>local-first</td><td>A trigger-maintained shape log, an exactly-once
-        mutation queue, and compaction that tells a stale client to refetch.</td></tr>
-      <tr><td>javascript</td><td>A vendored QuickJS-ng with a WinterTC-shaped
-        surface. A <code>.js</code> service gets the same envelope, contracts and
-        placement as a Ring one, and can call Ring services by name.</td></tr>
-      <tr><td>governance</td><td><code>check</code> finds contract and placement
-        defects before you run; <code>docs</code> generates the API catalog;
-        diagnostics follow a shared contract.</td></tr>
-      <tr><td>operations</td><td>A browser admin panel that starts, stops and
-        watches your apps; <code>journal verify</code> exits non-zero for cron;
-        static files; a small <code>ringserv.yaml</code>.</td></tr>
+      <tr><td>your code</td><td>Write a service as a simple list, as a class, or
+        in JavaScript — or write no service at all and let
+        <code>ringserv serve</code> publish a file of ordinary functions.</td></tr>
+      <tr><td>your data</td><td>A real SQL database (SQLite) is built in — no
+        server to set up, no driver to install. You describe your tables, write
+        ordinary SQL, and say what each request must contain; bad requests are
+        turned away before your code sees them.</td></tr>
+      <tr><td>history</td><td>A record you can only add to, never change.
+        Each entry is sealed with a fingerprint of the one before it, so if
+        anyone edits the past, the server points at exactly where. For
+        accounts, audits, and anything the law says you must keep intact.</td></tr>
+      <tr><td>works offline</td><td>Your page can keep working without a
+        network and catch up when it returns. Changes are sent once and only
+        once, even if the connection drops mid-send.</td></tr>
+      <tr><td>javascript</td><td>A JavaScript engine is inside the binary, so a
+        service can be a <code>.js</code> file. It follows the same rules as a
+        Ring one and can call your Ring services by name — two languages, one
+        application.</td></tr>
+      <tr><td>before you run</td><td><code>ringserv check</code> catches
+        mistakes without starting anything, and <code>ringserv docs</code>
+        writes your API reference from the code you already wrote.</td></tr>
+      <tr><td>running it</td><td>A small admin page in your browser to start,
+        stop and watch your applications. Settings live in a plain
+        <code>ringserv.yaml</code>. And <code>journal verify</code> reports a
+        tampered record with a failure code, so you can run it nightly and be
+        told rather than having to look.</td></tr>
     </table>
   </section>
 
   <section id="proof">
-    <h2>How it is kept honest</h2>
+    <h2>How we know it works</h2>
     <div class="cols">
       <div class="card">
-        <h3>625 gates, 22 suites</h3>
-        <p>About seventy seconds for the whole thing. <code>--full</code> adds
-          soak, benchmarks and a wide sweep over Ring's own ~470 samples.</p>
+        <h3>625 tests, about a minute</h3>
+        <p>The whole suite runs in roughly seventy seconds, so it runs often.
+          A longer version adds stress tests and performance measurements.</p>
       </div>
       <div class="card">
-        <h3>A differential oracle</h3>
-        <p>Programs are run against native <code>ring.exe</code> and compared
-          byte for byte, so a compatibility regression cannot pass quietly.</p>
+        <h3>Compared against real Ring</h3>
+        <p>Around a thousand Ring programs are run twice — once by RingServ,
+          once by the official <code>ring</code> — and the output is compared
+          character by character. If RingServ ever disagreed with Ring, we
+          would know that day.</p>
       </div>
       <div class="card">
-        <h3>Three platforms, every push</h3>
-        <p>Linux, macOS and Windows build and run every gate in CI. Running them
-          for the first time found five defects that one machine could not see.</p>
+        <h3>Tested on all three systems</h3>
+        <p>Every change is built and tested on Linux, macOS and Windows.
+          The first time we did this it uncovered five bugs that a single
+          computer simply could not reveal.</p>
       </div>
       <div class="card">
-        <h3>Documentation that fails the build</h3>
-        <p>The guides' own examples are extracted from the pages and executed.
-          Prose that stops being true stops the build.</p>
+        <h3>The documentation is tested too</h3>
+        <p>The examples on our pages are pulled out of the pages themselves
+          and actually run. If a guide stops being true, the build fails —
+          so the instructions you read are the instructions that work.</p>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>Honest limits</h2>
-    <p class="tag" style="font-size:15.5px">
-      RingServ <b>terminates no TLS</b> — a TLS stack is the one dependency that
-      cannot be vendored honestly, so put a proxy in front and say so.
-      <b>Intl and the YAML config are named subsets</b>: they serve the common
-      cases and refuse everything else <i>by name</i>, because a formatter that
-      quietly gets your separators wrong is worse than one that admits it cannot.
-      At <b>0.9 the API is stabilising, not frozen.</b> What is still thin is
-      listed in the repository, not hidden.
-    </p>
+    <h2>Three things to know before you build on it</h2>
+    <div class="cols">
+      <div class="card">
+        <h3>For HTTPS, put a proxy in front</h3>
+        <p>RingServ speaks plain HTTP. It does not do HTTPS itself, on
+          purpose: encryption libraries are large and change often, and
+          copying one into this project would break the promise that the
+          binary has no dependencies.</p>
+        <p style="margin-top:10px"><b>What to do:</b> run Caddy, nginx or
+          Traefik in front — a few lines of config, and they handle
+          certificates for you. RingServ will refuse to start on a public
+          address until you confirm you have done this, so you cannot
+          publish traffic in the clear by accident.</p>
+      </div>
+      <div class="card">
+        <h3>Number formatting and config files cover the common cases</h3>
+        <p>Two features are deliberately partial. <code>Intl</code>
+          (formatting prices and numbers in JavaScript) supports eight
+          languages and nine currencies. <code>ringserv.yaml</code> reads
+          ordinary settings, not the whole YAML standard.</p>
+        <p style="margin-top:10px"><b>Why:</b> full support would add more
+          to the download than everything else combined. <b>What to do:</b>
+          nothing, usually — and if you do step outside, you get a clear
+          error telling you exactly what is missing. It never guesses and
+          gets it silently wrong.</p>
+      </div>
+      <div class="card">
+        <h3>0.9 means "ready to use, not finished"</h3>
+        <p>Everything described here works and is tested. But this is not
+          1.0 yet, so a command or a declaration may still change before
+          then.</p>
+        <p style="margin-top:10px"><b>What to do:</b> build with it, and
+          expect to read the release notes when you upgrade. Anything the
+          tests do not yet cover well is written down openly in the
+          repository — we would rather tell you than have you find out.</p>
+      </div>
+    </div>
   </section>
 
   <footer>

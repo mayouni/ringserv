@@ -190,12 +190,27 @@ Two example applications, both real and both gated:
 [comptoir](examples/comptoir) — a café counter — wires every hostable
 form together the way an application actually does.
 
-**What 0.9 is not.** The API may still move before 1.0. RingServ
-terminates no TLS by design ([docs/TLS.md](docs/TLS.md)) — put a proxy
-in front. `Intl` and the yaml config are deliberate **named subsets**
-that refuse the rest by name rather than guessing. And what is still
-thin is listed honestly in [docs/GATES.md](docs/GATES.md); the road
-ahead is [docs/PLAN.md](docs/PLAN.md).
+**Three things to know before you build on it.**
+
+- **For HTTPS, put a proxy in front.** RingServ speaks plain HTTP and does
+  not do HTTPS itself — encryption libraries are large and change often,
+  and copying one in would break the promise that the binary has no
+  dependencies. Run Caddy, nginx or Traefik in front; they handle
+  certificates for you. RingServ *refuses to start* on a public address
+  until you confirm you have done this, so traffic cannot go out in the
+  clear by accident ([docs/TLS.md](docs/TLS.md)).
+- **Two features cover the common cases, not everything.** `Intl` (number
+  and price formatting in JavaScript) supports eight languages and nine
+  currencies; `ringserv.yaml` reads ordinary settings rather than the
+  whole YAML standard. Full support would add more to the download than
+  everything else combined. Step outside either one and you get a clear
+  error saying exactly what is missing — it never guesses and gets it
+  quietly wrong.
+- **0.9 means ready to use, not finished.** Everything here works and is
+  tested, but a command or a declaration may still change before 1.0.
+  Whatever the tests do not yet cover well is written down openly in
+  [docs/GATES.md](docs/GATES.md) — we would rather tell you than have you
+  find out. What comes next is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Documentation
 
