@@ -199,10 +199,8 @@ ahead is [docs/PLAN.md](docs/PLAN.md).
 
 ## Documentation
 
-**Start here** — [docs/getting-started.md](docs/getting-started.md), then
-[docs/gesture.md](docs/gesture.md) (a function to a service in ninety
-seconds), then [docs/fieldnotes-app.md](docs/fieldnotes-app.md) (a whole
-application, built).
+**Start here** — [docs/TUTORIAL.md](docs/TUTORIAL.md): six steps in order,
+from a bare function to a hash-chained fiscal record, each one runnable.
 
 - [docs/VISION.md](docs/VISION.md) — why RingServ exists, and the two-player model
 - [docs/architecture.md](docs/architecture.md) — the layers, and the Zig/Ring seams

@@ -6,6 +6,12 @@
       "runtimeExecutable": "zig-out/bin/ringserv.exe",
       "runtimeArgs": ["panel", "examples", "--port", "8079"],
       "port": 8079
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "zig-out/bin/ringserv.exe",
+      "runtimeArgs": ["run", "site/serve.ring"],
+      "port": 8060
     }
   ]
 }

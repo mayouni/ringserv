@@ -1,0 +1,55 @@
+# The site, published.
+#
+# site/ is a single self-contained page — no generator, no build step, no
+# node_modules. That is deliberate: a project whose whole claim is "one
+# binary, nothing to install" should not need a toolchain to publish a
+# page about it. Locally it is served by the thing it documents:
+#
+#     ringserv run site/serve.ring
+#
+# Pages must be enabled once, by hand, in Settings -> Pages -> Source:
+# "GitHub Actions". Until then this workflow will fail on deploy, and
+# that failure is the instruction.
+
+name: site
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/site.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; never cancel one half-done.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # serve.ring is the LOCAL preview server, not part of the published
+      # site. Copying rather than uploading site/ wholesale keeps that
+      # distinction explicit instead of relying on a reader noticing.
+      - name: Assemble
+        run: |
+          mkdir -p _site
+          cp site/index.html _site/index.html
+          ls -la _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
