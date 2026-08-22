@@ -10,12 +10,15 @@
     --ink-soft: #4a5560;
     --muted: #6a737d;
     /* RingServ: the family stylesheet with the dominant colour turned
-       from RingScript's green to the logo's blue, and the secondary to
-       its purple sweep. Both values are contrast-proven on white in the
-       father sheet already (5.00 and 5.45) -- see the token comments. */
-    --accent: #0b6bcb;
-    --accent-2: #8b3fc9;
-    --accent-soft: #eef3fb;
+       from RingScript's green to the ELECTRIC VIOLET of the logo's
+       sweep -- the author's call: blue is every developer tool's colour,
+       and a signature should not be widely worn. #8a2be2 measures 5.97
+       against white (computed, not assumed), comfortably past the 4.5
+       the father sheet holds itself to; the blue the logo opens with
+       recedes to the secondary role. */
+    --accent: #8a2be2;
+    --accent-2: #0b6bcb;
+    --accent-soft: #f4ecfd;
     --accent-ink: #ffffff;
     --error: #b42318;
     --border: #e2e8ee;
@@ -357,7 +360,7 @@ article .rh-shell pre.rh-static code { font: inherit; background: none; padding:
     background: transparent; color: transparent; caret-color: var(--ink);
     outline: none; overflow: auto; resize: vertical;
 }
-.rh-input::selection { background: #cfe0f5; color: transparent; }
+.rh-input::selection { background: #e6d9f7; color: transparent; }
 
 .tok-kw   { color: var(--k); font-weight: 600; }
 .tok-str  { color: var(--s); }
