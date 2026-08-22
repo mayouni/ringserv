@@ -70,6 +70,14 @@ the world to test one pixel property.
   green nobody earned, and the same holds for a gate you COULD NOT RUN: name it and
   say why. Your count is gates run, never gates owned (an unattended wake is confined
   to this repository, so a gate needing a sibling's working directory does not run)
+- **OWNED AND RUN ARE TWO FIGURES AND MAY NEVER BE SUMMED** (`CENTRAL-PXDENOMINATOR-01`,
+  2026-08-21). Count OWNED **from your file list, never from what this repository is
+  for** -- ringine answered 0 from memory and the true number was 7, because "no parser,
+  therefore nothing runs" was plausible and being plausible is what stopped it checking.
+  Name every gate you own and did not run, with the reason: absent runtime, absent
+  hardware, or *it executes in another repository* (stzzql: 1 run, 4 owned, three of the
+  four living in its consumers). **A gate you forgot you own reports as a gate you do not
+  own, and both look like zero from Central.**
 - **`substr(s, i, 1)` on a big string is NOT cheap -- it copies.** Measured by Central
   2026-08-20 on Ring 1.27: 316 us per call on a 1.8 MB buffer against 0.07 us for
   `s[i]`, same character returned. Per-byte `substr` over a large buffer IS the cost,
@@ -125,6 +133,12 @@ case your memo goes in `.central\outbox.md` and Central folds it into that journ
 reference. AUTOPILOT rule 3a rules this: rule 3 forbids a run writing outside its own
 repository, and writing the memo twice would be two sources of truth. An attended session
 files it itself. Full law: `D:\GitHub\softanza\protocol\STYLE.md`
+
+**Words name states, never people.** A term describes what an artefact IS, and never reads
+as a verdict on whoever made it -- so it is **uncommitted work**, never a "dirty" tree.
+Ruled by the Principal 2026-08-21. The refused words are the banned table in
+`D:\GitHub\softanza\protocol\GLOSSARY.md`; the reasoning, and how you propose an entry,
+are in `D:\GitHub\softanza\protocol\ETHICS.md`.
 *This repository: `ringserv`.*
 <!-- /BANGALO-BLOCK -->
 
