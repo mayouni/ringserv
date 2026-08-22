@@ -301,8 +301,12 @@ fn getState(req: *httpz.Request, res: *httpz.Response) !void {
     _ = req;
     var out: std.ArrayList(u8) = .empty;
     const now = std.time.timestamp();
+    var running: usize = 0;
+    for (g_apps[0..g_napps]) |*a| {
+        if (a.status == .running) running += 1;
+    }
     try out.writer(g_alloc).print(
-        "{{\"version\":\"{s}\",\"uptime\":{d},\"apps\":[", .{ bridge.RINGSERV_VERSION, now - g_started_at });
+        "{{\"version\":\"{s}\",\"uptime\":{d},\"running\":{d},\"apps\":[", .{ bridge.RINGSERV_VERSION, now - g_started_at, running });
     g_mu.lock();
     for (g_apps[0..g_napps], 0..) |*a, i| {
         if (i > 0) try out.append(g_alloc, ',');
@@ -437,6 +441,40 @@ fn postCall(req: *httpz.Request, res: *httpz.Response) !void {
     res.body = answer;
 }
 
+/// Start every stopped app — the page's "Start server". The panel stays
+/// resident either way: a stop button that kills the only thing able to
+/// start again is a trap, which is why these exist beside /panel/shutdown
+/// rather than replacing it (shutdown remains for the terminal and gates).
+fn postServerStart(req: *httpz.Request, res: *httpz.Response) !void {
+    _ = req;
+    var started: u32 = 0;
+    for (g_apps[0..g_napps]) |*a| {
+        if (a.status == .stopped) {
+            const err = startApp(a) catch "spawn failed";
+            if (err.len == 0) started += 1;
+        }
+    }
+    res.content_type = .JSON;
+    var out: std.ArrayList(u8) = .empty;
+    try out.writer(g_alloc).print("{{\"ok\":1,\"started\":{d}}}", .{started});
+    res.body = out.items;
+}
+
+/// Stop every running app; the panel keeps listening.
+fn postServerStop(req: *httpz.Request, res: *httpz.Response) !void {
+    _ = req;
+    var stopped: u32 = 0;
+    for (g_apps[0..g_napps]) |*a| {
+        if (a.status == .running) {
+            if (stopApp(a).len == 0) stopped += 1;
+        }
+    }
+    res.content_type = .JSON;
+    var out: std.ArrayList(u8) = .empty;
+    try out.writer(g_alloc).print("{{\"ok\":1,\"stopped\":{d}}}", .{stopped});
+    res.body = out.items;
+}
+
 fn postShutdown(req: *httpz.Request, res: *httpz.Response) !void {
     _ = req;
     for (g_apps[0..g_napps]) |*a| _ = stopApp(a);
@@ -504,6 +542,8 @@ pub fn run(arena: std.mem.Allocator, dir: []const u8, port: u16, exe: []const u8
     router.post("/panel/stop", postStop, .{});
     router.get("/panel/logs", getLogs, .{});
     router.post("/panel/call", postCall, .{});
+    router.post("/panel/server/start", postServerStart, .{});
+    router.post("/panel/server/stop", postServerStop, .{});
     router.post("/panel/shutdown", postShutdown, .{});
 
     std.debug.print(

@@ -152,7 +152,26 @@ let panel = null;
     r = await post("/panel/start", {});
     check("a start without a name is 400", r.status === 400, r.status + "");
 
-    // ========================================== 8. shutdown, clean
+    // ================== 8. the server toggle — the panel stays resident
+    r = await post("/panel/server/start", {});
+    check("Start server starts every stopped app", /"ok":1/.test(r.text), r.text);
+    check("...both ports answer", await until(async () =>
+        (await portAnswers(8071)) && (await portAnswers(8072))));
+    check("...and state counts them", await until(async () => (await state()).running === 2));
+    r = await post("/panel/server/stop", {});
+    check("Stop server stops every running app", /"ok":1/.test(r.text), r.text);
+    check("...both ports refuse", await until(async () =>
+        !(await portAnswers(8071)) && !(await portAnswers(8072))));
+    check("...and THE PANEL ITSELF STAYS — stop is not a trap",
+        (await fetch(P + "/health")).status === 200);
+    check("...so it can start everything again", await (async () => {
+        await post("/panel/server/start", {});
+        return until(() => portAnswers(8071));
+    })());
+    await post("/panel/server/stop", {});
+    await until(async () => (await state()).running === 0);
+
+    // ========================================== 9. shutdown, clean
     await post("/panel/start", { name: "calc" });
     await until(() => portAnswers(8071));
     await post("/panel/shutdown", {});

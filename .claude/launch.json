@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "panel",
+      "runtimeExecutable": "zig-out/bin/ringserv.exe",
+      "runtimeArgs": ["panel", "examples/panel-demo", "--port", "8079"],
+      "port": 8079
+    }
+  ]
+}

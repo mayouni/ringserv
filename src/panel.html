@@ -72,6 +72,11 @@
   }
   pre.answer.err { background: #f7efee; color: #6d2822; border-color: #e8d5d2; }
   .empty { color: var(--dim); text-align: center; padding: 40px 0; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 13px;
+    color: var(--dim); border: 1px solid var(--line); border-radius: 20px;
+    padding: 5px 12px; background: var(--card);
+  }
   footer { text-align: center; color: var(--dim); font-size: 12px; padding: 18px 0 30px; }
 </style>
 </head>
@@ -80,7 +85,8 @@
   <h1>RingServ <span style="color:var(--dim);font-weight:400">· panel</span></h1>
   <span class="meta" id="meta">…</span>
   <span class="grow"></span>
-  <button class="danger" onclick="shutdown()">Stop server</button>
+  <span class="chip" id="chip"><span class="dot" id="chipdot"></span><span id="chiptext">…</span></span>
+  <button class="primary" id="srvbtn" onclick="toggleServer()" disabled>…</button>
 </header>
 <main id="apps"><div class="empty">connecting…</div></main>
 <footer>loopback only · the panel starts, stops and watches — it never guesses</footer>
@@ -103,6 +109,7 @@ async function refresh() {
   document.getElementById("meta").textContent =
     "v" + st.version + " · up " + fmtUp(st.uptime) + " · " + st.apps.length + " app" +
     (st.apps.length === 1 ? "" : "s");
+  paintServer(st.running, st.apps.length);
   const main = document.getElementById("apps");
   for (const a of st.apps) {
     let card = document.getElementById("app-" + a.name);
@@ -197,13 +204,32 @@ async function call(name, card) {
   } catch (e) { out.className = "answer err"; out.textContent = "" + e; }
 }
 
-async function shutdown() {
-  if (!confirm("Stop the panel and every app it started?")) return;
-  dead = true;
-  try { await fetch("/panel/shutdown", { method: "POST" }); } catch {}
-  document.getElementById("meta").textContent = "stopped — restart with: ringserv panel";
-  document.querySelectorAll(".dot").forEach(d => d.className = "dot");
-  document.querySelectorAll("button").forEach(b => b.disabled = true);
+// The server toggle: stop halts every app but the panel STAYS — a stop
+// button that kills the only thing able to start again is a trap.
+let serverRunning = false;
+async function toggleServer() {
+  const btn = document.getElementById("srvbtn");
+  btn.disabled = true;
+  if (serverRunning) {
+    if (!confirm("Stop every running app? The panel stays up and can start them again.")) {
+      btn.disabled = false; return;
+    }
+    await fetch("/panel/server/stop", { method: "POST" });
+  } else {
+    await fetch("/panel/server/start", { method: "POST" });
+  }
+  setTimeout(refresh, 300);
+}
+function paintServer(running, total) {
+  serverRunning = running > 0;
+  const btn = document.getElementById("srvbtn");
+  btn.textContent = serverRunning ? "Stop server" : "Start server";
+  btn.className = serverRunning ? "danger" : "primary";
+  btn.disabled = false;
+  document.getElementById("chipdot").className = "dot" + (serverRunning ? " on" : "");
+  document.getElementById("chiptext").textContent = serverRunning
+    ? "serving · " + running + "/" + total + " apps"
+    : "stopped";
 }
 
 refresh();
