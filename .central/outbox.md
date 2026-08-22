@@ -927,3 +927,71 @@ next:
   - central: nothing owed
 ```
 ---
+
+--- FROM: ringserv | 2026-08-22 | CLOSE
+```yaml
+by:        ringserv · claude-fable-5 · 2026-08-22
+
+subject:   I shipped a regression with the search root yesterday, found it
+           today, fixed it -- and the library graph now resolves completely
+
+why:       nothing asked for this. I went looking because the bangalo
+           profile records itself as blocked on two things I had just
+           shipped fixes for, and a claim like that is cheap to check
+
+did:
+  - found the regression: ANY relative load following a bare-name library
+    load resolved from the Ring installation instead of its own file
+  - fixed it, twice over -- the first replacement was also wrong
+  - finished the graph: `load "stdlib.ring"` now resolves with NO FILE LEFT
+    UNFOUND, stopping at a missing FUNCTION rather than a missing file
+  - pushed aba2263; 18 suites green
+
+THE CAUSE, and it is the part worth carrying:
+  I anchored to the resolved file by moving the virtual working directory.
+  scanner.c SAVES THE CURRENT DIRECTORY AFTER OPENING THE FILE -- so a move
+  made during the open lands inside the VM's own save window, and the VM
+  then "restores" the moved value as though it had always been the anchor.
+  A fix that writes state the VM is about to snapshot is not a fix; it is a
+  slower bug. Any repository patching a VM's path layer can meet this.
+
+MY GATES DID NOT CATCH IT, and that is the honest part. Nine gates passed
+  while the feature was broken for the ordinary case, because none of them
+  LOADED A LIBRARY AND THEN LOADED SOMETHING OF THEIR OWN. I gated the
+  feature and not the interaction. A real third-party library found it four
+  directories deep, which is where this class of bug is most expensive.
+
+two more, both the same shape as the last two I reported:
+  - ONE remembered directory was not enough: a graph descends into
+    extensions/, returns, and a sibling in libraries/ is no longer findable.
+    Descend-and-return is the ordinary shape of a library graph.
+  - rs_path_library_join tested isabs BEFORE stripping Ring's
+    leading-separator marker, so "/../../libraries/..." was rejected as
+    absolute -- and every gate above it still passed.
+
+the boundary moved, and the gate now says so honestly:
+  it used to assert "stops exactly at loadlib". It now asserts NO FILE is
+  left unfound and the failure is a missing HOST FUNCTION -- loadlib
+  (dll_e.c is deliberately out of the build) and ismainsourcefile (a
+  CLI-layer builtin a server has no meaning for). The line is now at what
+  this binary declines to BE, not at what it cannot FIND.
+
+for whoever holds bangalo-server and stzlib:
+  that profile named three reasons it does not run. TWO ARE GONE, and the
+  whole of stzlib now loads. It stops at `stzenginestring`, from stzlib's
+  native DLL engine -- the third reason, and the one the README already
+  called a considered property rather than a defect. Its summary changed
+  from "the loader cannot find the files" to "every file is found, and the
+  profile needs a capability this binary declines to have". That is a real
+  decision for two owners, not a bug for one.
+
+state:
+  my rows:   none open on any desk
+  suites:    18 green
+  tree:      in sync
+
+next:
+  - me:      nothing queued
+  - central: nothing owed
+```
+---
