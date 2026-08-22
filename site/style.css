@@ -17,7 +17,12 @@
        the father sheet holds itself to; the blue the logo opens with
        recedes to the secondary role. */
     --accent: #8a2be2;
-    --accent-2: #0b6bcb;
+    /* The secondary is the CRYSTAL'S TEAL, not the ring's blue. The blue
+       that felt dominant on this page was never the palette -- it was the
+       syntax colour of :atoms, and RingServ's declarative samples are
+       MADE of :atoms where RingScript's barely used them. Teal contrasts
+       with the violet instead of competing with it. 4.8 on white. */
+    --accent-2: #0c7d8f;
     --accent-soft: #f4ecfd;
     --accent-ink: #ffffff;
     --error: #b42318;
@@ -38,7 +43,7 @@
     --s: #0a7d4b;   /* strings   4.92 */
     --n: #a83a0f;   /* numbers   6.08 */
     --c: #5c6773;   /* comments  5.47 */
-    --a: #0b6bcb;   /* :atoms    5.00 */
+    --a: #0c7d8f;   /* :atoms — the crystal teal, see --accent-2  4.8 */
     --t: #0f5bc4;   /* html tags 6.01 */
     --f: #7a4f01;   /* functions 6.76 */
     --mono: "Cascadia Code", Consolas, "SF Mono", monospace;
@@ -563,3 +568,30 @@ footer { border-top: 1px solid var(--border); margin-top: 2rem; padding: 2rem 0 
 footer a { color: var(--accent); text-decoration: none; }
 footer .wrap { display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: center; }
 footer .sp { margin-left: auto; }
+
+/* ------------------------------------------------------------------
+   RingServ signature: the logo's violet-to-blue sweep, as a gradient,
+   in EXACTLY three places -- the hero's one word, the top bar's
+   Download, and the primary button. The father site's own rule (Zui
+   118, quoted in its source): a colour that appears everywhere stops
+   meaning anything. So the sweep is the page's rarest thing.
+   Both gradient ends measure over 4.5 on white, so every point
+   between them does too. */
+.btn.primary, nav .cta {
+    background: linear-gradient(115deg, #8a2be2 45%, #2d5fd3);
+}
+.btn.primary:hover, nav .cta:hover {
+    background: linear-gradient(115deg, #9b3ff2 45%, #3a6ce0);
+    opacity: 1;
+}
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+    .hero h1 em {
+        /* Mostly violet, resolving to indigo -- never to full blue: the
+           word is the page's signature, and the point of the change was
+           to stop blue from wearing it. */
+        background: linear-gradient(100deg, #8a2be2 55%, #5a35d8);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+}
