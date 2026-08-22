@@ -36,7 +36,11 @@ nTicketNo = 0
 RingServ([
 	:port     = 8110,
 	:workers  = 2,
-	:database = sysget("COMPTOIR_DB"),
+	# A reference application must RUN when someone clones the repository
+	# and presses go — env-var-or-nothing is a barrier, not a default.
+	# The gates set COMPTOIR_DB to a scratch file; everyone else gets one
+	# beside the application.
+	:database = RsComptoirDb(),
 
 	:data = [
 		# The menu is ordinary mutable state — prices change, and the
@@ -206,7 +210,7 @@ Contract(:kitchen, [
 # actor may do. 401 and 403 stay distinct, because "I do not know you"
 # and "I know you, and no" are different problems for the caller.
 
-Actor([ :secret = sysget("COMPTOIR_SECRET") ])
+Actor([ :secret = RsComptoirSecret() ])
 
 # ---------------------------------------------------------- the placement
 #
@@ -231,6 +235,24 @@ Topology([
 ])
 
 # ------------------------------------------------------------- helpers
+
+func RsComptoirDb
+	cEnv = "" + sysget("COMPTOIR_DB")
+	if cEnv != ""
+		return cEnv
+	ok
+	return "comptoir.db"
+
+func RsComptoirSecret
+	cEnv = "" + sysget("COMPTOIR_SECRET")
+	if cEnv != ""
+		return cEnv
+	ok
+	# A development default, and it says so. An application that needs a
+	# real secret reads one from the environment; one that silently
+	# invented a strong-looking secret would be worse, because nobody
+	# would notice it was never configured.
+	return "comptoir-development-secret"
 
 func RsComptoirIsState cTo
 	if cTo = "recue" return 1 ok
