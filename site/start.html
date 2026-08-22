@@ -17,7 +17,7 @@
     <a href="unified.html">One model</a>
     <a href="faq.html">Q&amp;A</a>
     <a href="blog.html">Blog</a>
-    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
 </nav>
 
@@ -32,7 +32,7 @@
   <h2>Ninety seconds</h2>
   <ol class="steps">
     <li><b>Download one file.</b> Pick your platform on the
-      <a href="https://github.com/mayouni/ringserv/releases">releases page</a> — Linux,
+      <a href="https://github.com/mayouni/ringserv/releases/latest">releases page</a> — Linux,
       macOS or Windows — and put it somewhere on your path. On Linux and macOS, make it
       executable: <code>chmod +x ringserv</code>. That is the entire installation.</li>
     <li><b>Write ordinary functions.</b> Create a file — say <code>calc.ring</code> —
@@ -46,8 +46,9 @@
       the file is callable over the web, its parameters matched to your payload
       <em>by name</em>:
 <pre class="code"><span class="c">$</span> curl -X POST localhost:8080/api/v1 <span class="t">\</span>
-    -d <span class="s">'{"service":"calc","action":"hello","payload":{"name":"Mansour"}}'</span>
-<span class="n">{"code":0,"message":"OK","data":"Ahlan, Mansour!"}</span></pre></li>
+    -d <span class="s">'{"service":"calc","action":"hello",
+         "payload":{"name":"Sara"}}'</span>
+<span class="n">{"code":0,"message":"OK","data":"Ahlan, Sara!"}</span></pre></li>
   </ol>
   <p class="lead">Not sure what you just published? <code>ringserv serve --explain
   calc.ring</code> prints exactly which functions became callable — and which stayed

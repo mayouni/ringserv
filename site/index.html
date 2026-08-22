@@ -17,18 +17,16 @@
     <a href="unified.html">One model</a>
     <a href="faq.html">Q&amp;A</a>
     <a href="blog.html">Blog</a>
-    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
 </nav>
 
 <header class="hero wrap">
   <img class="logo" src="ringserv-logo.png" alt="RingServ">
-  <h1>A modern server for <em>Ring</em> apps,<br>web services, and what comes next.</h1>
-  <p class="sub">Where RingScript makes Ring resident in the browser, RingServ makes it
-  resident on the server: one static binary that speaks HTTP by web standards, runs your
-  services in beautiful declarative Ring — or in JavaScript — stores data in embedded
-  SQLite, and syncs with local-first RingScript pages. No Apache, no npm, no runtime to
-  install, nothing to configure.</p>
+  <h1>A modern server<br>for <em>Ring</em> apps and web services.</h1>
+  <p class="sub">One static binary with everything inside: the web server, the Ring
+  language, a SQL database, a JavaScript engine. Write clear, readable services.
+  Nothing to install, nothing to configure.</p>
   <div class="badges">
     <span class="badge">version 0.9</span>
     <span class="badge">one file per platform</span>
@@ -37,7 +35,7 @@
   </div>
   <div class="actions">
     <a class="btn primary" href="start.html">Start here &mdash; one file, one command</a>
-    <a class="btn ghost" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Or download 0.9 <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a class="btn ghost" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Or download 0.9 <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
 </header>
 
@@ -50,7 +48,8 @@
 
 <span class="c">$</span> ringserv serve calc.ring
 <span class="c">$</span> curl -X POST localhost:8080/api/v1 <span class="t">\</span>
-      -d <span class="s">'{"service":"calc","action":"add","payload":{"a":19,"b":23}}'</span>
+      -d <span class="s">'{"service":"calc","action":"add",
+           "payload":{"a":19,"b":23}}'</span>
 <span class="n">{"code":0,"message":"OK","data":42}</span></pre>
     <figcaption>The first touch: a file of plain functions, served as-is. Worried about what
     you just published? <code>ringserv serve --explain calc.ring</code> prints exactly which
@@ -177,7 +176,7 @@ app.listen(<span class="n">8080</span>)</pre>
   <h2>Three steps, no ceremony</h2>
   <ol class="steps">
     <li><b>Get the one file.</b> Download it from the
-      <a href="https://github.com/mayouni/ringserv/releases">releases page</a> for Linux,
+      <a href="https://github.com/mayouni/ringserv/releases/latest">releases page</a> for Linux,
       macOS or Windows — or scaffold a working app with
       <code>ringserv new myapp --gesture</code>.</li>
     <li><b>Serve it.</b> <code>ringserv serve myapp.ring</code> publishes your functions;

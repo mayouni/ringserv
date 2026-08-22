@@ -17,7 +17,7 @@
     <a href="unified.html">One model</a>
     <a href="faq.html">Q&amp;A</a>
     <a class="active" href="blog.html">Blog</a>
-    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
 </nav>
 
@@ -37,7 +37,8 @@
     <span class="k">return</span> qty * price</pre>
 <pre class="code"><span class="c">$</span> ringserv serve till.ring
 <span class="c">$</span> curl -X POST localhost:8080/api/v1 <span class="t">\</span>
-    -d <span class="s">'{"service":"till","action":"total","payload":{"qty":2,"price":180}}'</span>
+    -d <span class="s">'{"service":"till","action":"total",
+         "payload":{"qty":2,"price":180}}'</span>
 <span class="n">{"code":0,"message":"OK","data":360}</span></pre>
   <p class="lead">No declarations, no routes. The payload's keys were matched to the
   parameters by name. When you wonder what exactly is exposed,
@@ -83,7 +84,8 @@
 ])
 
 <span class="c"># inside your action:</span>
-JournalAppend(<span class="s">"sales"</span>, [ <span class="a">:type</span> = <span class="s">"sold"</span>, <span class="a">:item</span> = <span class="s">"espresso"</span>, <span class="a">:amount</span> = <span class="n">360</span> ])</pre>
+JournalAppend(<span class="s">"sales"</span>, [ <span class="a">:type</span> = <span class="s">"sold"</span>,
+    <span class="a">:item</span> = <span class="s">"espresso"</span>, <span class="a">:amount</span> = <span class="n">360</span> ])</pre>
   <p class="lead">Three properties, each one testable. <b>Append-only:</b> the journal's
   own service exposes read and verify — an "edit" action does not exist to be called.
   <b>Sealed:</b> every entry carries a fingerprint of the one before it, so if anyone

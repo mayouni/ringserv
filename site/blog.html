@@ -7,6 +7,35 @@
 <meta name="description" content="Articles from the RingServ project: technical deep dives, hands-on tutorials, and the occasional position piece — losses published with the wins.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css?v=0.9.0">
+<style>
+    article { max-width: 46rem; }
+    article p { color: var(--ink-soft); }
+    article p.first { font-size: var(--read); color: var(--ink); }
+
+    /* Categories divide the list the way the father site's do; at three
+       posts the filter buttons would outnumber their contents, so the
+       labels carry the structure until the list earns the buttons. */
+    .cat { margin: 2.8rem 0 0; padding-top: 1.5rem; border-top: 1px solid var(--rule); }
+    .cat:first-of-type { border-top: 0; padding-top: 0; margin-top: 2rem; }
+    .cat > .label {
+        font-size: var(--floor); text-transform: uppercase; letter-spacing: .06em;
+        color: var(--accent); font-weight: 700; margin: 0 0 .2rem;
+    }
+    .cat > .why { margin: 0 0 1.4rem; }
+
+    /* A post is a heading and a summary, not a tile you press. The link is
+       the title, which is the honest affordance. */
+    .post { margin: 0 0 1.7rem; padding-left: 1rem; border-left: 3px solid var(--border); }
+    .post:hover { border-left-color: var(--accent); }
+    .post h2 { margin: 0 0 .35rem; }
+    .post h2 a { color: var(--ink); text-decoration: none; font-weight: 700; }
+    .post h2 a:hover { color: var(--accent); text-decoration: underline; }
+    .post p { margin: 0; }
+    .post .tag {
+        display: inline-block; margin-top: .5rem; font-size: var(--floor);
+        color: var(--accent); font-weight: 600;
+    }
+</style>
 </head>
 <body>
 
@@ -17,44 +46,64 @@
     <a href="unified.html">One model</a>
     <a href="faq.html">Q&amp;A</a>
     <a class="active" href="blog.html">Blog</a>
-    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
 </nav>
 
-<header class="hero wrap">
-  <h1>Written as it is <em>built</em>.</h1>
-  <p class="sub">Deep dives, tutorials and position pieces — in the same voice as the
-  code: plain words, real numbers, and the losses published with the wins.</p>
-</header>
-
 <section class="wrap">
-  <div class="grid">
-    <div class="card">
-      <span class="icon">&#9673;</span>
-      <h3><a href="blog-why-ringserv.html">Why we built a server for Ring</a></h3>
-      <p>Position · 2026-08-22 — The evening you never get back, five things assembling
-      a stack does not give you, where RingServ stands beside Ring's other backends —
-      and the honest list of when you should not listen to us.</p>
-    </div>
-    <div class="card">
-      <span class="icon">&#9672;</span>
-      <h3><a href="blog-inside-the-binary.html">Inside the one binary</a></h3>
-      <p>Technical · 2026-08-22 — How Zig compiles the Ring VM, http.zig, SQLite and
-      QuickJS-ng into one file; N worker VMs and one writer; and the ~970 programs that
-      verify it against native Ring on every change.</p>
-    </div>
-    <div class="card">
-      <span class="icon">&#8646;</span>
-      <h3><a href="blog-first-service.html">From a function to a record nobody can edit</a></h3>
-      <p>Tutorial · 2026-08-22 — Serve a bare function, grow it into a declared service
-      with a table and a contract, then give it a journal: a sales record that survives a
-      crash and refuses to be quietly altered. Twenty minutes, every listing runs.</p>
+<article>
+
+  <h1>Blog</h1>
+
+  <p class="first">Writing from the work itself — no filler. Three kinds of posts: where
+  this project is going and why, how to build things with it, and what the engineering
+  actually cost. Losses are published with the wins; that is the house style.</p>
+
+  <div class="cat">
+    <p class="label">Vision &amp; direction</p>
+    <p class="why">Why RingServ exists, and where it stands among its neighbours.</p>
+
+    <div class="post">
+      <h2><a href="blog-why-ringserv.html">Why we built a server for Ring</a></h2>
+      <p>The evening you never get back, five things assembling a stack does not give
+      you, RingServ's position beside Ring's other backends — and the honest list of
+      when you should not listen to us.</p>
+      <span class="tag">Position · 2026-08-22</span>
     </div>
   </div>
-  <p class="lead" style="margin-top:1.8rem">More is on the way as the
+
+  <div class="cat">
+    <p class="label">For app programmers</p>
+    <p class="why">Hands-on, every listing runnable.</p>
+
+    <div class="post">
+      <h2><a href="blog-first-service.html">From a function to a record nobody can edit</a></h2>
+      <p>Serve a bare function, grow it into a declared service with a table and a
+      contract, then give it a journal — a sales record that survives a crash and
+      refuses to be quietly altered. About twenty minutes.</p>
+      <span class="tag">Tutorial · 2026-08-22</span>
+    </div>
+  </div>
+
+  <div class="cat">
+    <p class="label">Deep technical</p>
+    <p class="why">What the engineering actually cost, with the numbers.</p>
+
+    <div class="post">
+      <h2><a href="blog-inside-the-binary.html">Inside the one binary</a></h2>
+      <p>How Zig compiles the Ring VM, http.zig, SQLite and QuickJS-ng into one file;
+      N worker VMs and one writer; and the ~970 programs that verify it against native
+      Ring on every change.</p>
+      <span class="tag">Technical · 2026-08-22</span>
+    </div>
+  </div>
+
+  <p style="margin-top:2.6rem">More lands here as the
   <a href="https://github.com/mayouni/ringserv/blob/main/docs/PLAN.md">public plan</a>
-  advances — the JavaScript module story, the family handshake, and the phone. Articles
-  land here when the work they describe is real, not before.</p>
+  advances — the JavaScript module story, the family handshake, the phone. Articles
+  arrive when the work they describe is real, not before.</p>
+
+</article>
 </section>
 
 <footer>

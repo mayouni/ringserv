@@ -17,7 +17,7 @@
     <a class="active" href="unified.html">One model</a>
     <a href="faq.html">Q&amp;A</a>
     <a href="blog.html">Blog</a>
-    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
 </nav>
 
@@ -72,13 +72,17 @@ Page(<span class="a">:settext</span>, [ <span class="a">:id</span> = <span class
 <pre class="code"><span class="f">Topology</span>([
     <span class="a">:app</span> = <span class="s">"comptoir"</span>,
 
+    <span class="c"># the menu lives in the page, and syncs back</span>
     <span class="a">:data</span> = [
-        <span class="a">:menu</span> = [ <span class="a">:store</span> = <span class="a">:local</span>, <span class="a">:sync</span> = <span class="a">:onreconnect</span> ]   <span class="c"># lives in the page, syncs back</span>
+        <span class="a">:menu</span> = [ <span class="a">:store</span> = <span class="a">:local</span>, <span class="a">:sync</span> = <span class="a">:onreconnect</span> ]
     ],
 
     <span class="a">:services</span> = [
-        <span class="a">:orders</span>  = [ <span class="a">:site</span> = <span class="a">:local</span>, <span class="a">:authority</span> = <span class="a">:server</span> ],  <span class="c"># instant in the page; server has the last word</span>
-        <span class="a">:reports</span> = [ <span class="a">:site</span> = <span class="a">:server</span> ]                        <span class="c"># needs the full dataset</span>
+        <span class="c"># instant in the page; the server has the last word</span>
+        <span class="a">:orders</span>  = [ <span class="a">:site</span> = <span class="a">:local</span>, <span class="a">:authority</span> = <span class="a">:server</span> ],
+
+        <span class="c"># needs the full dataset</span>
+        <span class="a">:reports</span> = [ <span class="a">:site</span> = <span class="a">:server</span> ]
     ]
 ])</pre>
   <p class="lead"><b>The one-word move.</b> The day a rule outgrows the page — it needs
