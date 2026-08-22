@@ -75,6 +75,7 @@
 
 const char *rs_path_resolve(const char *cPath, char *cOut, int nOut);
 int rs_path_chdir(const char *cDir);
+int rs_path_exists(const char *cPath);
 
 /* This thread's virtual working directory, seeded on first use. */
 static _Thread_local char g_here[RS_PATH_SIZE];
@@ -218,41 +219,131 @@ static const char *rs_path_here(void) {
 /* The anchor, for the library fallback in native_stubs.c: it must be able
 ** to tell a path the VM joined itself from one an author wrote. */
 /*
-** Anchor to the DIRECTORY of a file the library fallback just resolved.
+** The directory of the last file the library fallback resolved out of a Ring
+** installation — a SEPARATE root, deliberately not the anchor.
 **
-** Needed because Ring's loader switches to a loaded file's folder using the
-** name AS WRITTEN — `switchtofilefolder("stdlib.ring")` has no directory in
-** it and therefore moves nothing. That is correct for a file found relative
-** to the anchor, and wrong for one found in a Ring installation: its own
-** dependencies are written `/../../libraries/...`, relative to where IT
-** lives, and without this they resolve against the application instead.
+** The first version of this moved the virtual working directory instead, and
+** that was wrong in a way only a real library found: `scanner.c` saves the
+** current directory AFTER opening the file, so a move made during the open
+** is inside the VM's own save window. The VM then "restored" the moved
+** value, and every relative load for the rest of the run resolved from the
+** installation. stzlib found it four directories deep, which is exactly
+** where a bug like this is most expensive to diagnose.
 **
-** The VM saves and restores the current directory around every load, and
-** currentdir() reads this same virtual directory, so the restore still
-** works and the move is scoped to the file that caused it.
+** So the anchor is never touched. This root is consulted ONLY when the
+** ordinary resolution has already missed, which means it can rescue a path
+** that would otherwise be an error and can never redirect one that works.
 */
-void rs_path_anchor_to_file(const char *cFile) {
+#define RS_LIB_DIRS 16
+
+static _Thread_local char g_lib_dir[RS_LIB_DIRS][RS_PATH_SIZE];
+static _Thread_local int g_lib_count = 0;
+
+/*
+** Remember a directory the library fallback resolved out of a Ring
+** installation. Most-recently-used first, bounded, duplicates collapsed.
+**
+** WHY A SET AND NOT ONE DIRECTORY. The first version kept a single "last
+** library directory", and a real graph broke it: `stdlib.ring` descends
+** into `extensions/ringpostgresql/`, comes back, and a file in
+** `libraries/stdlib/` then asks for a sibling — which the single variable
+** could no longer find, because it was pointing at the extension. Descend
+** and return is the ordinary shape of a library graph, and one variable
+** cannot express it.
+**
+** WHY NOT A STACK. A stack is the exactly-right structure and needs a
+** "this file's scan has ended" signal, which the VM does not give this
+** layer. The set is the honest approximation: bounded at 16, tried
+** most-recent-first, and consulted ONLY after the anchor has already
+** missed — so it can rescue a path that would otherwise be an error and
+** can never redirect one that already works. The failure mode it admits
+** is a bare name that exists in two installation directories resolving
+** from the more recent, which is also what a human reading the graph
+** would expect.
+*/
+void rs_path_set_library_dir(const char *cFile) {
 	char cDir[RS_PATH_SIZE];
 	size_t nLen;
-	if ((cFile == NULL) || (cFile[0] == '\0')) {
+	int i, n;
+	if ((cFile == NULL) || (cFile[0] == 0)) {
 		return;
 	}
 	nLen = strlen(cFile);
 	if (nLen >= RS_PATH_SIZE) {
 		return;
 	}
-	while (nLen > 0 && cFile[nLen - 1] != '/' && cFile[nLen - 1] != '\\') {
+	while (nLen > 0 && !rs_path_issep(cFile[nLen - 1])) {
 		nLen--;
 	}
-	while (nLen > 1 && (cFile[nLen - 1] == '/' || cFile[nLen - 1] == '\\')) {
+	while (nLen > 1 && rs_path_issep(cFile[nLen - 1])) {
 		nLen--;
 	}
 	if (nLen == 0) {
 		return;
 	}
 	memcpy(cDir, cFile, nLen);
-	cDir[nLen] = '\0';
-	rs_path_chdir(cDir);
+	cDir[nLen] = 0;
+
+	/* Already known? Move it to the front rather than adding it twice. */
+	for (i = 0; i < g_lib_count; i++) {
+		if (strcmp(g_lib_dir[i], cDir) == 0) {
+			for (n = i; n > 0; n--) {
+				memcpy(g_lib_dir[n], g_lib_dir[n - 1], RS_PATH_SIZE);
+			}
+			memcpy(g_lib_dir[0], cDir, nLen + 1);
+			return;
+		}
+	}
+	if (g_lib_count < RS_LIB_DIRS) {
+		g_lib_count++;
+	}
+	for (n = g_lib_count - 1; n > 0; n--) {
+		memcpy(g_lib_dir[n], g_lib_dir[n - 1], RS_PATH_SIZE);
+	}
+	memcpy(g_lib_dir[0], cDir, nLen + 1);
+}
+
+/*
+** Resolve cPath against the library directories, most recent first, or
+** return NULL. The LAST resort — after the anchor has failed to produce an
+** existing file and after the installation's own two search directories.
+*/
+const char *rs_path_library_join(const char *cPath, char *cOut, int nOut) {
+	char cJoin[RS_PATH_SIZE];
+	size_t nDir, nPath;
+	int i;
+	if ((cPath == NULL) || (cOut == NULL) || (nOut <= 0) || (g_lib_count == 0)) {
+		return NULL;
+	}
+	/* Ring's leading-separator form is relative too — see rs_path_resolve —
+	** and this test MUST come before the isabs check, because `/../..`
+	** looks absolute and is not. Getting that order wrong here made every
+	** library dependency unresolvable while every gate above still passed. */
+	if (rs_path_issep(cPath[0]) && (cPath[1] == '.') && (cPath[2] == '.')) {
+		cPath++;
+	} else if (rs_path_isabs(cPath)) {
+		return NULL;
+	}
+	nPath = strlen(cPath);
+	for (i = 0; i < g_lib_count; i++) {
+		nDir = strlen(g_lib_dir[i]);
+		if ((nDir + nPath + 2) >= RS_PATH_SIZE) {
+			continue;
+		}
+		memcpy(cJoin, g_lib_dir[i], nDir);
+		cJoin[nDir] = RS_PATH_SEP;
+		memcpy(cJoin + nDir + 1, cPath, nPath + 1);
+		if (rs_path_norm(cJoin, cOut, nOut) != 0) {
+			continue;
+		}
+		if (rs_path_exists(cOut)) {
+			/* The graph descends: the file just found becomes the newest
+			** directory, so its own siblings resolve next. */
+			rs_path_set_library_dir(cOut);
+			return cOut;
+		}
+	}
+	return NULL;
 }
 
 int rs_path_exists(const char *cPath) {

@@ -146,7 +146,8 @@
 /* RINGSERV: the library search root (src/native_stubs.c, src/rs_path.c). */
 RING_API const char *rs_library_resolve(const char *cPath, char *cOut, int nOut);
 RING_API int rs_path_exists(const char *cPath);
-RING_API void rs_path_anchor_to_file(const char *cFile);
+RING_API void rs_path_set_library_dir(const char *cFile);
+RING_API const char *rs_path_library_join(const char *cPath, char *cOut, int nOut);
 
 #define RING_CANTOPENFILE "\nError (E9) : Can't open file"
 #define RING_STRINGSIZEOVERFLOW "\nError (E10) : String size overflow!\n"

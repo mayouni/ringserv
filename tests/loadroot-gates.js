@@ -77,12 +77,19 @@ if (HOME === null) {
     // against the application and miss.
     {
         const r = run('load "stdlib.ring"\nsee "ran" + nl\n');
-        check("a library's OWN `/../../` dependencies resolve too",
-            !/libraries[\\/]stdlib/.test(r.out),
-            "still failing inside the graph: " + r.out.slice(0, 200));
-        check("...and the graph stops exactly at `loadlib`, as designed",
-            /loadlib/.test(r.out),
-            "expected the RING_NODLL boundary, got: " + r.out.slice(0, 200));
+        check("a library's whole graph resolves — NO file is left unfound",
+            !/Can't open file/.test(r.out),
+            "a file is still unresolved: " + r.out.slice(0, 200));
+        // The boundary moved outward as the search root improved, and this
+        // gate now names it for what it is rather than for one symptom.
+        // `loadlib` is absent because dll_e.c is deliberately out of the
+        // build (RING_NODLL); `ismainsourcefile` is a CLI-layer builtin the
+        // interpreter provides and a server has no meaning for. Both are
+        // MISSING FUNCTIONS, not missing files — which is exactly the line
+        // RINGSERV-LOADROOT-01 said a search root would stop at.
+        check("...and stops at a missing HOST FUNCTION, not a missing file",
+            /Calling Function without definition/.test(r.out),
+            "expected the host boundary, got: " + r.out.slice(0, 200));
     }
 
     // -------------------------------------------- the explicit override

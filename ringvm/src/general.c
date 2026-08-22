@@ -38,12 +38,19 @@ RING_API RING_FILE ring_general_fopen(const char *cFileName, const char *cMode) 
 		cFileName = rs_path_resolve(cFileName, cResolved, RING_RS_PATHSIZE);
 		if (!rs_path_exists(cFileName)) {
 			const char *cFromHome = rs_library_resolve(cOriginal, cLibrary, RING_RS_PATHSIZE);
+			if (cFromHome == cOriginal) {
+				const char *cFromLib =
+					rs_path_library_join(cOriginal, cLibrary, RING_RS_PATHSIZE);
+				if (cFromLib != NULL) {
+					cFromHome = cFromLib;
+				}
+			}
 			if (cFromHome != cOriginal) {
 				/*  Anchor to where it actually lives, or its own
 				**  `/../../libraries/...` dependencies resolve against the
 				**  application instead of against the installation. */
 				cFileName = cFromHome;
-				rs_path_anchor_to_file(cFileName);
+				rs_path_set_library_dir(cFileName);
 			}
 		}
 	}

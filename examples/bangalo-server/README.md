@@ -109,6 +109,48 @@ reads the host), which is the rule the ask actually cares about; the
 HTTP verb carrying it is a RingServ wire-contract fact
 (`docs/services.md`), not a decision this profile made.
 
+## UPDATE, 2026-08-22 — both of those reasons are gone; the third one stands
+
+*Measured, not assumed. Both blockers named in the 08-20 update below were
+fixed on 2026-08-21 and 08-22, and this profile now loads **the whole of
+stzlib** — every file resolves, nothing is left unfound.*
+
+**1. The library search root — done.** `RINGSERV-LOADROOT-01` was ruled
+**DEPEND** on 2026-08-20: a general Ring application server MAY require a
+Ring installation and need not carry a search root. RingServ now **finds**
+one (`RINGSERV_RING_HOME`, else `ring` on PATH) and `ringserv where` prints
+it. stzlib's `load "stdlibcore.ring"` resolves, and so does the whole graph
+below it.
+
+**2. The `Ask` collision — done.** `RINGSERV-RINGLIBNS-01` was ruled
+**SCOPED, NOT RENAMED**: `testing.ring` loads for `ringserv test` alone, so
+`run`, `dev`, `serve` and `check` never see it. `Ask` keeps its name, and
+`stzNodePlane.ring:42` may define its own.
+
+**What it takes now, and it is the third boundary this README already
+named.** The run reaches application code and stops at:
+
+```
+Error (R3) : Calling Function without definition: stzenginestring
+```
+
+preceded by warnings that `stk_string.dll`, `stz_string.dll` and their
+siblings were not found. stzlib's engine is a set of **native
+extensions**, and RingServ cannot load one: `dll_e.c` is deliberately out
+of `build.zig` (`RING_NODLL`). That is not a defect to be fixed later — a
+single static binary that cannot load arbitrary native code is the
+property, and `docs/LOADING.md` states it as one.
+
+So the honest summary changed shape. It used to be *"the loader cannot
+find the files"*. It is now: **every file is found; the profile needs a
+capability this binary declines to have.** Closing that would mean either
+a RingServ that loads native extensions — a real decision, not an
+oversight to correct — or an stzlib whose engine has a pure-Ring path.
+Neither is this profile's to make, and neither is urgent: what this
+example was written to demonstrate — the `stzAgentHost` adoption, the
+agents-folder convention, the read-only surface — is unaffected by which
+of those two answers arrives.
+
 ## UPDATE, 2026-08-20 — the loader was fixed; this profile still does not run, for two other reasons
 
 *The finding below stands as written and is what routed prompt 45. That

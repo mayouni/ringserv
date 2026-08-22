@@ -121,16 +121,41 @@ recording because neither was visible from the outside:
 
 **Both halves, stated together, because a routing memo once said this
 "makes every one of them resolve" and that was one half:** every Ring
-LIBRARY now resolves, and Ring's bundled `stdlib.ring` still does not
-**run** — its graph ends at `loadlib`, and `dll_e.c` is deliberately absent
-from `build.zig` (`RING_NODLL`). See item 3, which is unchanged.
+LIBRARY now resolves — no file is left unfound — and Ring's bundled
+`stdlib.ring` still does not **run**. What stops it is a missing *host
+function*: `loadlib`, because `dll_e.c` is deliberately absent from
+`build.zig` (`RING_NODLL`), and `ismainsourcefile`, a CLI-layer builtin a
+server has no meaning for. The boundary moved outward as the search root
+improved, and it is now exactly where item 3 says it should be: at what
+this binary declines to be, not at what it cannot find.
 
-Measured 2026-08-21: `load "stdlibcore.ring"` — a real Ring library, by
-bare name — loads and runs; `load "stdlib.ring"` resolves its entire graph
-and stops exactly at `loadlib`. Held by `tests/loadroot-gates.js`, which
-**skips itself entirely when no Ring is installed** — the ruling says MAY,
-and a suite that failed without an installation would have quietly turned
-that into MUST.
+**How a library's own dependencies follow.** A file found in the
+installation is remembered by its DIRECTORY, and that set — most recent
+first, bounded at 16 — is the last resort when the anchor misses. Two
+earlier designs were wrong and both are worth recording:
+
+- **Moving the anchor was wrong.** `scanner.c` saves the current directory
+  *after* opening the file, so a move made during the open lands inside the
+  VM's own save window and is then "restored" as though it had always been
+  the anchor. Every relative load for the rest of the run resolved from the
+  installation. stzlib found it four directories deep.
+- **One remembered directory was wrong.** A graph descends into
+  `extensions/ringpostgresql/`, returns, and a file back in
+  `libraries/stdlib/` asks for a sibling — which a single variable can no
+  longer find. Descend-and-return is the ordinary shape of a library graph.
+
+A stack is the exactly-right structure and needs a "this scan has ended"
+signal the VM does not give this layer. The bounded set is the honest
+approximation, and it is consulted **only after the anchor has already
+missed** — so it can rescue a path that would otherwise be an error and can
+never redirect one that already works.
+
+Measured 2026-08-22: `load "stdlibcore.ring"` loads and runs by bare name,
+and `load "stdlib.ring"` resolves its **entire graph with no file left
+unfound** — stopping at a missing *function*, not a missing file. Held by
+`tests/loadroot-gates.js`, which **skips itself entirely when no Ring is
+installed** — the ruling says MAY, and a suite that failed without an
+installation would have quietly turned that into MUST.
 
 **2. A name RingServ's own embedded library already defines.**
 

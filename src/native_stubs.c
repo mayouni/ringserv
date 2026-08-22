@@ -342,17 +342,23 @@ FILE *rs_fopen(const char *cPath, const char *cMode) {
 		** upgrade could silently take over a name the author owns. */
 		char cHome[RS_STUB_PATHSIZE];
 		const char *cFound = rs_home_lookup(cPath, cHome, sizeof(cHome));
+		if (cFound == NULL) {
+			/* Last resort: a library's own relative dependency, resolved
+			** against where that library lives rather than against the
+			** application's anchor. Only reached after the anchor missed. */
+			cFound = rs_path_library_join(cPath, cHome, RS_STUB_PATHSIZE);
+		}
 		if (cFound != NULL) {
 			pFile = fopen(cFound, cMode);
 			if (pFile != NULL) {
-				/* Anchor to where it actually lives. Ring's loader
-				** switches folders using the name AS WRITTEN, which for a
-				** bare name moves nothing — so a library found in the
-				** installation would have its own `/../../libraries/...`
-				** dependencies resolved against the APPLICATION. The VM
-				** saves and restores the directory around each load, so
-				** this is scoped to the file that caused it. */
-				rs_path_anchor_to_file(cFound);
+				/* Remember where it lives, so its own
+				** `/../../libraries/...` dependencies can resolve. NOT by
+				** moving the anchor: scanner.c saves the current directory
+				** AFTER the open, so a move here lands inside the VM's save
+				** window and is restored as though it had always been the
+				** anchor — which broke every relative load for the rest of
+				** the run. See rs_path_set_library_dir. */
+				rs_path_set_library_dir(cFound);
 			}
 		}
 	}
