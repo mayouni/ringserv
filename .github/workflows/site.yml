@@ -13,10 +13,13 @@
 
 name: site
 
+# MANUAL ON PURPOSE. Publishing the site is a decision, not a consequence
+# of editing a file — and it cannot succeed until Pages is turned on by
+# hand anyway (Settings → Pages → Source: "GitHub Actions"). Running it on
+# every push only painted a red X for a step nobody has asked for yet.
+#
+# To publish: enable Pages, then run this workflow from the Actions tab.
 on:
-  push:
-    branches: [main]
-    paths: ["site/**", ".github/workflows/site.yml"]
   workflow_dispatch:
 
 permissions:
