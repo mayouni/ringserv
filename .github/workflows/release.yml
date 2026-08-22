@@ -112,7 +112,11 @@ jobs:
             exit 0
           fi
           chmod +x bin/ringserv-linux-x64
-          GOT=$(./bin/ringserv-linux-x64 version | sed -E 's/^RingServ ([^ ]+).*/\1/')
+          # `ringserv version` prints to STDERR (a diagnostic; the run
+          # path keeps stdout for program output) — the first release
+          # attempt captured an empty string here and refused itself.
+          # The check was right to refuse; the plumbing was wrong.
+          GOT=$(./bin/ringserv-linux-x64 version 2>&1 | sed -E 's/^RingServ ([^ ]+).*/\1/')
           echo "tag=$TAG binary=$GOT"
           test "$TAG" = "$GOT"
 
