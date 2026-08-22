@@ -1,0 +1,3 @@
+# the config-file form -- fills what the declaration leaves unset
+port: 8095          # the gesture declares none, so this wins
+workers: 2

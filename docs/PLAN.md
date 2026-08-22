@@ -49,37 +49,12 @@ accumulate unchallenged.
 
 ---
 
-## Phase 10 — The gesture
+## Phase 10 — The gesture ✅ (delivered 2026-08-22)
 
-**Vision:** *"a didactic simplification of the complex task of transforming any
-code, even a simple function, to a hosted service"* and *"yaml-like config and
-file formats."* The heart of the charter, and the cheapest phase on the board.
-
-**Deliverables.**
-- **`ringserv serve <file.ring>`** — a file containing plain functions, no
-  `RingServ([...])` at all, becomes a service: each public function an action,
-  parameters mapped from the payload by name, return value enveloped. The
-  existing declarative form stays the *precise* form; this is the *first-touch*
-  form, and `ringserv new` scaffolds start from it.
-- **The config-file form** — `ringserv.yaml` (a deliberately small yaml-like
-  subset we parse ourselves — mappings, sequences, scalars, comments; anchors
-  and the exotic rest of YAML are refused with a clear message, because
-  vendoring a full YAML parser for a config file breaks the dependency ethos
-  for nothing). Everything declarable in `RingServ([...])` is declarable here;
-  the Ring form wins on conflict and the collision is *reported*, never
-  silently resolved.
-- **The didactic doc** — "from a function to a service in ninety seconds",
-  gated like the guides are.
-
-**Gate.** A file of two bare functions serves both over `/api/v1` with zero
-declaration lines; the yaml form drives port/database/placement and round-trips
-against the Ring form (same app declared both ways answers identically); a
-config the subset refuses is refused *by name*; guide-gates hold the new doc to
-its promises.
-
-**Risk.** The function→action mapping must not become magic that lies —
-`check` must be able to explain exactly what got exposed and why, or the
-didactic gain is a debugging loss.
+Delivered the day the plan was adopted; the record is in
+[roadmap.md](roadmap.md). `ringserv serve`, `--explain`, `new --gesture`,
+`ringserv.yaml` with refusals by name, 41 gates. One scope note recorded in
+the change log below.
 
 ## Phase 11 — JS, honestly measured
 
@@ -249,5 +224,13 @@ reason; js-gates extended.
 
 *Reorderings and scope changes land here, one line each, newest first.*
 
+- 2026-08-22 — phase 10 delivered. One scoping against its own text: the
+  default `ringserv new` scaffold is unchanged (the page calling its own
+  services is the fullstack moment, worth keeping first); the gesture gets
+  `new --gesture` instead. And the yaml form covers configuration keys only
+  — code (`services:`, `data:`) is refused toward the application file,
+  because a function in a config file is a program pretending to be data.
+
+- 2026-08-22 — **adopted as-is by the author**; phase 10 started the same day.
 - 2026-08-22 — plan created; order proposed by the session, adoption and
   reordering the author's.

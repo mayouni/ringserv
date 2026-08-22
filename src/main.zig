@@ -101,6 +101,7 @@ const usage =
     \\  ringserv docs [--json]       the API catalog, from the declarations
     \\  ringserv topology [--emit]   the placement map; --emit writes zing.json
     \\  ringserv journal <verb>      list / verify / export the fiscal record
+    \\  ringserv serve <file.ring>   serve a file of plain functions, as-is
     \\  ringserv run <app.ring>      run for real (or run a plain program)
     \\  ringserv eval "<code>"       evaluate Ring code
     \\  ringserv where               versions and paths
@@ -164,7 +165,13 @@ pub fn main() !u8 {
     if (std.mem.eql(u8, cmd, "where")) return cli.where(arena);
 
     if (std.mem.eql(u8, cmd, "new")) {
-        return cli.new(arena, if (args.len > 2) args[2] else "");
+        var name: []const u8 = "";
+        var gesture = false;
+        for (args[2..]) |a| {
+            if (std.mem.eql(u8, a, "--gesture")) gesture = true else name = a;
+        }
+        if (gesture) return cli.newGesture(arena, name);
+        return cli.new(arena, name);
     }
 
     if (std.mem.eql(u8, cmd, "test")) {
@@ -224,12 +231,116 @@ pub fn main() !u8 {
         return 0;
     }
 
-    if (std.mem.eql(u8, cmd, "run") or std.mem.eql(u8, cmd, "eval")) {
+    if (std.mem.eql(u8, cmd, "run") or std.mem.eql(u8, cmd, "eval") or
+        std.mem.eql(u8, cmd, "serve"))
+    {
         if (args.len < 3) {
             std.debug.print("{s}", .{usage});
             return 2;
         }
-        const code: [:0]const u8 = if (std.mem.eql(u8, cmd, "run")) blk: {
+        var serve_code: ?[:0]const u8 = null;
+        // THE GESTURE (docs/PLAN.md phase 10): `serve file.ring` turns a
+        // file of plain functions into a service. The Zig side only
+        // composes — a trailer calling RsGestureBoot is prepended to the
+        // user's source (BEFORE it, because Ring executes top-level
+        // statements only until the first `func`), and everything else
+        // rides the ordinary run path below. The mapping itself lives in
+        // src/ringlib/gesture.ring, where --explain can print it.
+        if (std.mem.eql(u8, cmd, "serve")) {
+            var file: []const u8 = "";
+            var port: u32 = 0;
+            var explain = false;
+            var i: usize = 2;
+            while (i < args.len) : (i += 1) {
+                const a = args[i];
+                if (std.mem.eql(u8, a, "--explain")) {
+                    explain = true;
+                } else if (std.mem.eql(u8, a, "--port")) {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("ringserv serve: --port needs a number\n", .{});
+                        return 2;
+                    }
+                    port = std.fmt.parseInt(u32, args[i], 10) catch {
+                        std.debug.print("ringserv serve: --port needs a number, got {s}\n", .{args[i]});
+                        return 2;
+                    };
+                } else {
+                    file = a;
+                }
+            }
+            if (file.len == 0) {
+                std.debug.print("ringserv serve: which file? — ringserv serve <file.ring>\n", .{});
+                return 2;
+            }
+            const f = std.fs.cwd().openFile(file, .{}) catch |e| {
+                std.debug.print("ringserv: cannot open {s}: {s}\n", .{ file, @errorName(e) });
+                return 1;
+            };
+            const src = try f.readToEndAlloc(arena, 64 * 1024 * 1024);
+            f.close();
+            // A file that already declares a server has outgrown the
+            // gesture — refusing beats booting it twice.
+            if (std.mem.indexOf(u8, src, "RingServ(") != null) {
+                std.debug.print(
+                    "ringserv serve: {s} already declares RingServ([...]) — " ++
+                        "it is a full application; use `ringserv run {s}`\n",
+                    .{ file, file },
+                );
+                return 2;
+            }
+            // The service name is the file's base name — stated, and
+            // validated the same way service names always are.
+            const base = std.fs.path.stem(std.fs.path.basename(file));
+            var name_ok = base.len > 0 and (std.ascii.isAlphabetic(base[0]) or base[0] == '_');
+            for (base) |c| {
+                if (!(std.ascii.isAlphanumeric(c) or c == '_')) name_ok = false;
+            }
+            if (!name_ok) {
+                std.debug.print(
+                    "ringserv serve: the file name becomes the service name, and " ++
+                        "`{s}` is not a valid one (letters, digits, _ — starting " ++
+                        "with a letter). Rename the file, or declare the service " ++
+                        "with RingServ([...]).\n",
+                    .{base},
+                );
+                return 2;
+            }
+            // The path reaches Ring as a string literal: absolute, with
+            // forward slashes, and refused outright if it holds a quote.
+            const abs = std.fs.cwd().realpathAlloc(arena, file) catch file;
+            const abs_fwd = try arena.dupe(u8, abs);
+            for (abs_fwd) |*c| {
+                if (c.* == '\\') c.* = '/';
+            }
+            if (std.mem.indexOfScalar(u8, abs_fwd, '"') != null) {
+                std.debug.print("ringserv serve: a path containing a quote cannot be served\n", .{});
+                return 2;
+            }
+            bridge.setAppDir(std.fs.path.dirname(abs_fwd) orelse ".");
+            if (explain) {
+                bridge.rs_set_echo(1);
+                if (bridge.rs_init() != 0) {
+                    std.debug.print("ringserv: runtime init failed: {s}\n", .{bridge.rs_init_error()});
+                    return 1;
+                }
+                const one = try std.fmt.allocPrintSentinel(arena, "RsGestureExplain(\"{s}\", \"{s}\")", .{ abs_fwd, base }, 0);
+                if (bridge.rs_eval(one) != 0) {
+                    std.debug.print("ringserv: {s}\n", .{std.mem.span(bridge.rs_last_error())});
+                    return 1;
+                }
+                return 0;
+            }
+            const norm = try cli.normalizeZ(arena, src);
+            const composed = try std.fmt.allocPrintSentinel(
+                arena,
+                "RsGestureBoot(\"{s}\", \"{s}\", {d})\n{s}",
+                .{ abs_fwd, base, port, norm },
+                0,
+            );
+            serve_code = composed;
+        }
+        const code: [:0]const u8 = if (serve_code) |sc| sc else if (std.mem.eql(u8, cmd, "run")) blk: {
             const f = std.fs.cwd().openFile(args[2], .{}) catch |e| {
                 std.debug.print("ringserv: cannot open {s}: {s}\n", .{ args[2], @errorName(e) });
                 return 1;

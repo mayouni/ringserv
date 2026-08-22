@@ -318,6 +318,47 @@ worker agreement, the refusals, the tamper, and the command line. 19 suites now.
 
 **Phase 9 is delivered.**
 
+## Phase 10 — The gesture ✅ (delivered 2026-08-22, the plan's first phase)
+
+The charter's heart ([VISION.md](VISION.md)): *hosting anything is a
+dead-simple gesture, even a single function.* Full account in
+[gesture.md](gesture.md); the plan entry was [PLAN.md](PLAN.md) phase 10.
+
+**`ringserv serve file.ring`** — a file of plain functions serves as-is:
+service = file name, action = every top-level function (`_` prefix stays
+private), payload keys map to parameters BY NAME (case-insensitive,
+order-independent, a missing parameter refused as 422 naming every missing
+one at once), return value enveloped. The mapping is deliberately boring,
+and **`serve --explain` prints it** without serving — the phase's risk
+clause (magic that lies) discharged by making the tool state what it
+exposed. What serve refuses, it refuses with the reason: a file already
+declaring RingServ() (that is `run`'s job), an unserviceable file name, a
+file with no functions, more than 10 parameters. `new --gesture` scaffolds
+the first-touch pair; the full scaffold stays the default.
+
+**`ringserv.yaml`** — the config-file form, a deliberately small yaml-like
+subset parsed in ~150 lines of Ring (`src/ringlib/config.ring`), because
+vendoring a YAML engine for a config file breaks the dependency ethos for
+nothing. Mappings, scalars, comments, one nesting level; anchors, aliases,
+tags, flow style, block scalars, sequences, tabs and document markers are
+**refused by name with the line number**. Only `true`/`false` are booleans
+— `country: no` stays a string, which is the Norway problem defused by
+deciding (flag keys still read the yes/no family through RsBool). Two
+boundaries stated rather than discovered: **code is not configuration**
+(`services:` in yaml is refused toward the application file), and **the
+declaration wins** — `--port` > `RingServ([...])` > yaml, every collision
+printed at boot with both values.
+
+**Gate — passed:** 41 gates (`node tests/gesture-gates.js`), including:
+the two forms answering **byte-identically** (same service configured in
+Ring vs in yaml, envelopes compared as strings); the yaml-named database
+file existing where it said; every refused construct refused by name; and
+the doc's ninety-seconds example **extracted from its own fence in
+[gesture.md](gesture.md) and driven** — the page cannot rot silently.
+20 suites.
+
+**Phase 10 is delivered.**
+
 ## Standing risks (tracked, not hidden)
 
 - **VM concurrency** — the N-worker model is designed, not proven;

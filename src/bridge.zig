@@ -382,6 +382,10 @@ const jsserv_ring_src = @embedFile("ringlib/jsserv.ring");
 /// store beside Data(). Loaded after sync.ring, whose compaction must
 /// refuse it by name.
 const journal_ring_src = @embedFile("ringlib/journal.ring");
+
+const gesture_ring_src = @embedFile("ringlib/gesture.ring");
+
+const config_ring_src = @embedFile("ringlib/config.ring");
 /// actorlib — who is calling, and whether they may. Loaded after
 /// contract.ring, whose per-action spec it reads.
 const actor_ring_src = @embedFile("ringlib/actor.ring");
@@ -462,6 +466,8 @@ const ringlib_files = [_]RingLibFile{
     .{ .name = "jsserv.ring", .src = jsserv_ring_src, .provides = "rsjsdispatch" },
     .{ .name = "actor.ring", .src = actor_ring_src, .provides = "rsactorcheck" },
     .{ .name = "journal.ring", .src = journal_ring_src, .provides = "journalappend" },
+    .{ .name = "gesture.ring", .src = gesture_ring_src, .provides = "rsgesturecall" },
+    .{ .name = "config.ring", .src = config_ring_src, .provides = "rsconfigfold" },
     .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask", .testing_only = true },
 };
 

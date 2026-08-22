@@ -28,6 +28,58 @@ fn render(arena: std.mem.Allocator, template: []const u8, name: []const u8) ![]u
 
 // ------------------------------------------------------------------ new
 
+/// `new --gesture` — the first-touch scaffold: one file of plain
+/// functions and the yaml beside it, served as-is by `ringserv serve`.
+/// The full scaffold below stays the default: the page that calls its
+/// own services is the fullstack moment, and the gesture is for the
+/// moment BEFORE that one.
+pub fn newGesture(arena: std.mem.Allocator, name: []const u8) !u8 {
+    if (name.len == 0) {
+        std.debug.print("ringserv new: a name is required" ++ .{10}, .{});
+        return 2;
+    }
+    for (name) |ch| {
+        if (!std.ascii.isAlphanumeric(ch) and ch != '_') {
+            std.debug.print("ringserv new --gesture: '{s}' becomes the service name, so letters, digits and _ only" ++ .{10}, .{name});
+            return 2;
+        }
+    }
+    if (std.fs.cwd().access(name, .{})) |_| {
+        std.debug.print("ringserv new: '{s}' already exists" ++ .{10}, .{name});
+        return 1;
+    } else |_| {}
+    var dir = try std.fs.cwd().makeOpenPath(name, .{});
+    defer dir.close();
+    const app = try std.fmt.allocPrint(arena, tpl_gesture, .{name});
+    const file = try std.fmt.allocPrint(arena, "{s}.ring", .{name});
+    try dir.writeFile(.{ .sub_path = file, .data = app });
+    try dir.writeFile(.{ .sub_path = "ringserv.yaml", .data = tpl_gesture_yaml });
+    std.debug.print(
+        "Created {s}/" ++ .{10} ++
+            "  {s}.ring        plain functions - each one is already an action" ++ .{10} ++
+            "  ringserv.yaml   port and workers, outside the code" ++ .{10} ++ .{10} ++
+            "Serve it:   ringserv serve {s}/{s}.ring" ++ .{10} ++
+            "See the mapping first:   ringserv serve --explain {s}/{s}.ring" ++ .{10},
+        .{ name, name, name, name, name, name },
+    );
+    return 0;
+}
+
+const tpl_gesture =
+    "# {s}.ring - plain functions. No declarations: `ringserv serve` exposes" ++ .{10} ++
+    "# every top-level function as an action (names starting with _ stay" ++ .{10} ++
+    "# private), mapping payload keys to parameters by name." ++ .{10} ++ .{10} ++
+    "func hello name" ++ .{10} ++
+    .{9} ++ "return \"Hello, \" + name + \"!\"" ++ .{10} ++ .{10} ++
+    "func add a, b" ++ .{10} ++
+    .{9} ++ "return a + b" ++ .{10};
+
+const tpl_gesture_yaml =
+    "# ringserv.yaml - configuration, outside the code. The declaration" ++ .{10} ++
+    "# (or --port) wins over this file, and collisions are reported." ++ .{10} ++
+    "port: 8080" ++ .{10} ++
+    "workers: 2" ++ .{10};
+
 pub fn new(arena: std.mem.Allocator, name: []const u8) !u8 {
     if (name.len == 0) {
         std.debug.print("ringserv new: a name is required\n", .{});

@@ -15,6 +15,9 @@ lRsServDeclared = 0
 func RingServ aDecl
 	aRsServDecl = aDecl
 	lRsServDeclared = 1
+	# ringserv.yaml fills what the declaration left unset; collisions are
+	# reported and the declaration wins. See src/ringlib/config.ring.
+	RsConfigFold()
 
 func Reply pCode, pData
 	return ReplyMsg(pCode, "", pData)

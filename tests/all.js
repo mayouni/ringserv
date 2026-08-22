@@ -44,6 +44,7 @@ const suites = [
     { name: "the guides        ", node: "guide-gates.js" },
     { name: "ringlib namespace ", node: "ringlibns-gates.js" },
     { name: "journal           ", node: "journal-gates.js" },
+    { name: "gesture + config  ", node: "gesture-gates.js" },
 ];
 
 if (full) {
