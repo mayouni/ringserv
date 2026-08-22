@@ -100,6 +100,52 @@ Pionia's `api:docs` proves: single-endpoint APIs are *more*
 documentable than REST, because the catalog is a data structure, not
 a URL archaeology.
 
+### `ringserv journal <verb>` ✅
+
+The fiscal record, from a shell. `Journal()` (docs/COMMONS.md §1) makes a
+record the law may require to be **inalterable**; `RsJournalService()`
+answers questions about it over HTTP. This is the same answer when **no
+client is attached** -- which is the case the design was written for: the
+box is in a drawer, an inspector is standing there, and the question is
+whether the chain holds.
+
+```
+ringserv journal list   [app.ring]   the journals this app declares
+ringserv journal verify [app.ring]   INTACTE or ROMPUE, and where
+ringserv journal export [app.ring]   JSONL, one event per line
+
+  --journal <name>   which journal (required when the app declares > 1)
+  --db <path>        read this database instead of the declared one
+  --out <file>       write here instead of stdout (export)
+  --json             machine-readable verdict (verify)
+```
+
+**`verify` exits 1 on ROMPUE.** A verification command that always exits 0
+is one no cron job can use, and this is exactly the check that belongs in a
+cron job. It names the database it read on every run, because an export
+whose provenance is implicit is an export nobody can hand to an auditor.
+
+Three properties that are decisions rather than details:
+
+- **It opens the application's own database.** `check`, `docs` and
+  `topology` evaluate an app against `:memory:` because they read
+  *declarations*. This reads *records*, so it must look at the same file
+  the server writes.
+- **It never creates the journal table.** Pointed at the wrong path, a
+  command that creates what it cannot find would report an *empty record*
+  where it should report a *missing* one. A missing table is printed as the
+  fact it is -- and the message says outright that SQLite creates an absent
+  file on open, so an empty one is not evidence anything was lost.
+- **It decides nothing about which journal is meant.** That rule lives in
+  Ring (`__rs_journal_cli`), beside the identical rule the HTTP service
+  uses. A second copy in Zig would be a second answer, and the two would
+  drift on the first application that declares three journals.
+
+`export` is the germ's own interchange format, so a journal moves between a
+Commons and a RingServ without translation: the table is the durable form,
+the JSONL is the ambassador.
+
+
 ### `ringserv build`
 
 Not yet built. Deployment today is already small — copy the binary

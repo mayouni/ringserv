@@ -8,6 +8,7 @@ const serve = @import("serve.zig");
 const cli = @import("cli.zig");
 const check = @import("check.zig");
 const topology_cmd = @import("topology.zig");
+const journal_cmd = @import("journal.zig");
 const js = bridge.js;
 
 extern fn fflush(stream: ?*anyopaque) c_int;
@@ -99,6 +100,7 @@ const usage =
     \\  ringserv check [app.ring]    syntax + contract agreement, before running
     \\  ringserv docs [--json]       the API catalog, from the declarations
     \\  ringserv topology [--emit]   the placement map; --emit writes zing.json
+    \\  ringserv journal <verb>      list / verify / export the fiscal record
     \\  ringserv run <app.ring>      run for real (or run a plain program)
     \\  ringserv eval "<code>"       evaluate Ring code
     \\  ringserv where               versions and paths
@@ -194,6 +196,14 @@ pub fn main() !u8 {
             } else app = a;
         }
         return topology_cmd.topology(arena, app, do_emit, as_json);
+    }
+
+    // The journal has its own verbs, so its arguments are passed through
+    // whole rather than pre-parsed here: `list`, `verify` and `export` do
+    // not take the same flags, and a dispatcher that flattens them would
+    // have to know which flag belongs to which verb.
+    if (std.mem.eql(u8, cmd, "journal")) {
+        return journal_cmd.journal(arena, args[2..]);
     }
 
     if (std.mem.eql(u8, cmd, "docs")) {

@@ -25,7 +25,7 @@
 **
 **   node tests/journal-gates.js
 */
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -171,6 +171,77 @@ async function stop() {
     check("...and the chain is still INTACTE",
         v.chain === "INTACTE" && v.events === WHO.length + 1, JSON.stringify(v));
 
+    // ================================= 5b. the same answers, from a shell
+    // The ambassador docs/COMMONS.md §1 named and phase 9 owed. `Journal()`
+    // made the record durable and `RsJournalService()` made it answerable
+    // over HTTP; these gates are the case the design was actually written
+    // for -- the box in a drawer, nothing connected, and an inspector
+    // asking whether the chain holds. They run the REAL binary against the
+    // REAL file, because an in-process check would prove the function and
+    // not the command.
+    await stop();
+    const cliEnv = { ...process.env, RINGSERV_TEST_DB: DB };
+    const cli = (...a) => spawnSync(RINGSERV, ["journal", ...a],
+        { encoding: "utf8", env: cliEnv });
+    const jsonl = t => t.split("\n").map(s => s.trim()).filter(s => s.length > 0);
+
+    let c = cli("list", FIXTURE);
+    check("journal list names the declared journal",
+        c.status === 0 && c.stdout.trim() === "ventes", c.stdout + c.stderr);
+
+    c = cli("verify", FIXTURE);
+    check("journal verify answers INTACTE with no server running",
+        c.status === 0 && c.stdout.includes("INTACTE"), c.stdout + c.stderr);
+    check("...counting every event, not this shell's share",
+        c.stdout.includes(String(WHO.length + 1)), c.stdout);
+    check("...and naming the database it read, which an auditor needs first",
+        c.stdout.includes(path.basename(DB)), c.stdout);
+
+    c = cli("verify", FIXTURE, "--json");
+    check("verify --json answers the service's own envelope",
+        c.status === 0 && JSON.parse(c.stdout).chain === "INTACTE", c.stdout + c.stderr);
+
+    c = cli("export", FIXTURE);
+    const cliLines = jsonl(c.stdout);
+    check("journal export writes one JSON object per record",
+        c.status === 0 && cliLines.length === WHO.length + 1 &&
+        cliLines.every(l => JSON.parse(l).type), c.stdout + c.stderr);
+    // The CLI and the service must not be two exports. `exported` was read
+    // over HTTP in section 4, one record ago; the tail is compared so the
+    // one append since then does not make an agreement look like a
+    // disagreement.
+    check("...identical to what the service exports, line for line",
+        cliLines.slice(0, WHO.length).join("|") === jsonl(exported).join("|"),
+        cliLines.slice(0, WHO.length).join("|"));
+
+    const outFile = path.join(tmp, "export.jsonl");
+    c = cli("export", FIXTURE, "--out", outFile);
+    check("export --out writes the file and reports what it wrote",
+        c.status === 0 && fs.existsSync(outFile) &&
+        jsonl(fs.readFileSync(outFile, "utf8")).length === WHO.length + 1,
+        c.stdout + c.stderr);
+
+    // Three ways to be wrong, and each has to fail LOUDLY. A command that
+    // prints an empty export when it cannot find the record is worse than
+    // one that prints nothing: it answers the auditor's question with the
+    // wrong answer.
+    c = cli("verify", FIXTURE, "--journal", "achats");
+    check("an undeclared journal is refused, and the real ones are named",
+        c.status !== 0 && c.stdout.includes("achats") && c.stdout.includes("ventes"),
+        c.stdout + c.stderr);
+
+    c = cli("frobnicate", FIXTURE);
+    check("an unknown verb is refused with the usage",
+        c.status === 2 && c.stdout.includes("ringserv journal"), c.stdout + c.stderr);
+
+    c = cli("export", FIXTURE, "--db", path.join(tmp, "nothing-here.db"));
+    check("a database with no journal table reports the fact, not an empty export",
+        c.status !== 0 && c.stdout.includes("no such table") &&
+        !c.stdout.includes('"type"'), c.stdout + c.stderr);
+    check("...and says the empty file is not evidence the record was lost",
+        c.stdout.includes("proves nothing was lost"), c.stdout);
+
+
     // ===================================== 6. tampering is detected, and located
     await stop();
     // Edited through SQLite directly — which is exactly the threat model:
@@ -209,6 +280,16 @@ async function stop() {
     check("...having counted the intact prefix", v.events === target, JSON.stringify(v));
 
     await stop();
+
+    // The same command over the tampered file. A verification tool that
+    // cannot fail is decoration, and the exit code is the whole of what a
+    // cron job reads.
+    c = cli("verify", FIXTURE);
+    check("journal verify reports ROMPUE from the command line",
+        c.status === 1 && c.stdout.includes("ROMPUE"), c.stdout + c.stderr);
+    check("...naming the record where the chain broke",
+        c.stdout.includes("seq " + target), c.stdout);
+
     console.log(`\n${passed} passed, ${failed} failed`);
     process.exit(failed ? 1 : 0);
 })().catch(async e => {

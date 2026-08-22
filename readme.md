@@ -108,6 +108,7 @@ ringserv run app.ring    # run a server program directly
 ringserv check           # static analysis: contracts, types, dead actions
 ringserv test            # run the app's tests against a scratch server
 ringserv docs            # generate the API catalog from the contracts
+ringserv journal verify  # is the fiscal record still whole? exits 1 if not
 ringserv build           # produce the single deployable binary
 ```
 

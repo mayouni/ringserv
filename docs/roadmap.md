@@ -294,8 +294,22 @@ record would be worse than no endpoint.
 `JournalExport` emits the germ's own line-per-record JSON, so a journal
 moves between the two without translation.
 
-28 gates own it (`tests/journal-gates.js`), covering the chain, the restart,
-worker agreement, the refusals, and the tamper. 19 suites now.
+**And it is reachable with nothing connected.** `ringserv journal
+list | verify | export` (`src/journal.zig`) is the ambassador COMMONS.md §1
+named: the box in a drawer, an inspector standing there, and no client
+attached. It opens the application's **own** database rather than the
+scratch `:memory:` that `check`, `docs` and `topology` use, because it reads
+records and not declarations -- and it names that file on every run, since
+an export whose provenance is implicit is one nobody can hand to an
+auditor. `verify` **exits 1 on ROMPUE**, so it can be a cron job rather than
+a ritual. It **never creates the journal table**: pointed at the wrong path
+it reports a MISSING record rather than an empty one, and says so, because
+SQLite creating an absent file is not evidence that anything was lost.
+Which journal a request means is decided in Ring, beside the identical rule
+the HTTP service uses -- a second copy in Zig would be a second answer.
+
+42 gates own it (`tests/journal-gates.js`), covering the chain, the restart,
+worker agreement, the refusals, the tamper, and the command line. 19 suites now.
 
 **Phase 9 is delivered.**
 

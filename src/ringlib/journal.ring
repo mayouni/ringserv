@@ -392,3 +392,71 @@ func RsJournalService cName
 			return Reply(:ok, [ :records = JournalRead(cJ, nFrom, nLimit) ])
 		}
 	]
+
+# ------------------------------------------- the command-line ambassador
+#
+# `ringserv journal list | verify | export` reaches the journal through
+# THIS one entry point rather than calling JournalExport/JournalVerify
+# across the bridge one by one. Two reasons, and neither is tidiness:
+#
+#   rs_call is JSON in, JSON out -- so a single list-in/list-out surface
+#   is the only shape whose argument survives the trip unambiguously,
+#   whatever a journal is named.
+#
+#   WHICH JOURNAL A REQUEST MEANS is a rule, not a lookup: named, or the
+#   only one declared, or a refusal. RsJournalService already answers it
+#   for HTTP callers; a second copy in Zig would be a second answer, and
+#   the two would drift on the first application that declares three.
+#
+# THE TABLE IS NEVER CREATED HERE. A command that reads a record the law
+# requires to be inalterable must not be able to manufacture an empty one
+# by being pointed at the wrong file -- so a missing table is reported as
+# the fact it is, and the caller decides what that means.
+func __rs_journal_cli aArgs
+	cOp   = ""
+	cName = ""
+	if islist(aArgs)
+		cOp   = "" + RsDeclGet(aArgs, "op", "")
+		cName = "" + RsDeclGet(aArgs, "journal", "")
+	ok
+	aNames = RsJournalNames()
+
+	if cOp = "list"
+		return [ :ok = 1, :error = "", :names = aNames ]
+	ok
+
+	if cName = ""
+		if len(aNames) = 0
+			return [ :ok = 0, :names = aNames,
+				 :error = "this application declares no journal" ]
+		but len(aNames) > 1
+			return [ :ok = 0, :names = aNames,
+				 :error = "name the journal with --journal: this application " +
+					  "declares more than one" ]
+		ok
+		cName = aNames[1]
+	ok
+
+	if not islist(RsJournalDecl(cName))
+		return [ :ok = 0, :names = aNames,
+			 :error = "no journal named `" + cName + "` in this application" ]
+	ok
+
+	aRes = []
+	try
+		if cOp = "export"
+			aRes = [ :ok = 1, :error = "", :journal = cName,
+				 :text = JournalExport(cName) ]
+		but cOp = "verify"
+			aV = JournalVerify(cName)
+			aRes = [ :ok = 1, :error = "", :journal = cName,
+				 :events = aV[:events], :chain = aV[:chain],
+				 :at = aV[:at], :why = aV[:why] ]
+		else
+			aRes = [ :ok = 0, :names = aNames,
+				 :error = "unknown operation `" + cOp + "`" ]
+		ok
+	catch
+		aRes = [ :ok = 0, :names = aNames, :error = cCatchError ]
+	done
+	return aRes

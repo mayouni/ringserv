@@ -59,7 +59,7 @@ contradicts the tree.
 
 ## 1. The journaled store — `Journal()`, a first-class primitive
 
-> **BUILT, 2026-08-22** — `src/ringlib/journal.ring`, 28 gates in
+> **BUILT, 2026-08-22** — `src/ringlib/journal.ring`, 42 gates in
 > `tests/journal-gates.js`, written up as phase 9 in
 > [roadmap.md](roadmap.md). Two divergences from the design below, both
 > deliberate:
@@ -72,9 +72,17 @@ contradicts the tree.
 >   was enough. It is not, under N workers — see phase 9. The design was
 >   written from a single-process germ and this is what it could not see.
 >
-> Still owed: `ringserv journal export` as a **CLI** subcommand. The
-> function `JournalExport()` exists and the gates use it; the command-line
-> ambassador named below does not exist yet.
+> **The CLI ambassador is built too, 2026-08-22** -- `ringserv journal
+> list | verify | export` (`src/journal.zig`, `__rs_journal_cli` in
+> `src/ringlib/journal.ring`, 14 further gates). Two things it does that
+> this section did not ask for, and both for the same reason -- the command
+> exists for the case where nobody is watching:
+>
+> - **`verify` exits 1 on ROMPUE**, so it can be a cron job rather than
+>   something a person remembers to read.
+> - **It refuses to create the journal table.** Pointed at the wrong file
+>   it reports a MISSING record rather than an empty one, and says that
+>   SQLite creating an absent file is not evidence anything was lost.
 
 ### What it is, and what it is not
 
