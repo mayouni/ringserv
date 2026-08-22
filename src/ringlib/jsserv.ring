@@ -105,12 +105,36 @@ func RsJsDispatch cService, cFile, aReq
 	ok
 	cOut = __js_call(cService, cAction, JsonEncode(RsDeclGet(aReq, "payload", [])))
 	cOut = RsJsTrampoline(cService, cAction, cOut)
+
+	# Validate by decoding, then RETURN THE GUEST'S OWN TEXT.
+	#
+	# The decode still happens, because a service that answered something
+	# that is not JSON must fail here rather than at the socket. But its
+	# result is thrown away: Ring has no boolean and no null, so a reply
+	# of { ok: false, error: null } decoded into Ring and re-encoded came
+	# back out as { ok: 0, error: "" }. The reference application found it
+	# the first time a receipt called an unpaid ticket `paid: 0`.
+	#
+	# So the text the guest produced is carried through verbatim (the
+	# __rs_raw_json__ sentinel, honoured by the encoder in src/rs_json.c).
+	# Lossless by construction, and one encode cheaper than before.
 	try
 		pReply = JsonDecode(cOut)
 	catch
 		raise("service `" + cService + "." + cAction +
 		      "` returned something that is not JSON")
 	done
+	if not islist(pReply)
+		raise("service `" + cService + "." + cAction +
+		      "` must answer an object, not a bare value")
+	ok
+	# Verbatim ONLY when this reply is the whole wire response. A Ring
+	# caller -- another service, or `ringserv test` -- reads the reply as
+	# a list and must keep getting one; it pays the round trip, and the
+	# limitation is named in docs/JS.md rather than hidden.
+	if lRsOnWire = 1 and nRsDispatchDepth = 1
+		return [ "__rs_raw_json__", cOut ]
+	ok
 	return pReply
 
 # The trampoline: RING stays the outer loop.

@@ -143,6 +143,25 @@ reason placement exists.
   `SubtleCrypto` is worse than an absent one.
 - **Memory and stack limits are the server's**, not the application's:
   128 MB and 4 MB. Hitting one is an ordinary trapped error.
+- **`Intl` is a named subset, not ICU.** Real `Intl` is ~30 MB of locale
+  data — more than this entire binary, and the front page promises one
+  file. So `Intl.NumberFormat` ships for the locales `en-US, en-GB,
+  fr-FR, de-DE, es-ES, it-IT, pt-BR, ar-TN` and the currencies `EUR, USD,
+  GBP, JPY, CHF, CAD, AUD, TND, MAD`, with `decimal`, `currency` and
+  `percent` styles; `Number.prototype.toLocaleString` routes through the
+  same code so the two cannot disagree. **Anything else throws a
+  `RangeError` naming the limit** — `Intl.DateTimeFormat`, an unlisted
+  locale, `formatToParts`. A formatter that quietly gets fr-FR's
+  separators wrong is worse than one that says it cannot.
+- **Ring has no boolean and no null, and that used to leak.** A reply of
+  `{ ok: false, error: null }` was decoded into Ring and re-encoded, and
+  arrived as `{ ok: 0, error: "" }`. **At the wire it no longer is**: the
+  guest's own JSON text is carried through verbatim, so a JS service's
+  `false`, `true` and `null` reach the client exactly as written. The
+  round trip remains — and with it the loss — when a **Ring** caller
+  reads the reply, because a Ring caller genuinely gets a Ring list:
+  `serv.call` from another service, and `ringserv test`. Return `0`/`1`
+  if a Ring service is going to inspect the value.
 
 ## Gates
 

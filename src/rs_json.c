@@ -203,9 +203,41 @@ static void rs_je_listitem(RsJBuf *pBuf, List *pList, unsigned int i, int *pnDec
 	}
 }
 
+/* Is this the raw-JSON envelope: exactly [ "__rs_raw_json__", "<text>" ]?
+ *
+ * WHY THIS EXISTS. Ring has no boolean and no null. A JavaScript service
+ * that returns { ok: false, error: null } was decoded into Ring and then
+ * re-encoded, and came out as { ok: 0, error: "" } -- found by the
+ * reference application (examples/comptoir) the first time a receipt
+ * reported an unpaid ticket as paid: 0 instead of false.
+ *
+ * The fix is not to teach Ring booleans. It is to STOP ROUND-TRIPPING:
+ * the guest already produced valid JSON, so that text is carried through
+ * verbatim and emitted as-is. Lossless by construction, and cheaper than
+ * the decode it replaces.
+ *
+ * The sentinel is a two-element list whose first element is a string no
+ * application would write by accident; anything else encodes normally. */
+static int rs_je_israw(List *pList) {
+	const char *cKey;
+	if (ring_list_getsize(pList) != 2) {
+		return 0;
+	}
+	if (!ring_list_isstring(pList, 1) || !ring_list_isstring(pList, 2)) {
+		return 0;
+	}
+	cKey = ring_list_getstring(pList, 1);
+	return strcmp(cKey, "__rs_raw_json__") == 0;
+}
+
 static void rs_je_list(RsJBuf *pBuf, List *pList, int *pnDec) {
 	unsigned int i, nSize;
 	List *pPair;
+	if (rs_je_israw(pList)) {
+		rs_jbuf_put(pBuf, ring_list_getstring(pList, 2),
+			    ring_list_getstringsize(pList, 2));
+		return;
+	}
 	nSize = ring_list_getsize(pList);
 	if (rs_je_ispairlist(pList)) {
 		rs_jbuf_putc(pBuf, '{');

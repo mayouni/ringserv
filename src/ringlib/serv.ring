@@ -12,6 +12,17 @@ lRsServDeclared = 0
 
 # ------------------------------------------------------------ the seam
 
+# Is this dispatch answering THE WIRE, and how deep is it?
+#
+# Both exist for one narrow purpose: a JavaScript reply can be carried to
+# the socket verbatim (lossless booleans and null -- see jsserv.ring), but
+# ONLY when that reply is the whole response. A Ring service that calls a
+# JS service inspects the result as a Ring list, and `ringserv test` does
+# too, so those paths must still get a decoded list. The flag says "a
+# socket is waiting"; the depth says "and nothing is wrapping me".
+lRsOnWire = 0
+nRsDispatchDepth = 0
+
 func RingServ aDecl
 	aRsServDecl = aDecl
 	lRsServDeclared = 1
@@ -60,9 +71,21 @@ func __dispatch_raw cBody
 	catch
 		return RsRefuse(400, "malformed request: body is not valid JSON")
 	done
-	return __dispatch(aReq)
+	# THE WIRE ENTRY, and the only one. Everything else that reaches
+	# __dispatch -- a Ring service calling another, `ringserv test` -- is
+	# a Ring caller that will read the reply as a list.
+	lRsOnWire = 1
+	pOut = __dispatch(aReq)
+	lRsOnWire = 0
+	return pOut
 
 func __dispatch aReq
+	nRsDispatchDepth++
+	pRsOut = __dispatch_inner(aReq)
+	nRsDispatchDepth--
+	return pRsOut
+
+func __dispatch_inner aReq
 	if not islist(aReq)
 		return RsRefuse(400, "malformed request: body must be a JSON object")
 	ok
@@ -221,10 +244,37 @@ func RsStaticRoutes
 		# [key, value] pairs as an OBJECT, so [ "/", "public/" ] would
 		# reach the Zig side as {"/": "public/"} instead of a route.
 		if isstring(aRoute[2]) and isstring(aRoute[3])
-			add(aOut, [ :prefix = aRoute[2], :dir = aRoute[3] ])
+			add(aOut, [ :prefix = aRoute[2], :dir = RsStaticDir(aRoute[3]) ])
 		ok
 	next
 	return aOut
+
+# A declared static directory, resolved AGAINST THE APPLICATION.
+#
+# `:js` paths already resolve this way, and static files must agree with
+# them: an application that works as `ringserv run app.ring` has to work
+# as `ringserv run /elsewhere/app.ring` too. Before this, `public/` was
+# joined to the PROCESS WORKING DIRECTORY, so running the reference
+# application from the repository root served 404 for its own page while
+# its JS service loaded fine -- two path rules in one declaration, which
+# is one more than any application should have to know about.
+func RsStaticDir cDir
+	if not isstring(cDir) or cDir = ""
+		return cDir
+	ok
+	# Already absolute: a leading separator, or a drive letter.
+	c1 = left(cDir, 1)
+	if c1 = "/" or c1 = (char(92))
+		return cDir
+	ok
+	if len(cDir) >= 2 and substr(cDir, 2, 1) = ":"
+		return cDir
+	ok
+	cRoot = __rs_approot()
+	if cRoot = "" or cRoot = "."
+		return cDir
+	ok
+	return cRoot + "/" + cDir
 
 # The Zig core calls this in every worker after the app is evaluated:
 # a worker's own connection must see the schema too, and CREATE TABLE

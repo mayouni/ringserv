@@ -394,11 +394,142 @@
         },
     };
 
+    // ------------------------------------------------------------- Intl
+    //
+    // A DELIBERATE SUBSET, and the reason is the same one that keeps the
+    // yaml parser small: real Intl is ICU, and ICU is ~30 MB of locale
+    // data. Vendoring it to format prices would cost more than the whole
+    // rest of this binary and break the promise on the front page.
+    //
+    // But "no Intl" is not an answer either. The reference application
+    // (examples/comptoir) reached for `Intl.NumberFormat` on its FIRST
+    // line of money handling, which is exactly what a JS programmer does
+    // — so the common case is served, and everything else is REFUSED BY
+    // NAME rather than formatted wrongly. A number formatter that quietly
+    // gets fr-FR's separators wrong is worse than one that says it cannot.
+    const INTL_LOCALES = {
+        "en-US": { group: ",", decimal: ".", before: true,  nbsp: "" },
+        "en-GB": { group: ",", decimal: ".", before: true,  nbsp: "" },
+        "fr-FR": { group: " ", decimal: ",", before: false, nbsp: " " },
+        "de-DE": { group: ".", decimal: ",", before: false, nbsp: " " },
+        "es-ES": { group: ".", decimal: ",", before: false, nbsp: " " },
+        "it-IT": { group: ".", decimal: ",", before: false, nbsp: " " },
+        "pt-BR": { group: ".", decimal: ",", before: true,  nbsp: " " },
+        "ar-TN": { group: ",", decimal: ".", before: false, nbsp: " " },
+    };
+    const INTL_CURRENCIES = {
+        EUR: "€", USD: "$", GBP: "£", JPY: "¥",
+        CHF: "CHF", CAD: "CA$", AUD: "A$", TND: "DT", MAD: "MAD",
+    };
+    const INTL_DEFAULT = "en-US";
+
+    function intlRefuse(what, detail) {
+        throw new RangeError(
+            "Intl." + what + ": " + detail + " is not in RingServ's Intl subset. " +
+            "RingServ ships no ICU (it would be larger than the whole binary), so " +
+            "it supports " + Object.keys(INTL_LOCALES).join(", ") + " and the " +
+            "currencies " + Object.keys(INTL_CURRENCIES).join(", ") + ". " +
+            "For anything else, format on the client or pass the formatted " +
+            "string in — see docs/JS.md.");
+    }
+
+    class NumberFormat {
+        constructor(locales, options) {
+            const opts = options || {};
+            let tag = INTL_DEFAULT;
+            if (locales !== undefined) {
+                const wanted = Array.isArray(locales) ? locales : [locales];
+                const found = wanted.map(String).find(l => INTL_LOCALES[l]);
+                if (!found) intlRefuse("NumberFormat", "locale " + wanted.join("/"));
+                tag = found;
+            }
+            this._t = tag;
+            this._l = INTL_LOCALES[tag];
+            this._style = opts.style || "decimal";
+            if (["decimal", "currency", "percent"].indexOf(this._style) < 0) {
+                intlRefuse("NumberFormat", "style " + this._style);
+            }
+            this._cur = opts.currency;
+            if (this._style === "currency") {
+                if (!this._cur) intlRefuse("NumberFormat", "style currency with no currency");
+                this._cur = String(this._cur).toUpperCase();
+                if (!INTL_CURRENCIES[this._cur]) {
+                    intlRefuse("NumberFormat", "currency " + this._cur);
+                }
+            }
+            const dflt = this._style === "currency" ? 2 : (this._style === "percent" ? 0 : 0);
+            this._min = opts.minimumFractionDigits !== undefined
+                ? opts.minimumFractionDigits : dflt;
+            this._max = opts.maximumFractionDigits !== undefined
+                ? opts.maximumFractionDigits : Math.max(this._min, this._style === "decimal" ? 3 : dflt);
+            this._grouping = opts.useGrouping !== false;
+        }
+
+        resolvedOptions() {
+            return {
+                locale: this._t, style: this._style, currency: this._cur,
+                minimumFractionDigits: this._min, maximumFractionDigits: this._max,
+                useGrouping: this._grouping,
+            };
+        }
+
+        format(value) {
+            let n = Number(value);
+            if (!isFinite(n)) return String(n);
+            if (this._style === "percent") n *= 100;
+            const neg = n < 0 || Object.is(n, -0);
+            n = Math.abs(n);
+
+            let s = n.toFixed(this._max);
+            if (this._max > this._min) s = s.replace(/0+$/, "").replace(/\.$/, "");
+            let [int, frac = ""] = s.split(".");
+            while (frac.length < this._min) frac += "0";
+            if (this._grouping && int.length > 3) {
+                int = int.replace(/\B(?=(\d{3})+(?!\d))/g, this._l.group);
+            }
+            let out = frac ? int + this._l.decimal + frac : int;
+            if (this._style === "currency") {
+                const sym = INTL_CURRENCIES[this._cur];
+                out = this._l.before ? sym + out : out + this._l.nbsp + sym;
+            } else if (this._style === "percent") {
+                out = this._l.before ? out + "%" : out + this._l.nbsp + "%";
+            }
+            return neg ? "-" + out : out;
+        }
+
+        formatToParts() {
+            intlRefuse("NumberFormat", "formatToParts");
+        }
+    }
+
+    // Everything else under Intl is absent AND SAYS SO. A missing global
+    // gives "Intl.DateTimeFormat is not a constructor"; this gives the
+    // reason and the way forward.
+    const Intl = {
+        NumberFormat,
+        getCanonicalLocales(l) {
+            const w = l === undefined ? [] : (Array.isArray(l) ? l : [l]);
+            return w.map(String).filter(x => INTL_LOCALES[x]);
+        },
+    };
+    for (const missing of ["DateTimeFormat", "Collator", "RelativeTimeFormat",
+                           "ListFormat", "PluralRules", "Segmenter", "DisplayNames"]) {
+        Object.defineProperty(Intl, missing, {
+            get() { intlRefuse(missing, missing); },
+            enumerable: false, configurable: true,
+        });
+    }
+    // Number.prototype.toLocaleString routes through the same subset, so
+    // the two agree instead of disagreeing.
+    Number.prototype.toLocaleString = function (locales, options) {
+        return new NumberFormat(locales, options).format(this);
+    };
+
     // ------------------------------------------------------------ install
     const surface = {
         TextEncoder, TextDecoder, URL, URLSearchParams,
         Event, EventTarget, AbortController, AbortSignal,
-        Headers, Request, Response, crypto, performance, serv,
+        Headers, Request, Response, crypto, performance, serv, Intl,
     };
     for (const k of Object.keys(surface)) {
         Object.defineProperty(g, k, {

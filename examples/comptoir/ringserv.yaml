@@ -1,0 +1,6 @@
+# Configuration, outside the code (docs/gesture.md).
+#
+# The declaration in app.ring wins every collision and the collision is
+# printed at boot — this file fills what the code left unset, so the same
+# application runs on the counter, on a laptop and in CI with no edit.
+workers: 2

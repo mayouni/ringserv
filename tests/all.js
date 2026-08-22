@@ -46,6 +46,7 @@ const suites = [
     { name: "journal           ", node: "journal-gates.js" },
     { name: "gesture + config  ", node: "gesture-gates.js" },
     { name: "the panel         ", node: "panel-gates.js" },
+    { name: "comptoir (broad)  ", node: "comptoir-gates.js" },
 ];
 
 if (full) {

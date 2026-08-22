@@ -1,0 +1,194 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Comptoir</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ink:#1c1a17; --dim:#6c6259; --line:#e6ded2; --bg:#faf7f2;
+    --card:#fff; --accent:#8a5a2b; --ok:#2f7d4f; --warn:#b4762a;
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#f0eae2; --dim:#a99e92; --line:#3a342d; --bg:#17150f;
+            --card:#201d17; --accent:#d9a066; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--font);
+         line-height:1.5; }
+  header { padding:18px 20px; border-bottom:1px solid var(--line);
+           display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:19px; margin:0; letter-spacing:-0.01em; }
+  h1 span { color:var(--dim); font-weight:400; }
+  .grow { flex:1; }
+  .stat { font-size:13px; color:var(--dim); }
+  main { max-width:1000px; margin:0 auto; padding:20px;
+         display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px;
+            padding:16px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+       color:var(--dim); margin:0 0 12px; font-weight:600; }
+  button { font:inherit; font-size:13px; padding:7px 13px; border-radius:8px;
+           border:1px solid var(--line); background:var(--card); color:var(--ink);
+           cursor:pointer; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.primary:hover { filter:brightness(1.08); color:#fff; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .item { display:flex; justify-content:space-between; align-items:center;
+          padding:8px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .item:last-child { border-bottom:0; }
+  .muted { color:var(--dim); font-size:12.5px; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:99px; border:1px solid var(--line);
+         color:var(--dim); }
+  .tag.recue { color:var(--warn); border-color:var(--warn); }
+  .tag.en_cuisine { color:var(--accent); border-color:var(--accent); }
+  .tag.prete { color:var(--ok); border-color:var(--ok); }
+  pre { font-family:var(--mono); font-size:12px; background:var(--bg);
+        border:1px solid var(--line); border-radius:8px; padding:12px;
+        overflow-x:auto; margin:0; white-space:pre; }
+  input { font:inherit; font-size:13px; padding:7px 10px; border-radius:8px;
+          border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  footer { text-align:center; color:var(--dim); font-size:12px; padding:22px; }
+  code { font-family:var(--mono); font-size:12px; color:var(--accent); }
+</style>
+
+<header>
+  <h1>Comptoir <span>· the reference application</span></h1>
+  <div class="grow"></div>
+  <div class="stat" id="stat">…</div>
+</header>
+
+<main>
+  <section>
+    <h2>menu — generic table service</h2>
+    <div id="menu"></div>
+    <div class="row" style="margin-top:12px">
+      <input id="mname" placeholder="name" size="10">
+      <input id="mprice" placeholder="price (cents)" size="8">
+      <button onclick="addItem()">Add</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>orders — class service · kitchen — declarative</h2>
+    <div id="queue"><div class="muted">no open tickets</div></div>
+    <div class="row" style="margin-top:12px">
+      <input id="client" placeholder="customer" size="10">
+      <button class="primary" onclick="placeOrder()">Take an order</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>receipt — javascript service</h2>
+    <pre id="receipt">place an order, then press Receipt on a ticket</pre>
+  </section>
+
+  <section>
+    <h2>journal — the fiscal record</h2>
+    <div class="row"><span class="muted" id="chain">…</span></div>
+    <div id="events" style="margin-top:10px"></div>
+  </section>
+</main>
+
+<footer>
+  six hostable forms, one application ·
+  <code>ringserv run examples/comptoir/app.ring</code>
+</footer>
+
+<script>
+const api = (service, action, payload = {}) =>
+  fetch("/api/v1", { method: "POST",
+    body: JSON.stringify({ service, action, payload }) }).then(r => r.json());
+
+const money = c => (c / 100).toFixed(2).replace(".", ",") + " €";
+let menu = [];
+
+async function refresh() {
+  const [m, st, q, jv, jr] = await Promise.all([
+    api("menu", "list"), api("orders", "state"), api("kitchen", "queue"),
+    api("journal", "verify"), api("journal", "read", { limit: 8 }),
+  ]);
+
+  menu = (m.data && m.data.rows) || [];
+  document.getElementById("menu").innerHTML = menu.length
+    ? menu.map(x => `<div class="item"><span>${esc(x.name)}</span>
+        <span class="muted">${money(x.price)}</span></div>`).join("")
+    : `<div class="muted">the menu is empty</div>`;
+
+  const s = st.data || {};
+  document.getElementById("stat").textContent =
+    `${s.tickets || 0} tickets · ${s.open || 0} open · ${s.paid || 0} paid`;
+
+  const tickets = (q.data && q.data.tickets) || [];
+  document.getElementById("queue").innerHTML = tickets.length
+    ? tickets.map(t => `<div class="item">
+        <span>#${t.numero} <b>${esc(t.client)}</b>
+          <span class="tag ${t.etat}">${t.etat}</span></span>
+        <span class="row">
+          <span class="muted">${money(t.total)}</span>
+          <button onclick="advance(${t.numero})">Advance</button>
+          <button onclick="showReceipt(${t.numero})">Receipt</button>
+          <button onclick="pay(${t.numero})">Pay</button>
+        </span></div>`).join("")
+    : `<div class="muted">no open tickets</div>`;
+
+  const v = jv.data || {};
+  document.getElementById("chain").innerHTML =
+    `chain <b style="color:${v.chain === "INTACTE" ? "var(--ok)" : "crimson"}">
+      ${v.chain || "?"}</b> · ${v.events || 0} events, never compacted`;
+
+  const recs = (jr.data && jr.data.records) || [];
+  document.getElementById("events").innerHTML = recs.slice(-6).reverse()
+    .map(r => `<div class="item"><span class="muted">#${r.seq}</span>
+      <span>${esc(r.event.type)}</span>
+      <span class="muted" style="font-family:var(--mono)">${r.hash.slice(0, 10)}…</span>
+      </div>`).join("");
+}
+
+const esc = s => String(s == null ? "" : s).replace(/[<>&"]/g,
+  c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+
+async function addItem() {
+  const name = document.getElementById("mname").value.trim();
+  const price = parseInt(document.getElementById("mprice").value, 10);
+  if (!name || !price) return;
+  await api("menu", "create", { name, price, category: "divers" });
+  document.getElementById("mname").value = "";
+  document.getElementById("mprice").value = "";
+  refresh();
+}
+
+async function placeOrder() {
+  if (!menu.length) return alert2("add something to the menu first");
+  const client = document.getElementById("client").value.trim() || "comptoir";
+  const pick = menu[Math.floor(Math.random() * menu.length)];
+  await api("orders", "place", {
+    client, lignes: [{ item: pick.name, qty: 1 + Math.floor(Math.random() * 2),
+                       price: pick.price }],
+  });
+  document.getElementById("client").value = "";
+  refresh();
+}
+
+const NEXT = { recue: "en_cuisine", en_cuisine: "prete", prete: "servi" };
+async function advance(no) {
+  const q = await api("kitchen", "queue");
+  const t = (q.data.tickets || []).find(x => x.numero === no);
+  if (!t) return;
+  await api("kitchen", "advance", { ticket: no, to: NEXT[t.etat] || "servi" });
+  refresh();
+}
+async function pay(no) { await api("orders", "pay", { ticket: no }); refresh(); }
+
+async function showReceipt(no) {
+  const r = await api("receipt", "render", { ticket: no });
+  document.getElementById("receipt").textContent =
+    r.code === 0 ? r.data.text : r.message;
+}
+
+function alert2(msg) { document.getElementById("receipt").textContent = msg; }
+
+refresh();
+setInterval(refresh, 2500);
+</script>
