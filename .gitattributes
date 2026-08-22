@@ -1,0 +1,25 @@
+# Line endings are LF in the repository AND in the working tree, on every
+# platform. This is not tidiness — its absence was a real defect.
+#
+# Without it, a Windows checkout converts source to CRLF. src/cli.zig's
+# scaffold templates are Zig multiline literals, so the CRLF became part
+# of the emitted app.ring; gates that regex on `\n` then stopped matching
+# and reported success while checking nothing. Three suites failed in CI
+# on a machine that had never touched the code (run 32581935566), and the
+# same three passed locally, because the local tree had been written by
+# tools rather than checked out.
+#
+# A build whose behaviour depends on how the source was checked out is not
+# reproducible, and the difference is invisible in a diff.
+* text=auto eol=lf
+
+# Explicitly binary: never transformed, never diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
+*.db binary
+*.exe binary
+*.wasm binary
