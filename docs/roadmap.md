@@ -359,6 +359,21 @@ the doc's ninety-seconds example **extracted from its own fence in
 
 **Phase 10 is delivered.**
 
+## The panel ✅ (delivered 2026-08-22, by the author's standing order)
+
+`ringserv panel [dir]` — the admin panel: every app in a directory (both
+shapes: gesture files and app.ring directories), status/start/stop/logs
+and a call box on one clean loopback-only page, with children managed as
+real processes. The design rule is TRUTH: status follows the process (a
+child killed behind the panel's back is reported stopped — gated), start
+is proven by the app's own port answering, shutdown leaves no orphans —
+gated on the ports, not the promise. [panel.md](panel.md); 22 gates
+(`tests/panel-gates.js`). 21 suites.
+
+Also standing from the same order: **every phase closes with an
+interactive browser demo** the author can drive — recorded in
+[PLAN.md](PLAN.md)'s change log as a gate on communication.
+
 ## Standing risks (tracked, not hidden)
 
 - **VM concurrency** — the N-worker model is designed, not proven;

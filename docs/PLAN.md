@@ -224,6 +224,15 @@ reason; js-gates extended.
 
 *Reorderings and scope changes land here, one line each, newest first.*
 
+- 2026-08-22 — **two standing rules from the author**, recorded where the
+  plan lives: (1) every delivered phase closes with an INTERACTIVE example
+  the author can drive in the browser — a gate on communication, not only
+  on code; (2) RingServ carries an ADMIN PANEL — start/stop the server and
+  its hosted apps, see their work, one place. The panel shipped the same
+  day (`ringserv panel`, docs/panel.md, 22 gates) as an unnumbered
+  deliverable between phases 10 and 11: it is operations surface, not a
+  vision-ledger line, and waiting would have made every later phase's demo
+  poorer.
 - 2026-08-22 — phase 10 delivered. One scoping against its own text: the
   default `ringserv new` scaffold is unchanged (the page calling its own
   services is the fullstack moment, worth keeping first); the gesture gets

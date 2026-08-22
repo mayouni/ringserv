@@ -9,6 +9,7 @@ const cli = @import("cli.zig");
 const check = @import("check.zig");
 const topology_cmd = @import("topology.zig");
 const journal_cmd = @import("journal.zig");
+const panel = @import("panel.zig");
 const js = bridge.js;
 
 extern fn fflush(stream: ?*anyopaque) c_int;
@@ -102,6 +103,7 @@ const usage =
     \\  ringserv topology [--emit]   the placement map; --emit writes zing.json
     \\  ringserv journal <verb>      list / verify / export the fiscal record
     \\  ringserv serve <file.ring>   serve a file of plain functions, as-is
+    \\  ringserv panel [dir]         the admin panel: apps, start/stop, logs
     \\  ringserv run <app.ring>      run for real (or run a plain program)
     \\  ringserv eval "<code>"       evaluate Ring code
     \\  ringserv where               versions and paths
@@ -220,6 +222,27 @@ pub fn main() !u8 {
             if (std.mem.eql(u8, a, "--json")) as_json = true else app = a;
         }
         return check.docs(arena, app, as_json);
+    }
+
+    if (std.mem.eql(u8, cmd, "__proxy")) {
+        if (args.len < 4) return 2;
+        const pport = std.fmt.parseInt(u16, args[2], 10) catch return 2;
+        return panel.probe(arena, pport, args[3]);
+    }
+
+    if (std.mem.eql(u8, cmd, "panel")) {
+        var dir: []const u8 = ".";
+        var port: u16 = 8079;
+        var i: usize = 2;
+        while (i < args.len) : (i += 1) {
+            if (std.mem.eql(u8, args[i], "--port")) {
+                i += 1;
+                if (i >= args.len) return 2;
+                port = std.fmt.parseInt(u16, args[i], 10) catch 8079;
+            } else dir = args[i];
+        }
+        const exe = try std.fs.selfExePathAlloc(arena);
+        return panel.run(arena, dir, port, exe);
     }
 
     if (std.mem.eql(u8, cmd, "bench-workers")) {

@@ -1,0 +1,3 @@
+# configuration for the gesture file beside this -- the config-file form
+port: 8095
+workers: 2

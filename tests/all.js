@@ -45,6 +45,7 @@ const suites = [
     { name: "ringlib namespace ", node: "ringlibns-gates.js" },
     { name: "journal           ", node: "journal-gates.js" },
     { name: "gesture + config  ", node: "gesture-gates.js" },
+    { name: "the panel         ", node: "panel-gates.js" },
 ];
 
 if (full) {
