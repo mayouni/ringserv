@@ -367,8 +367,9 @@ and a call box on one clean loopback-only page, with children managed as
 real processes. The design rule is TRUTH: status follows the process (a
 child killed behind the panel's back is reported stopped — gated), start
 is proven by the app's own port answering, shutdown leaves no orphans —
-gated on the ports, not the promise. [panel.md](panel.md); 22 gates
-(`tests/panel-gates.js`). 21 suites.
+gated on the ports, not the promise. [panel.md](panel.md); 29 gates
+(`tests/panel-gates.js`), including that a server-wide stop leaves the
+panel resident and able to start everything again. 21 suites.
 
 Also standing from the same order: **every phase closes with an
 interactive browser demo** the author can drive — recorded in

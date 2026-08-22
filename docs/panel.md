@@ -8,10 +8,14 @@ ringserv panel my-apps/
 Open that address and you have the admin panel: every application in the
 directory, each with its status, port, pid and uptime — **Start**, **Stop**,
 a live log tail, and a call box that speaks to the app's own `/api/v1`, all
-on one page. The **Stop server** button shuts the panel and everything it
-started.
+on one page. The header holds the server itself: a state chip and one
+toggle that **starts or stops everything the panel hosts** — and the
+panel **stays resident through a stop**, because a stop button that kills
+the only thing able to start again is a trap, not a control.
+(`/panel/shutdown` still exists for the terminal and the gates; the page
+never calls it.)
 
-*(Every claim here is executable — `tests/panel-gates.js`, 22 gates.)*
+*(Every claim here is executable — `tests/panel-gates.js`, 29 gates.)*
 
 ## What counts as an app
 
