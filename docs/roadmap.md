@@ -1,7 +1,9 @@
 # Roadmap
 
 *The charter these phases answer to is [VISION.md](VISION.md) — the author's
-statement of what RingServ is for, recorded 2026-08-22.*
+statement of what RingServ is for, recorded 2026-08-22. The road ahead —
+phases 10 and on — is proposed and kept current in [PLAN.md](PLAN.md);
+delivered phases move back here with their gate results.*
 
 *Phases in the RingScript tradition: each one small, each one gated by
 executable verification, one commit per phase milestone. No phase
