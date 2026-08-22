@@ -1,0 +1,102 @@
+# The platform gate, made continuous.
+#
+# Phase 4 shipped with one gate held open: the binary had only ever been
+# RUN on Windows. Cross-compiling is not running, and the difference was
+# not academic -- the first Linux run found a deadlocked Stop button, a
+# broken `dist` step, two feature-test-macro breaks and six dead links,
+# none of which Windows could see (commit 341faa4).
+#
+# macOS cannot be run from the author's machine at all. This is how that
+# half of the gate closes, and how it STAYS closed.
+#
+# No marketplace actions beyond checkout: the toolchain is fetched from
+# ziglang.org's own index, so what runs here is auditable in the same way
+# vendor/VENDOR.md makes the dependencies auditable.
+
+name: gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  ZIG_VERSION: "0.15.2"
+
+jobs:
+  gates:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    # One red platform must not hide the others: the whole point is to
+    # learn what every platform does, in one run.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig ${{ env.ZIG_VERSION }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ runner.os }}-${{ runner.arch }}" in
+            Linux-X64)   KEY=x86_64-linux   ;;
+            Linux-ARM64) KEY=aarch64-linux  ;;
+            macOS-X64)   KEY=x86_64-macos   ;;
+            macOS-ARM64) KEY=aarch64-macos  ;;
+            Windows-X64) KEY=x86_64-windows ;;
+            *) echo "unmapped runner: ${{ runner.os }}-${{ runner.arch }}"; exit 1 ;;
+          esac
+          # Ask ziglang.org which tarball that is, rather than guessing a
+          # URL scheme that has changed between releases before.
+          URL=$(curl -fsSL https://ziglang.org/download/index.json \
+                | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+                    const j=JSON.parse(s), v=process.argv[1], k=process.argv[2];
+                    const rel=j[v]; if(!rel){console.error("no such zig version: "+v);process.exit(1)}
+                    const e=rel[k]; if(!e){console.error("no such target: "+k);process.exit(1)}
+                    console.log(e.tarball)})' "$ZIG_VERSION" "$KEY")
+          echo "fetching $URL"
+          mkdir -p "$HOME/zig"
+          if [[ "$URL" == *.zip ]]; then
+            curl -fsSL "$URL" -o /tmp/zig.zip
+            # unzip is not guaranteed on the Windows runner's bash; 7z is.
+            if command -v unzip >/dev/null; then
+              unzip -q /tmp/zig.zip -d "$HOME/zig"
+            else
+              7z x -o"$HOME/zig" /tmp/zig.zip > /dev/null
+            fi
+          else
+            curl -fsSL "$URL" -o /tmp/zig.tar.xz
+            tar -xJf /tmp/zig.tar.xz -C "$HOME/zig"
+          fi
+          DIR=$(find "$HOME/zig" -maxdepth 1 -mindepth 1 -type d | head -1)
+          echo "$DIR" >> "$GITHUB_PATH"
+
+      - name: zig version
+        shell: bash
+        run: zig version
+
+      - name: Build
+        shell: bash
+        run: zig build
+
+      - name: Every gate
+        shell: bash
+        run: node tests/all.js
+
+      # Cross-compilation is a separate claim from "it runs here", and it
+      # broke silently once already. Prove it on one runner, not three.
+      - name: Cross-compile every shipped target
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          zig build dist
+          ls -la bin/
+          test -s bin/ringserv-linux-x64
+          test -s bin/ringserv-linux-arm64
+          test -s bin/ringserv-macos-x64
+          test -s bin/ringserv-macos-arm64
+          test -s bin/ringserv-windows-x64.exe
