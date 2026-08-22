@@ -1,0 +1,135 @@
+# Cutting a release.
+#
+#   git tag v0.9.0 && git push origin v0.9.0
+#
+# The binaries are NOT in git (bin/ is ignored — ~66 MB per build would
+# bloat history permanently). They are built here, from the tagged
+# commit, and attached to the release with checksums, so "install is
+# download one file and run it" stays true without the repository
+# carrying every past build forever.
+#
+# The gate runs FIRST and the release depends on it: a tag must not be
+# able to publish something that has not passed on all three platforms.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (for a dry run)"
+        required: false
+
+env:
+  ZIG_VERSION: "0.15.2"
+
+jobs:
+  # Same three-platform proof as every push. A release is not a reason to
+  # skip it — it is the reason to insist on it.
+  verify:
+    name: gates (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Zig
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ runner.os }}-${{ runner.arch }}" in
+            Linux-X64)   KEY=x86_64-linux   ;;
+            macOS-ARM64) KEY=aarch64-macos  ;;
+            macOS-X64)   KEY=x86_64-macos   ;;
+            Windows-X64) KEY=x86_64-windows ;;
+            *) echo "unmapped runner"; exit 1 ;;
+          esac
+          URL=$(curl -fsSL https://ziglang.org/download/index.json \
+                | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+                    const j=JSON.parse(s);console.log(j[process.argv[1]][process.argv[2]].tarball)})' \
+                  "$ZIG_VERSION" "$KEY")
+          mkdir -p "$HOME/zig"
+          if [[ "$URL" == *.zip ]]; then
+            curl -fsSL "$URL" -o /tmp/zig.zip
+            if command -v unzip >/dev/null; then unzip -q /tmp/zig.zip -d "$HOME/zig";
+            else 7z x -o"$HOME/zig" /tmp/zig.zip > /dev/null; fi
+          else
+            curl -fsSL "$URL" -o /tmp/zig.tar.xz
+            tar -xJf /tmp/zig.tar.xz -C "$HOME/zig"
+          fi
+          find "$HOME/zig" -maxdepth 1 -mindepth 1 -type d | head -1 >> "$GITHUB_PATH"
+      - name: Build
+        shell: bash
+        run: zig build
+      - name: Every gate
+        shell: bash
+        run: node tests/all.js
+
+  release:
+    name: build and publish
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Zig
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL=$(curl -fsSL https://ziglang.org/download/index.json \
+                | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+                    const j=JSON.parse(s);console.log(j[process.argv[1]]["x86_64-linux"].tarball)})' \
+                  "$ZIG_VERSION")
+          mkdir -p "$HOME/zig"
+          curl -fsSL "$URL" -o /tmp/zig.tar.xz
+          tar -xJf /tmp/zig.tar.xz -C "$HOME/zig"
+          find "$HOME/zig" -maxdepth 1 -mindepth 1 -type d | head -1 >> "$GITHUB_PATH"
+
+      # One cross-compiling host builds all five, so every artefact in a
+      # release comes from the same toolchain and the same commit.
+      - name: Cross-compile every shipped target
+        shell: bash
+        run: |
+          zig build dist
+          ls -la bin/
+
+      # The version the binary REPORTS must equal the tag that built it.
+      # A release whose `ringserv version` disagrees with its own tag is
+      # a bug report nobody can act on.
+      - name: The binary agrees with the tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ -z "${GITHUB_REF_NAME:-}" ] || [[ "$GITHUB_REF_NAME" != v* ]]; then
+            echo "not a tag build — skipping the version check by name"
+            exit 0
+          fi
+          chmod +x bin/ringserv-linux-x64
+          GOT=$(./bin/ringserv-linux-x64 version | sed -E 's/^RingServ ([^ ]+).*/\1/')
+          echo "tag=$TAG binary=$GOT"
+          test "$TAG" = "$GOT"
+
+      - name: Checksums
+        shell: bash
+        run: |
+          cd bin
+          sha256sum ringserv-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "RingServ $GITHUB_REF_NAME" \
+            --generate-notes \
+            bin/ringserv-* bin/SHA256SUMS

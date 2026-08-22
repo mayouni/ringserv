@@ -25,7 +25,7 @@ pub const js = @import("js.zig");
 
 const alloc = std.heap.c_allocator;
 
-pub const RINGSERV_VERSION = "0.1-dev";
+pub const RINGSERV_VERSION = "0.9.0";
 
 pub export fn rs_version() [*:0]const u8 {
     return RINGSERV_VERSION;

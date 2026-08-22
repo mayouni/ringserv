@@ -3,8 +3,14 @@
 <h2 align="center">The Ring language, resident on your server</h2>
 
 <p align="center">
-  <strong>design stage</strong> · Ring 1.27 · MIT · a Softanza Project ·
+  <strong>0.9</strong> · Ring 1.27 · MIT · a Softanza Project ·
   sister of <a href="https://github.com/mayouni/ringscript">RingScript</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/mayouni/ringserv/actions/workflows/gates.yml"><img
+    src="https://github.com/mayouni/ringserv/actions/workflows/gates.yml/badge.svg"
+    alt="gates"></a>
 </p>
 
 RingServ is the backend counterpart of
@@ -62,17 +68,21 @@ application.
 
 1. **One binary, zero dependencies.** Zig compiles the vendored Ring
    1.27 VM natively (the same VM RingScript compiles to wasm), plus an
-   HTTP core, embedded SQLite, and the CLI, into one static executable
-   per platform. Like RingScript's ~40 KB servers, the binaries are
-   prebuilt and committed: install is *download and run*.
+   HTTP core, embedded SQLite, a JavaScript engine and the CLI, into one
+   static executable per platform. Install is *download one file and run
+   it* — the binaries are built by CI for each release, not committed
+   (they would bloat git history permanently).
 
 2. **Web standards, not framework standards.** The programming model
    is the fetch shape — a handler receives a Request and returns a
    Response — the same contract that lets Hono run unchanged on
    Cloudflare, Deno, and Bun, now standardized as ECMA-429. RingServ
    speaks that shape natively, so it is legible to the whole web
-   ecosystem, and JavaScript remains a first-class caller — and, later,
-   a first-class guest via an embedded standards-shaped JS engine.
+   ecosystem, and JavaScript is a first-class caller **and a
+   first-class guest**: a service's implementation may be a `.js` file,
+   run on a vendored QuickJS-ng with a WinterTC-shaped surface, behind
+   the same envelope, contracts and placement as a Ring one
+   ([docs/JS.md](docs/JS.md)).
 
 3. **Services, not routes.** The primary paradigm (learned from
    [Pionia](https://pionia.netlify.app/)'s Moonlight architecture) is a
@@ -99,7 +109,7 @@ application.
    [tree-sitter-ring](https://github.com/ysdragon/tree-sitter-ring)
    grammar, and rendered into API docs automatically.
 
-## The planned CLI — the whole developer experience
+## The CLI — the whole developer experience
 
 ```bash
 ringserv new myapp       # scaffold a working service + page + topology
@@ -109,7 +119,8 @@ ringserv check           # static analysis: contracts, types, dead actions
 ringserv test            # run the app's tests against a scratch server
 ringserv docs            # generate the API catalog from the contracts
 ringserv journal verify  # is the fiscal record still whole? exits 1 if not
-ringserv build           # produce the single deployable binary
+ringserv serve fns.ring  # host a file of plain functions, as-is
+ringserv panel examples  # start, stop and watch your apps in a browser
 ```
 
 One tool. A backend developer needs nothing else installed — not even
@@ -136,59 +147,74 @@ so that Softanza can stand on an industrial-strength, dependency-free
 backend runtime when it needs one — while remaining, on its own, a
 simple and beautiful way to write any backend in Ring.
 
-## Status and documentation
+## Install
 
-RingServ is **under construction, phase-gated**. Phases 1 and 2 are
-**done and green**:
-
-- **Phase 1** — the resident native Ring VM: 12 gates, the shared
-  24-example corpus byte-identical to native `ring.exe`, the
-  N-worker model proven ([docs/WORKERS.md](docs/WORKERS.md)).
-- **Phase 2** — the server lives: `ringserv run app.ring` serves
-  `RingServ()` declarations on `POST /api/v1` — both service forms,
-  the uniform envelope, transport-status contract (404/400/500),
-  N VM workers behind httpz — 16 service gates, 200-case fuzz, and
-  a 3,000-request soak with flat memory.
-
-- **Phase 3** — data: SQLite vendored, `Data()` schema declarations,
-  one connection per worker with WAL, a plain-SQL query surface
-  (`DataQuery`/`DataExec`), generic table services (`table = "notes"`
-  → list/get/create/update/delete), and `Contract()` validation with
-  422 envelopes — 18 schema gates + 25 CRUD/contract gates
-  ([docs/DATA.md](docs/DATA.md)).
-
-- **Phase 4** — the CLI: `new` scaffolds an app whose tests already
-  pass, `dev` serves it and reloads on save, `test` runs in process
-  against a scratch database, `where` reports what is compiled in;
-  static files served by the Zig core; `zig build dist`
-  cross-compiles five platforms — 16 CLI gates.
-
-- **Phase 5** — governance: `ringserv check` (syntax via a vendored
-  tree-sitter-ring grammar, contract agreement via the VM's own
-  catalog) and `ringserv docs` (the API reference, markdown or JSON,
-  generated from the declarations) — 21 seeded-defect gates
-  ([docs/CHECK.md](docs/CHECK.md)).
-
-Phase 6 (topology + sync) is next — and gated on the family's C3
-Placement Contract per `ALIGNMENT.md`. Everything above is real today
-— **134 gates across eleven suites**, including Ring's own ~470 samples
-and ~500 documentation snippets compared byte-for-byte against native
-`ring.exe` — all runnable with one command:
+Download one file for your platform from
+[Releases](https://github.com/mayouni/ringserv/releases), make it
+executable, and run it. There is nothing else to install — not Ring, not
+Node, not a runtime, not a web server.
 
 ```bash
-zig build gates -- --full
+ringserv new myapp --gesture   # or: ringserv new myapp  (fullstack scaffold)
+cd myapp && ringserv serve myapp.ring
 ```
 
-See [docs/GATES.md](docs/GATES.md) for what each suite defends, and
-for an honest list of what is still thin.
+Building from source needs only [Zig](https://ziglang.org) 0.15.2:
+`zig build` — every dependency is vendored in `vendor/`, nothing is
+fetched.
 
-- [docs/vision.md](docs/VISION.md) — why RingServ exists, and the two-player model
-- [docs/architecture.md](docs/architecture.md) — the planned layers, Zig/Ring seams
+## Where it stands — 0.9
+
+**0.9 means the surface is complete and exercised, and the API is
+stabilising rather than frozen.** Ten phases are delivered and gated;
+each one's record, with its gate results, is in
+[docs/roadmap.md](docs/roadmap.md).
+
+| | |
+|---|---|
+| **Services** | declarative, class, generic-table, JavaScript, and *no declaration at all* (`ringserv serve`) |
+| **Data** | embedded SQLite, WAL, one connection per worker, plain SQL, typed contracts validated at the door |
+| **History** | `Journal()` — append-only, SHA-256 hash-chained, replayed to state, never compacted |
+| **Local-first** | C3 placement, a trigger-maintained shape log, an exactly-once mutation queue, compaction with `must-refetch` |
+| **Governance** | `check` (tree-sitter + the VM's own catalog), `docs`, C2 diagnostics, an actor seam with 401/403 kept distinct |
+| **Operations** | a browser admin panel, `journal verify` for cron, static files, `ringserv.yaml` |
+
+**625 gates across 22 suites** run in about 70 seconds
+(`node tests/all.js`); `--full` adds soak, a benchmark, a **differential
+oracle against native `ring.exe`**, and a wide sweep over Ring's own
+~470 samples plus ~500 documentation snippets compared byte-for-byte.
+Every push builds and runs all of it on **Linux, macOS and Windows**.
+
+Two example applications, both real and both gated:
+[fieldnotes](examples/fieldnotes) teaches one seam at a time, and
+[comptoir](examples/comptoir) — a café counter — wires every hostable
+form together the way an application actually does.
+
+**What 0.9 is not.** The API may still move before 1.0. RingServ
+terminates no TLS by design ([docs/TLS.md](docs/TLS.md)) — put a proxy
+in front. `Intl` and the yaml config are deliberate **named subsets**
+that refuse the rest by name rather than guessing. And what is still
+thin is listed honestly in [docs/GATES.md](docs/GATES.md); the road
+ahead is [docs/PLAN.md](docs/PLAN.md).
+
+## Documentation
+
+**Start here** — [docs/getting-started.md](docs/getting-started.md), then
+[docs/gesture.md](docs/gesture.md) (a function to a service in ninety
+seconds), then [docs/fieldnotes-app.md](docs/fieldnotes-app.md) (a whole
+application, built).
+
+- [docs/VISION.md](docs/VISION.md) — why RingServ exists, and the two-player model
+- [docs/architecture.md](docs/architecture.md) — the layers, and the Zig/Ring seams
 - [docs/services.md](docs/services.md) — the service model, contracts, envelopes
+- [docs/DATA.md](docs/DATA.md) · [docs/WRITES.md](docs/WRITES.md) — the data layer and the single writer
+- [docs/COMMONS.md](docs/COMMONS.md) — the journaled store, and why it is a second store
 - [docs/topology.md](docs/topology.md) — declarative placement and local-first sync
-- [docs/cli.md](docs/cli.md) — every command, with its reasoning
+- [docs/JS.md](docs/JS.md) — the JavaScript guest, and its honest limits
+- [docs/CHECK.md](docs/CHECK.md) · [docs/cli.md](docs/cli.md) — governance and every command
+- [docs/TLS.md](docs/TLS.md) · [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — the deployment decisions, and the numbers
 - [docs/landscape.md](docs/landscape.md) — the study: Pionia, Hono, WinterTC, Bolt, and friends
-- [docs/roadmap.md](docs/roadmap.md) — the phases, each with its gate
+- [docs/roadmap.md](docs/roadmap.md) · [docs/PLAN.md](docs/PLAN.md) — what shipped, and what is next
 
 ## License
 
