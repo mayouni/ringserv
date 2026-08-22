@@ -182,7 +182,7 @@ zig build gates -- --full
 See [docs/GATES.md](docs/GATES.md) for what each suite defends, and
 for an honest list of what is still thin.
 
-- [docs/vision.md](docs/vision.md) — why RingServ exists, and the two-player model
+- [docs/vision.md](docs/VISION.md) — why RingServ exists, and the two-player model
 - [docs/architecture.md](docs/architecture.md) — the planned layers, Zig/Ring seams
 - [docs/services.md](docs/services.md) — the service model, contracts, envelopes
 - [docs/topology.md](docs/topology.md) — declarative placement and local-first sync

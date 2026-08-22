@@ -62,8 +62,26 @@ if (full) {
     }
 }
 
+// A gate that CANNOT run is named, never silently dropped (CLAUDE.md's
+// PX law, and the same discipline loader-gates uses for its oracle).
+// The bridge gates need a Zig toolchain; the platform runs that prove
+// the binary works on Linux/macOS deliberately carry only the binary,
+// so on those machines this suite is reported as skipped, with why.
+const hasZig = (() => {
+    const r = spawnSync(process.platform === "win32" ? "where" : "which",
+        ["zig"], { encoding: "utf8" });
+    return r.status === 0;
+})();
+
 const results = [];
 for (const s of suites) {
+    if (!s.node && !hasZig) {
+        console.log("── " + s.name.trim());
+        console.log("   SKIP  no zig toolchain on this machine — " +
+            "the bridge gates compile Zig; the binary under test does not need it");
+        results.push({ name: s.name, ok: true, skipped: true });
+        continue;
+    }
     process.stdout.write("── " + s.name.trim() + "\n");
     const started = Date.now();
     const r = s.node
@@ -82,10 +100,13 @@ for (const s of suites) {
 }
 
 console.log("\n" + "─".repeat(56));
-for (const r of results) console.log((r.ok ? "  ok    " : "  FAIL  ") + r.name);
+for (const r of results)
+    console.log((r.skipped ? "  skip  " : r.ok ? "  ok    " : "  FAIL  ") + r.name);
 const failed = results.filter(r => !r.ok).length;
 console.log("─".repeat(56));
+const skipped = results.filter(r => r.skipped).length;
+if (skipped) console.log(`  (${skipped} skipped, named above)`);
 console.log(failed === 0
-    ? `All ${results.length} suites passed.` + (full ? "" : "  (add --full for soak + oracle)")
+    ? `All ${results.length - skipped} runnable suites passed.` + (full ? "" : "  (add --full for soak + oracle)")
     : `${failed} of ${results.length} suites FAILED.`);
 process.exit(failed ? 1 : 0);

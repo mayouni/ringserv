@@ -94,7 +94,7 @@ respectable one):
 store with whatever its runtime provides; the server queries SQLite
 in SQL. The *shared* vocabulary is the service call and the shape —
 not a query dialect, because RingServ's core deliberately has none
-(see [vision.md](vision.md)). A stack that wants one query language
+(see [vision.md](VISION.md)). A stack that wants one query language
 across page and server gets it by loading the same pure-Ring query
 library on both sides — that is a framework's promise to make, and
 Softanza is where it belongs.

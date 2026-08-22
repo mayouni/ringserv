@@ -102,7 +102,9 @@ const sqlite_cflags = [_][]const u8{
 // tree-sitter: the C runtime plus the Ring grammar (generated parser +
 // external scanner). Both vendored and pinned — vendor/VENDOR.md.
 const ts_cflags = [_][]const u8{
-    "-std=c11",
+    // gnu11 for the same reason as QuickJS above: under strict ISO,
+    // musl hides fdopen, which tree-sitter's parser.c and tree.c call.
+    "-std=gnu11",
     "-fno-sanitize=undefined",
 };
 
@@ -130,7 +132,15 @@ fn addTreeSitter(mod: *std.Build.Module, b: *std.Build) void {
 // in Zig and shared with the Ring side. Vendoring libc would hand the
 // guest a second, unaudited way to reach the machine.
 const qjs_cflags = [_][]const u8{
-    "-std=c11",
+    // gnu11, NOT c11 -- and the difference is one platform each way.
+    // `-std=c11` defines __STRICT_ANSI__: musl then hides clock_gettime
+    // and CLOCK_MONOTONIC, which QuickJS's cutils.h uses (28 errors on
+    // the Linux cross build, while Windows and macOS built clean).
+    // Asking instead for -D_POSIX_C_SOURCE=200809L fixes musl and BREAKS
+    // macOS, whose malloc.h needs the Darwin extensions that macro
+    // suppresses (42 errors, malloc_type_id_t). gnu11 drops the strict
+    // flag without suppressing anything, and satisfies all three.
+    "-std=gnu11",
     "-DCONFIG_VERSION=\"ringserv\"",
     // The engine's own arithmetic relies on wrapping and on unaligned
     // reads that UBSan flags; upstream builds with these off too.
@@ -266,9 +276,11 @@ pub fn build(b: *std.Build) void {
     gates_step.dependOn(&all.step);
 
     // `zig build dist` — cross-compile the CLI for every shipped
-    // platform into bin/. These are committed: installing RingServ is
-    // downloading one file, with no Zig, no Ring, and no toolchain on
-    // the user's machine (the RingScript convention).
+    // platform into bin/. NOT committed -- .gitignore excludes bin/, and
+    // ~66 MB per build would bloat history permanently; they are release
+    // artefacts. The promise they keep is still the RingScript one:
+    // installing RingServ is downloading ONE file, with no Zig, no Ring
+    // and no toolchain on the user's machine.
     const dist_step = b.step("dist", "Cross-compile ringserv for all shipped platforms into bin/");
     const dist_targets = [_]struct { q: std.Target.Query, name: []const u8 }{
         .{ .q = .{ .cpu_arch = .x86_64, .os_tag = .windows }, .name = "ringserv-windows-x64.exe" },
@@ -313,6 +325,17 @@ pub fn build(b: *std.Build) void {
         });
         d_main.addImport("bridge", d_bridge);
         d_main.addImport("httpz", d_httpz);
+        // THE DRIFT THIS LINE EXISTS TO CLOSE: `dist` was written in phase
+        // 4, tree-sitter arrived with `check` in phase 5, and only the
+        // NATIVE exe was taught about it. Every cross target then failed
+        // on `tree_sitter/api.h`, for months, while docs/roadmap.md went
+        // on saying "the other four targets cross-compile cleanly" --
+        // because nothing ran `zig build dist` and nothing gated it.
+        //
+        // Two configurations of the same executable will drift; the fix
+        // that lasts is the gate (tests/platform-gates.js builds every
+        // shipped target), not the vigilance.
+        addTreeSitter(d_main, b);
         const e = b.addExecutable(.{ .name = "ringserv", .root_module = d_main });
         e.stack_size = 8 * 1024 * 1024;
         const install = b.addInstallFile(e.getEmittedBin(), b.fmt("../bin/{s}", .{t.name}));

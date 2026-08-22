@@ -220,9 +220,24 @@ fn stopApp(app: *App) []const u8 {
     }
     var child = app.child.?;
     g_mu.unlock();
-    // Kill, and let the pipe readers observe EOF and reap — one reaping
-    // path, not two racing ones.
-    _ = child.kill() catch {};
+    // SIGNAL ONLY — never wait here, and this is a PLATFORM bug the
+    // Linux gate found that Windows could not:
+    //
+    //   Child.kill() on POSIX sends SIGTERM and then BLOCKS in waitpid
+    //   until the child is reaped. On Windows it is TerminateProcess,
+    //   which returns at once. So the same line that stopped an app
+    //   instantly on Windows held the HTTP worker thread forever on
+    //   Linux, and /panel/stop never answered.
+    //
+    // The reaping path stays exactly one: the pipe readers observe EOF
+    // and reap. This function's whole job is to make the child die.
+    // SIGKILL rather than SIGTERM because a Stop button promises now,
+    // and a child that installed a handler must not be able to refuse.
+    if (builtin.os.tag == .windows) {
+        _ = child.kill() catch {};
+    } else {
+        std.posix.kill(child.id, std.posix.SIG.KILL) catch {};
+    }
     return "";
 }
 

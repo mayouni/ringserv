@@ -94,16 +94,34 @@ const norm = s => s.split("\n").map(l => l.trim()).filter(Boolean).join("\n");
             new RegExp("ringserv " + cmd + "\\b").test(help), help.slice(0, 200));
     }
 
-    // Cross-references must resolve. A dead link in a learning path is a
-    // reader who stops.
-    for (const doc of ["fieldnotes-app.md", "getting-started.md", "README.md"]) {
-        const text = read(path.join(ROOT, "docs", doc));
-        const links = [...text.matchAll(/\]\((?!https?:)([^)#]+)(?:#[^)]*)?\)/g)]
-            .map(m => m[1]);
-        const dead = links.filter(l =>
-            !fs.existsSync(path.resolve(path.join(ROOT, "docs"), l)));
-        check(`every local link in ${doc} resolves`, dead.length === 0,
-            dead.join(", "));
+    // Cross-references must resolve — EVERYWHERE, which is not the same
+    // as resolving here. This gate used fs.existsSync over three docs and
+    // passed for months while six links were dead on GitHub and on Linux:
+    // NTFS is case-insensitive, so `](VISION.md)` found `docs/vision.md`
+    // on the machine doing the checking and 404'd for every reader.
+    //
+    // So the authority is git's index — the exact bytes of the tracked
+    // names — not the local filesystem, and the scope is every tracked
+    // markdown file rather than a hand-kept list of three.
+    {
+        const tracked = new Set(
+            require("child_process")
+                .execSync("git ls-files", { cwd: ROOT, encoding: "utf8" })
+                .split("\n").map(l => l.trim()).filter(Boolean));
+        const docs = [...tracked].filter(f => f.endsWith(".md"));
+        const dead = [];
+        for (const doc of docs) {
+            const text = fs.readFileSync(path.join(ROOT, doc), "utf8");
+            for (const m of text.matchAll(/\]\((?!https?:|mailto:)([^)#?]+\.md)(?:#[^)]*)?\)/g)) {
+                const target = path.posix.normalize(
+                    path.posix.join(path.posix.dirname(doc), m[1]));
+                if (!tracked.has(target)) dead.push(`${doc} -> ${m[1]}`);
+            }
+        }
+        check("every markdown link resolves with EXACT case, repo-wide",
+            dead.length === 0, dead.join("  |  "));
+        check("...over every tracked markdown file, not a hand-kept list",
+            docs.length >= 20, `${docs.length} files scanned`);
     }
 
     // ------------------------------------------- and it serves what it says

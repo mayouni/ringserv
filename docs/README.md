@@ -52,7 +52,7 @@ Each one answers "how do I", and says what it refuses to do.
 
 ## Design and history
 
-- **[vision.md](vision.md)** — why RingServ exists and what it refuses to
+- **[vision.md](VISION.md)** — why RingServ exists and what it refuses to
   be.
 - **[architecture.md](architecture.md)** — the layers: Zig core, resident
   Ring VM bridge, SQLite, vendored substrate.
