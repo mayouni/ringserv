@@ -93,10 +93,45 @@ including that the scaffold's own tests pass untouched, that a
 failing expectation *fails the run*, that `test` writes no database
 file, that the page and the API both answer, and that saving a file
 reloads the server.
-**Gate — still open:** the scaffold has only been *run* on Windows.
-The other four targets cross-compile cleanly, which is not the same
-as being tested on their platforms. Closing this needs a machine (or
-CI) per platform; see [cli.md](cli.md).
+**Gate — CLOSED 2026-08-22, and it was not a formality.** RingServ is
+now built and run on **Windows, Linux and macOS** every push
+(`.github/workflows/gates.yml`, run 32583106700: macos-14 2m4s,
+ubuntu 12m32s, windows 5m43s), plus `zig build dist` proving all five
+shipped targets still cross-compile.
+
+Running them found five real defects that Windows-only testing was
+structurally incapable of seeing:
+
+- **`zig build dist` was broken for every target.** `dist` was written
+  here in phase 4; tree-sitter arrived with `check` in phase 5 and only
+  the *native* executable was taught about it. Every cross target failed
+  on `tree_sitter/api.h` for months while this file said the opposite —
+  because nothing ran it and nothing gated it.
+- **Strict ISO hid POSIX on musl.** `-std=c11` defines `__STRICT_ANSI__`;
+  musl honours it, so QuickJS lost `clock_gettime` and tree-sitter lost
+  `fdopen`. The obvious fix (`-D_POSIX_C_SOURCE`) *broke macOS*, whose
+  `malloc.h` needs the Darwin extensions it suppresses. `gnu11` satisfies
+  all three.
+- **The panel's Stop button deadlocked on Linux.** `Child.kill()` is
+  TerminateProcess on Windows and SIGTERM-then-blocking-waitpid on POSIX,
+  so the same line that stopped an app instantly here held the HTTP
+  worker forever there. 301 s to 2.2 s.
+- **Six markdown links were dead on GitHub and Linux** — `docs/vision.md`
+  tracked lowercase against `VISION.md` links. The gate that should have
+  caught it used `fs.existsSync`, which is case-insensitive on NTFS: it
+  found the file on the machine doing the checking and passed while every
+  reader got a 404. It now asks **git** for the exact tracked names,
+  across every tracked markdown file.
+- **Line endings were nondeterministic.** No `.gitattributes`, so a
+  Windows checkout produced CRLF; `cli.zig`'s scaffold templates are Zig
+  multiline literals, so the CRLF reached the generated `app.ring` and
+  gates that regex on a bare newline stopped matching — reporting success
+  while checking nothing. Three suites were red in CI and green locally, for no
+  reason visible in any diff.
+
+The lesson, recorded because it generalises: **a gate that has only ever
+run in one environment is a gate that has only ever tested one
+environment.** See [cli.md](cli.md).
 
 Deviations from the plan, both deliberate and documented in
 [cli.md](cli.md): the scaffold is one `app.ring` with a plain
