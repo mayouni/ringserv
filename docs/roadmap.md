@@ -239,6 +239,66 @@ of the author's — the same bar RingScript's 0.9 met before its API froze.
 No session can open that gate for him, and the worked example is a guide,
 not a substitute.
 
+## Phase 9 — The journaled store ✅ (delivered 2026-08-22)
+
+The second half of the answer to
+[COMMONS.md §1](COMMONS.md): a record some applications are **required by
+law** to keep whole, in a server whose sync layer trims history on purpose.
+`Journal()` is a **store beside `Data()`, not a mode of it**, because the
+two want opposite things and one primitive settling between them would
+serve neither.
+
+|            | `Data()`                          | `Journal()`                     |
+|------------|-----------------------------------|---------------------------------|
+| rows       | mutable                           | append-only                     |
+| history    | derived by triggers, **compacted** | *is* the data, **never trimmed** |
+| recovery   | the rows are the state            | **replay is the only recovery** |
+
+```ring
+Journal([ :name = "ventes", :apply = func aEvent { ... } ])
+JournalAppend("ventes", [ :type = "passer_commande", :who = "ada" ])
+JournalVerify("ventes")   ->  [ :events = 41, :chain = "INTACTE", :at = 0 ]
+```
+
+**Chained, and verified where it breaks.** Each record stores `prev` and
+`hash = SHA-256(prev + body)` — hashed over *the exact stored body text*,
+never a re-serialisation, so two encoders disagreeing about whitespace can
+never manufacture a break that did not happen. `JournalVerify` reports
+`INTACTE`/`ROMPUE` **and the sequence number where it first fails, and which
+of the two invariants failed**. A verdict without a location is a verdict
+nobody can act on. The gate edits a body through a second connection — the
+real threat model is someone with the file, not someone with the API.
+
+**The head is read inside the write transaction.** Reading it outside would
+be a guess: a second worker appending in between forks the chain silently,
+which is the one failure this structure exists to prevent. `:apply` runs
+**only after the commit**, so an application can never hold state the
+journal cannot account for.
+
+**Replay at boot was not enough — the finding of this phase.** The germ this
+comes from was one process; RingServ is N workers, each with a private VM.
+`:apply` runs in the worker that appended, so every other worker's state
+stopped at its own boot: four orders numbered **1, 1, 2** across two
+workers, which is what the fixture printed the first time it ran. A worker
+now **catches up at the door**, applying every record newer than its own
+in-memory high-water mark — normally an indexed query returning nothing.
+The mark is per worker and never persisted: it describes what *this* VM has
+folded in, and a stored copy would be wrong for every worker that read it.
+
+**Compaction refuses a journal by name** — the mirror image of it refusing a
+non-shape, and the more important half. The service an application may
+expose (`RsJournalService`) is **read-only by construction**: `verify` and
+`read`, and no append. An endpoint that let any caller write to a fiscal
+record would be worse than no endpoint.
+
+`JournalExport` emits the germ's own line-per-record JSON, so a journal
+moves between the two without translation.
+
+28 gates own it (`tests/journal-gates.js`), covering the chain, the restart,
+worker agreement, the refusals, and the tamper. 19 suites now.
+
+**Phase 9 is delivered.**
+
 ## Standing risks (tracked, not hidden)
 
 - **VM concurrency** — the N-worker model is designed, not proven;

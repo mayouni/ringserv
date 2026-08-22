@@ -472,6 +472,15 @@ func SyncCompact cShape, nKeep
 	if not RsValidName(cShape)
 		raise("SyncCompact(): not a shape name: " + cShape)
 	ok
+	if find(RsJournalNames(), lower(cShape))
+		# The mirror image of refusing a non-shape, and the more important
+		# half: a journal is a record something is required to keep whole.
+		# Compaction discards history, so it may not be pointed at one --
+		# see docs/COMMONS.md section 1 for why the two stores are opposite
+		# primitives rather than two settings of one.
+		raise("SyncCompact(): `" + cShape + "` is a JOURNAL and is never " +
+		      "compacted -- its whole value is that nothing leaves it")
+	ok
 	if find(RsSyncedTables(), cShape) = 0
 		raise("SyncCompact(): `" + cShape + "` is not a synced shape")
 	ok

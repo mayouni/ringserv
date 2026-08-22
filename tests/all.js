@@ -43,6 +43,7 @@ const suites = [
     { name: "actor / auth      ", node: "auth-gates.js" },
     { name: "the guides        ", node: "guide-gates.js" },
     { name: "ringlib namespace ", node: "ringlibns-gates.js" },
+    { name: "journal           ", node: "journal-gates.js" },
 ];
 
 if (full) {

@@ -59,6 +59,23 @@ contradicts the tree.
 
 ## 1. The journaled store — `Journal()`, a first-class primitive
 
+> **BUILT, 2026-08-22** — `src/ringlib/journal.ring`, 28 gates in
+> `tests/journal-gates.js`, written up as phase 9 in
+> [roadmap.md](roadmap.md). Two divergences from the design below, both
+> deliberate:
+>
+> - **`JournalVerify` also reports WHERE.** The design promised
+>   `INTACTE`/`ROMPUE`; the implementation adds the sequence number and
+>   which invariant failed, because a verdict without a location is one
+>   nobody can act on.
+> - **A worker catches up at the door.** The design assumed replay at boot
+>   was enough. It is not, under N workers — see phase 9. The design was
+>   written from a single-process germ and this is what it could not see.
+>
+> Still owed: `ringserv journal export` as a **CLI** subcommand. The
+> function `JournalExport()` exists and the gates use it; the command-line
+> ambassador named below does not exist yet.
+
 ### What it is, and what it is not
 
 A second store beside `Data()`, not a mode of it:

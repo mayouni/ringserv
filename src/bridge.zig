@@ -378,6 +378,10 @@ const sync_ring_src = @embedFile("ringlib/sync.ring");
 /// jsserv — the JS service form, pure Ring. Loaded after serv.ring, whose
 /// dispatcher calls into it.
 const jsserv_ring_src = @embedFile("ringlib/jsserv.ring");
+/// journallib — history as the only truth: an append-only, hash-chained
+/// store beside Data(). Loaded after sync.ring, whose compaction must
+/// refuse it by name.
+const journal_ring_src = @embedFile("ringlib/journal.ring");
 /// actorlib — who is calling, and whether they may. Loaded after
 /// contract.ring, whose per-action spec it reads.
 const actor_ring_src = @embedFile("ringlib/actor.ring");
@@ -457,6 +461,7 @@ const ringlib_files = [_]RingLibFile{
     .{ .name = "sync.ring", .src = sync_ring_src, .provides = "__rs_sync_push" },
     .{ .name = "jsserv.ring", .src = jsserv_ring_src, .provides = "rsjsdispatch" },
     .{ .name = "actor.ring", .src = actor_ring_src, .provides = "rsactorcheck" },
+    .{ .name = "journal.ring", .src = journal_ring_src, .provides = "journalappend" },
     .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask", .testing_only = true },
 };
 
@@ -504,6 +509,7 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__rs_approot", &appRootHook);
     ring_vm_funcregister2(st, "__rs_authtoken", &authTokenHook);
     ring_vm_funcregister2(st, "__rs_jwt_verify", &jwtVerifyHook);
+    ring_vm_funcregister2(st, "__rs_sha256", &sha256Hook);
     ring_vm_funcregister2(st, "__js_load", &jsLoadHook);
     ring_vm_funcregister2(st, "__js_call", &jsCallHook);
     ring_vm_funcregister2(st, "__js_has", &jsHasHook);
@@ -905,6 +911,35 @@ threadlocal var g_jwt_out: std.ArrayList(u8) = .empty;
 ///
 /// Signature BEFORE claims, always: parsing attacker-controlled JSON that
 /// has not been authenticated is doing the attacker's work for them.
+threadlocal var g_sha_out: [64]u8 = undefined;
+
+/// Ring: __rs_sha256(cText) -> 64 lowercase hex characters.
+///
+/// The one primitive the journal cannot build for itself. Full SHA-256,
+/// not truncated: the germ this design comes from stored 16 hex characters
+/// as a display economy, and a chain that is a legal record should not spot
+/// an auditor 48 characters.
+///
+/// Hashes the BYTES GIVEN, with no normalisation of any kind. The journal
+/// hashes the exact text it appends and re-reads those same bytes to
+/// verify, so there is no re-serialisation step anywhere — two JSON
+/// encoders disagreeing about whitespace would otherwise be a ROMPUE that
+/// never happened.
+fn sha256Hook(p: ?*anyopaque) callconv(.c) void {
+    const text = argSlice(p, 1) orelse {
+        ring_vm_api_retstring2(p, "", 0);
+        return;
+    };
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(text, &digest, .{});
+    const hex = "0123456789abcdef";
+    for (digest, 0..) |b, i| {
+        g_sha_out[i * 2] = hex[b >> 4];
+        g_sha_out[i * 2 + 1] = hex[b & 0x0f];
+    }
+    ring_vm_api_retstring2(p, &g_sha_out, 64);
+}
+
 fn jwtVerifyHook(p: ?*anyopaque) callconv(.c) void {
     g_jwt_out.clearRetainingCapacity();
 

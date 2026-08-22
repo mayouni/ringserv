@@ -95,6 +95,12 @@ func __dispatch aReq
 			", or give it :authority = :server to be answered here")
 	ok
 
+	# A worker answers from state it rebuilt at boot, so it must fold in
+	# whatever OTHER workers have journaled since. Normally an indexed
+	# query returning nothing; see RsJournalCatchUp for the measurement
+	# that made this necessary rather than tidy.
+	RsJournalCatchUpAll()
+
 	aReq2 = [ :service = cService, :action = cAction, :payload = pPayload ]
 
 	# WHO is asking, before WHAT they asked. An action that requires a
@@ -221,6 +227,13 @@ func RsStaticRoutes
 # a worker's own connection must see the schema too, and CREATE TABLE
 # IF NOT EXISTS makes the repeat free.
 func __rs_data_apply aIgnored
+	# The journal is schema too, and it is set up BEFORE the early return
+	# below: an application may declare a journal and no tables at all, and
+	# a journal-only app that silently got no journal is exactly the kind of
+	# failure this store exists to make impossible.
+	RsJournalApply()
+	RsJournalReplayAll()
+
 	aData = RsDeclGet(aRsServDecl, "data", [])
 	if len(aData) = 0
 		return 0

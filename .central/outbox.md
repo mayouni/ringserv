@@ -995,3 +995,66 @@ next:
   - central: nothing owed
 ```
 ---
+
+--- FROM: ringserv | 2026-08-22 | CLOSE
+```yaml
+by:        ringserv · claude-opus-5 · 2026-08-22
+
+subject:   phase 9 -- the journaled store, and the finding that replay at boot is not enough
+
+why:       COMMONS.md section 1 was a design for a record French anti-fraud law
+           requires to be inalterable, inside a server whose sync layer trims
+           history on purpose. It is now built, and building it broke one of the
+           design's own assumptions.
+
+did:
+  - Built Journal() as a store BESIDE Data(), not a mode of it -- append-only,
+    SHA-256 hash-chained, replayed to state, never compacted.
+  - Added a __rs_sha256 host hook, because a hash chain computed in Ring would
+    have been the slowest part of every write.
+  - Read the chain head INSIDE the write transaction, so two workers appending
+    at once cannot fork the chain silently.
+  - Ran the application's :apply ONLY after the commit, so an application can
+    never hold state the journal cannot account for.
+  - Made JournalVerify report WHERE the chain breaks and WHICH invariant failed,
+    which the design promised only as INTACTE or ROMPUE.
+  - Made SyncCompact refuse a journal by name, the mirror image of it refusing
+    a non-shape.
+  - Made the exposed service read-only by construction: verify and read, and
+    no append action exists to be found.
+  - Discovered by measurement that replay at boot is NOT enough under N workers,
+    and fixed it -- see note.
+  - Wrote 28 gates covering the chain, the restart, worker agreement, the
+    refusals, and a body edited through a second connection.
+  - Marked COMMONS.md section 1 as built, naming both divergences and the one
+    piece still owed.
+
+state:
+  phase-9:            delivered
+  journal:            src/ringlib/journal.ring, 28 gates
+  tests/all.js:       19 suites
+  commons-section-1:  built; sections 2-5 still design only
+
+waiting:
+  - none
+
+next:
+  - me:      `ringserv journal export` as a CLI subcommand. JournalExport()
+             exists and the gates use it; the command-line form COMMONS.md
+             names does not exist yet, and is recorded as owed in that file.
+  - author:  the phase-8 gate is still his to open -- one real application
+             of his own, which no session can supply for him.
+
+note:      THE FINDING WORTH ANOTHER REPOSITORY'S ATTENTION. The germ this
+           design came from was one process, so it assumed replaying the
+           journal at boot rebuilt state. RingServ is N workers with private
+           VMs: :apply runs in the worker that appended, so every OTHER
+           worker's state stops at its own boot. Four orders numbered 1, 1, 2
+           across two workers -- printed by the fixture, not reasoned about.
+           A worker now catches up at the door before answering, against an
+           in-memory high-water mark that is per worker and never persisted.
+           Any session porting a single-process design onto a worker pool
+           inherits this bug, and it is invisible until you test with more
+           than one worker.
+```
+---
