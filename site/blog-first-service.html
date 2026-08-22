@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From a function to a record nobody can edit — RingServ</title>
+<meta name="description" content="A hands-on tutorial: serve a bare function, grow it into a declared service with a table and a contract, then give it a journal — a sales record that survives a crash and refuses to be quietly altered.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a class="active" href="blog.html">Blog</a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>From a function to a record<br>nobody can <em>edit</em>.</h1>
+  <p class="sub">Tutorial · 2026-08-22 · Three stops on one road: a bare function served
+  as-is, a declared service with a table and a contract, and finally a journal — the kind
+  of sales record a law can rely on. Every listing runs; total time, about twenty
+  minutes.</p>
+</header>
+
+<section class="wrap narrow">
+  <h2>Stop 1 — a function, served</h2>
+  <p class="lead">Start where every idea starts — a function in a file:</p>
+<pre class="code"><span class="c"># till.ring</span>
+<span class="k">func</span> total qty, price
+    <span class="k">return</span> qty * price</pre>
+<pre class="code"><span class="c">$</span> ringserv serve till.ring
+<span class="c">$</span> curl -X POST localhost:8080/api/v1 <span class="t">\</span>
+    -d <span class="s">'{"service":"till","action":"total","payload":{"qty":2,"price":180}}'</span>
+<span class="n">{"code":0,"message":"OK","data":360}</span></pre>
+  <p class="lead">No declarations, no routes. The payload's keys were matched to the
+  parameters by name. When you wonder what exactly is exposed,
+  <code>ringserv serve --explain till.ring</code> prints the whole mapping and exits.</p>
+
+  <h2>Stop 2 — a declared service, with a table and a door</h2>
+  <p class="lead">A real till needs to remember. Graduate the file — same binary, same
+  call shape, more said:</p>
+<pre class="code"><span class="f">RingServ</span>([
+    <span class="a">:port</span> = <span class="n">8080</span>,
+    <span class="a">:database</span> = <span class="s">"till.db"</span>,
+
+    <span class="a">:data</span> = [ <span class="a">:sales</span> = [ <span class="a">:item</span> = <span class="a">:text</span>, <span class="a">:amount</span> = <span class="a">:number</span> ] ],
+
+    <span class="a">:services</span> = [
+        <span class="a">:sales</span> = [ <span class="a">:table</span> = <span class="s">"sales"</span> ]     <span class="c"># list/add/edit/delete, one line</span>
+    ]
+])
+
+<span class="f">Contract</span>(<span class="a">:sales</span>, [
+    <span class="a">:create</span> = [ <span class="a">:in</span> = [
+        <span class="a">:item</span>   = [ <span class="a">:type</span> = <span class="a">:string</span>, <span class="a">:required</span> = <span class="k">true</span> ],
+        <span class="a">:amount</span> = [ <span class="a">:type</span> = <span class="a">:number</span>, <span class="a">:min</span> = <span class="n">0</span> ]
+    ] ]
+])</pre>
+  <p class="lead">Two things happened. The table became a service — five actions from one
+  line, with SQLite (in a file you can copy for backup) underneath. And the contract put
+  <b>validation at the door</b>: a request missing <code>item</code> is refused with every
+  problem named at once, before your code runs. An action that checks its own payload is
+  an action written twice.</p>
+
+  <h2>Stop 3 — the record that refuses to be quietly changed</h2>
+  <p class="lead">Now the part most stacks make you build yourself, badly, under
+  deadline. Sales are money, and in several countries the law says a sales record must be
+  <em>inalterable</em>. A table cannot promise that — anyone with the file can edit a row.
+  A <b>journal</b> can:</p>
+<pre class="code"><span class="f">Journal</span>([
+    <span class="a">:name</span>  = <span class="s">"sales"</span>,
+    <span class="a">:apply</span> = <span class="k">func</span> aEvent {
+        <span class="c"># fold each event into today's totals</span>
+        <span class="k">return</span> <span class="n">1</span>
+    }
+])
+
+<span class="c"># inside your action:</span>
+JournalAppend(<span class="s">"sales"</span>, [ <span class="a">:type</span> = <span class="s">"sold"</span>, <span class="a">:item</span> = <span class="s">"espresso"</span>, <span class="a">:amount</span> = <span class="n">360</span> ])</pre>
+  <p class="lead">Three properties, each one testable. <b>Append-only:</b> the journal's
+  own service exposes read and verify — an "edit" action does not exist to be called.
+  <b>Sealed:</b> every entry carries a fingerprint of the one before it, so if anyone
+  edits the file with a database tool, <code>ringserv journal verify</code> answers
+  <em>broken, at entry N, and why</em> — and exits with a failure code, so a nightly cron
+  job tells you instead of an auditor. <b>Replayed:</b> your running totals live in
+  memory, rebuilt from the journal at startup — kill the server mid-sale and nothing is
+  lost, because there is nothing outside the record to lose.</p>
+  <p class="lead">And when a customer cancels? You append a <code>cancelled</code> event
+  with a reason. The sale stays in history with its cancellation beside it — which is
+  exactly the difference between a record and a table.</p>
+
+  <h2>Where to go from here</h2>
+  <p class="lead">The <a
+  href="https://github.com/mayouni/ringserv/blob/main/docs/TUTORIAL.md">full tutorial
+  arc</a> continues: a JavaScript service, offline sync, and placement. And the <a
+  href="https://github.com/mayouni/ringserv/tree/main/examples/comptoir">reference
+  application</a> is this article grown all the way up — a café counter using every form
+  at once, with 38 tests driving it.</p>
+
+  <div class="actions" style="justify-content:flex-start">
+    <a class="btn primary" href="start.html">Start here</a>
+    <a class="btn ghost" href="blog.html">More articles</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>

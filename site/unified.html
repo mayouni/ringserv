@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One model, two players — RingServ + RingScript</title>
+<meta name="description" content="RingServ and RingScript share one programming model: the same call shape in the page and on the server, one declaration of services and data, and a topology that decides where each piece lives.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a class="active" href="unified.html">One model</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a href="blog.html">Blog</a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>One programming model,<br><em>two</em> players.</h1>
+  <p class="sub">RingScript puts the Ring VM in the browser. RingServ puts the same VM on
+  the server. Because both sides speak the same call — <code>service.action(payload)</code>
+  — a fullstack application is written <b>once</b>, and a separate declaration decides
+  where each piece runs. This page shows the whole idea in three code blocks.</p>
+</header>
+
+<section class="wrap">
+  <h2>1 — The call is the same call, everywhere</h2>
+  <p class="lead">In a RingScript page, a button asks for a price. On the server, a Ring
+  service answers. Neither side knows where the other lives:</p>
+  <div class="compare">
+    <div>
+      <span class="label"><b>The page</b> (RingScript, in the browser)<br>
+        asks by name, gets an answer</span>
+<pre class="code">aReply = serv.call(<span class="s">"orders.price"</span>, [
+    <span class="a">:item</span> = <span class="s">"espresso"</span>,
+    <span class="a">:qty</span>  = <span class="n">2</span>
+])
+
+Page(<span class="a">:settext</span>, [ <span class="a">:id</span> = <span class="s">"total"</span>,
+    <span class="a">:text</span> = aReply[<span class="a">:data</span>][<span class="a">:total</span>] ])</pre>
+    </div>
+    <div>
+      <span class="label"><b>The server</b> (RingServ)<br>
+        declares the same name, answers it</span>
+<pre class="code"><span class="f">RingServ</span>([ <span class="a">:services</span> = [
+    <span class="a">:orders</span> = [
+        <span class="a">:price</span> = <span class="k">func</span> aReq {
+            <span class="c"># qty × the current price</span>
+            <span class="k">return</span> Reply(<span class="a">:ok</span>, [
+                <span class="a">:total</span> = Price(aReq) ])
+        }
+    ]
+] ])</pre>
+    </div>
+  </div>
+  <p class="lead">A JavaScript page can make the identical call with
+  <code>serv.call("orders.price", {item: "espresso", qty: 2})</code> — the model is not
+  Ring-only, it is <em>name-and-payload</em>, which any client can speak.</p>
+</section>
+
+<section class="wrap">
+  <h2>2 — Declared once, placed separately</h2>
+  <p class="lead">Where should <code>orders.price</code> actually run? In the page, so it
+  works offline? On the server, where the whole dataset lives? That is a <b>deployment</b>
+  decision, so it does not live in the application — it lives in the topology:</p>
+<pre class="code"><span class="f">Topology</span>([
+    <span class="a">:app</span> = <span class="s">"comptoir"</span>,
+
+    <span class="a">:data</span> = [
+        <span class="a">:menu</span> = [ <span class="a">:store</span> = <span class="a">:local</span>, <span class="a">:sync</span> = <span class="a">:onreconnect</span> ]   <span class="c"># lives in the page, syncs back</span>
+    ],
+
+    <span class="a">:services</span> = [
+        <span class="a">:orders</span>  = [ <span class="a">:site</span> = <span class="a">:local</span>, <span class="a">:authority</span> = <span class="a">:server</span> ],  <span class="c"># instant in the page; server has the last word</span>
+        <span class="a">:reports</span> = [ <span class="a">:site</span> = <span class="a">:server</span> ]                        <span class="c"># needs the full dataset</span>
+    ]
+])</pre>
+  <p class="lead"><b>The one-word move.</b> The day a rule outgrows the page — it needs
+  data the page does not carry — change its <code>:site</code> and deploy. The rule's code
+  does not change. The page's call does not change. Only the answer's journey does. And
+  the server <em>enforces</em> the declaration: a service placed in the page is refused
+  over the wire with a message naming the fix, so the topology is a fact, not a comment.</p>
+</section>
+
+<section class="wrap">
+  <h2>3 — Offline is a declaration, not an architecture</h2>
+  <p class="lead">Mark a table <code>:store = :local</code> and the page keeps a copy,
+  works without a network, and syncs when the connection returns. Underneath is machinery
+  you never write: a change log on the read path, a queue on the write path that delivers
+  each change <b>exactly once</b> even when the connection drops mid-send, and an honest
+  signal when a client has been away so long it should refetch. It is the boring kind of
+  protocol — which is precisely what you want carrying your data.</p>
+  <p class="lead">This is the shape RingScript's local-first pages already use. RingServ
+  is the other half: the authority those pages sync back to.</p>
+</section>
+
+<section class="wrap">
+  <h2>Why this pairing is different</h2>
+  <div class="grid">
+    <div class="card">
+      <span class="icon">&#9673;</span>
+      <h3>Same VM on both sides</h3>
+      <p>Not "similar languages" — the same Ring VM, compiled to WebAssembly in the browser
+      and natively on the server, both verified byte-identical to native Ring.</p>
+    </div>
+    <div class="card">
+      <span class="icon">&#8646;</span>
+      <h3>Same call shape</h3>
+      <p>One seam, <code>service.action(payload)</code>, on both sides of the wire. No
+      route tables in the page, no client SDK to generate, nothing to keep in step.</p>
+    </div>
+    <div class="card">
+      <span class="icon">&#10064;</span>
+      <h3>Placement is enforced</h3>
+      <p>Most stacks describe their deployment in a diagram that drifts. Here the topology
+      is a declaration the server refuses to violate.</p>
+    </div>
+  </div>
+  <div class="actions" style="justify-content:flex-start; margin-top:1.6rem">
+    <a class="btn primary" href="start.html">Start here</a>
+    <a class="btn ghost" href="https://mayouni.github.io/ringscript/" target="_blank" rel="noopener">Meet RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a class="btn ghost" href="https://github.com/mayouni/ringserv/blob/main/docs/topology.md" target="_blank" rel="noopener">The topology, in depth <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>

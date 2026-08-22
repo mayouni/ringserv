@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q&amp;A — RingServ</title>
+<meta name="description" content="Honest answers to the questions people actually ask about RingServ: what it is for, what it refuses, how it compares, and what 0.9 means.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a class="active" href="faq.html">Q&amp;A</a>
+    <a href="blog.html">Blog</a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>Questions, answered <em>plainly</em>.</h1>
+  <p class="sub">The questions people actually ask — including the awkward ones. Where an
+  answer has a number behind it, the number is linked.</p>
+</header>
+
+<section class="wrap narrow">
+  <h2>What it is</h2>
+
+  <h3>What is RingServ, in one sentence?</h3>
+  <p class="lead">A modern server for Ring applications and web services: one downloaded
+  file that contains the web server, the Ring language, a SQL database and a JavaScript
+  engine, so writing a backend starts at zero and stays simple.</p>
+
+  <h3>Do I need to know Ring?</h3>
+  <p class="lead">It helps, and it is an afternoon's learning — Ring is small, dynamic and
+  readable. But no: a service can be written in JavaScript and run inside the same binary
+  under the same rules. Many applications will be a mix, and the two call each other by
+  name.</p>
+
+  <h3>Is this a framework?</h3>
+  <p class="lead">No — it is the whole stack in one binary. There is nothing to assemble:
+  no web server to configure, no database to install, no ORM to choose, no package tree to
+  audit. You write services; everything they stand on is already inside.</p>
+
+  <h3>How does it relate to RingScript?</h3>
+  <p class="lead">They are two halves of one idea: the same Ring VM in the browser and on
+  the server, speaking the same <code>service.action(payload)</code> call. Write the
+  application once; a separate declaration decides which pieces run where.
+  <a href="unified.html">The unified model</a> shows it in three code blocks.</p>
+
+  <h3>And to Softanza?</h3>
+  <p class="lead">RingServ is infrastructure <em>for</em> the Softanza project — the
+  dependency-free backend it stands on — while remaining fully usable by anyone with no
+  knowledge of Softanza at all. It complements Softanza's own server paradigms rather than
+  replacing them.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>The awkward ones</h2>
+
+  <h3>Why would I use this instead of Node or Bun?</h3>
+  <p class="lead">If Node is serving you well, keep it — sincerely. RingServ's case is
+  specific: <b>zero setup</b> (one file, no node_modules, no supply chain to audit),
+  <b>a database and a fiscal-grade journal built in</b>, <b>a declared, enforced
+  topology</b> with offline sync, and <b>a language you can teach in a day</b>. And it is
+  measured rather than argued: a full service round trip is
+  <a href="https://github.com/mayouni/ringserv/blob/main/docs/BENCHMARKS.md">0.75&nbsp;ms, with
+  ~5,700 requests/s at peak</a> on four workers — with the losses published next to the
+  wins.</p>
+
+  <h3>Is it fast enough for real applications?</h3>
+  <p class="lead">The numbers above come from the actual binary on service-shaped work —
+  dispatch, JSON, SQLite round trips. For the applications this exists for (business
+  systems, counters, field tools, sites), the server is not the bottleneck. For heavy
+  number crunching, keep using what you already use.</p>
+
+  <h3>What about HTTPS?</h3>
+  <p class="lead">Put a proxy in front — Caddy, nginx or Traefik handle certificates in a
+  few lines. RingServ speaks plain HTTP on purpose: encryption libraries are large and
+  change often, and copying one in would break the promise that the binary has no
+  dependencies. The server <em>refuses to start</em> on a public address until you confirm
+  a proxy is there, so this cannot bite you silently.</p>
+
+  <h3>Can I trust "it runs Ring"?</h3>
+  <p class="lead">It is checked, continuously: about 970 programs — Ring's official sample
+  set and every code block in Ring's documentation — run through RingServ and through
+  native Ring, compared character by character, on every change. Zero mismatches is a test
+  that fails the build, not a claim.</p>
+
+  <h3>What does 0.9 mean?</h3>
+  <p class="lead">Ready to use, not finished. Everything documented works and is tested on
+  Linux, macOS and Windows, but a command or a declaration may still change before 1.0 —
+  expect to read release notes when you upgrade. What the tests do not yet cover well is
+  <a href="https://github.com/mayouni/ringserv/blob/main/docs/GATES.md">listed openly</a>,
+  and the road ahead is <a href="https://github.com/mayouni/ringserv/blob/main/docs/PLAN.md">a
+  public plan</a>.</p>
+
+  <h3>What does it refuse to do?</h3>
+  <p class="lead">A few things, all on purpose and all said out loud: no TLS (above); number
+  formatting in JavaScript covers eight languages and nine currencies and <em>names</em>
+  anything outside them rather than formatting it wrongly; the config file reads ordinary
+  settings, not the whole YAML standard; and the journal has no delete — a cancellation is
+  an event with a reason, never an erasure, because that is what makes the record worth
+  keeping.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>Practical</h2>
+
+  <h3>What platforms?</h3>
+  <p class="lead">Linux (x64, arm64), macOS (Intel, Apple Silicon) and Windows — one file
+  each, built and tested by CI from the tagged commit, with checksums beside them.</p>
+
+  <h3>What is inside the binary, exactly — and whose work is it?</h3>
+  <p class="lead">Mahmoud Fayed and the Ring team's
+  <a href="https://ring-lang.github.io/">Ring VM</a>; D. Richard Hipp's
+  <a href="https://sqlite.org">SQLite</a>; the
+  <a href="https://github.com/quickjs-ng/quickjs">QuickJS-ng</a> JavaScript engine,
+  descended from Fabrice Bellard's QuickJS; Karl Seguin's
+  <a href="https://github.com/karlseguin/http.zig">http.zig</a>; and Youssef Saeed's
+  <a href="https://github.com/ysdragon/tree-sitter-ring">tree-sitter-ring</a> grammar
+  behind <code>ringserv check</code> — all vendored, pinned, and credited in
+  <a href="https://github.com/mayouni/ringserv/blob/main/vendor/VENDOR.md">vendor/VENDOR.md</a>,
+  compiled into one file by <a href="https://ziglang.org">Zig</a>.</p>
+
+  <h3>License?</h3>
+  <p class="lead">MIT, for everything.</p>
+
+  <h3>Where do I ask something this page missed?</h3>
+  <p class="lead">Open a discussion or an issue on
+  <a href="https://github.com/mayouni/ringserv">GitHub</a> — awkward questions welcome;
+  the best ones end up here.</p>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>

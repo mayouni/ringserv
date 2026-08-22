@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why we built a server for Ring — RingServ</title>
+<meta name="description" content="The case for RingServ: what it does that a Node stack, a classic LAMP setup or Ring's other backends do not — and the honest list of when you should not use it.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a class="active" href="blog.html">Blog</a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>Why we built a server<br>for <em>Ring</em>.</h1>
+  <p class="sub">Position · 2026-08-22 · Programming used to be: write the program, run
+  the program. Somewhere along the way, running a backend became an evening of
+  assembling other people's decisions. This is the case for putting it back — and the
+  honest list of when you should not listen to us.</p>
+</header>
+
+<section class="wrap narrow">
+  <h2>The evening you never get back</h2>
+  <p class="lead">Count what a "simple" Node backend asks of you before your first
+  endpoint answers: a runtime installed, a framework chosen (this year's), an ORM or a
+  driver, a validation library, a config loader, a process manager — and a
+  <code>node_modules</code> directory with a thousand strangers in it, any of whom can
+  publish an update tonight. None of that is your application. All of it is your
+  problem.</p>
+  <p class="lead">RingServ's opening move is to delete the evening: <b>one downloaded
+  file</b> that already contains the web server, the language, the SQL database, the
+  JavaScript engine and the validator. The supply-chain audit is reading
+  <a href="https://github.com/mayouni/ringserv/blob/main/vendor/VENDOR.md">one pinned
+  list</a>. The install instruction is a verb.</p>
+
+  <h2>Five things you get that assembling does not give you</h2>
+  <p class="lead"><b>1 — Services, not routes.</b> Every call is
+  <code>service.action(payload)</code> at one endpoint, with one envelope back. No URL
+  design meetings, no verb theology — and the wire shape is exactly what
+  <a href="unified.html">RingScript pages</a> already speak, which makes fullstack
+  symmetry free instead of a code generator.</p>
+  <p class="lead"><b>2 — Validation the server enforces.</b> Contracts are declarations,
+  checked before your code runs, reporting every violation at once. Your actions never
+  see a malformed payload — so they stop being half validation code.</p>
+  <p class="lead"><b>3 — A record the law can rely on, built in.</b> The journal is an
+  append-only, fingerprint-sealed history with replay recovery and a verifier that exits
+  non-zero for cron. Most stacks make you improvise this — money, audits, medical logs —
+  out of a mutable table and good intentions. Here it is a first-class store,
+  <a href="blog-first-service.html">three declarations long</a>.</p>
+  <p class="lead"><b>4 — Offline as a declaration.</b> Mark a table
+  <code>:local</code> and the page keeps working without a network, syncing back
+  exactly-once when it returns. The topology that places every piece is <em>enforced by
+  the server</em>, not drawn on a whiteboard that drifts.</p>
+  <p class="lead"><b>5 — Numbers instead of adjectives.</b> A service round trip:
+  0.75&nbsp;ms. A write: about a read. Peak: ~5,700 requests/s on four workers. And the
+  losses are <a href="https://github.com/mayouni/ringserv/blob/main/docs/BENCHMARKS.md">published
+  with their causes</a>, because a benchmark that only reports wins is marketing with
+  axes.</p>
+
+  <h2>Beside Ring's other backends</h2>
+  <p class="lead">Ring already speaks server-side — WebLib under Apache, RingHttpLib's
+  threads, and Youssef Saeed's elegant <a href="https://ysdragon.github.io/bolt/">Bolt</a>
+  over a Rust engine. RingServ takes a fourth position rather than competing for theirs:
+  it is not a routing layer but a <b>whole application server</b> — the unified model
+  with RingScript, the built-in data and journal stores, the enforced topology, the
+  zero-dependency operations story. The full survey of what we learned from each
+  neighbour is in <a
+  href="https://github.com/mayouni/ringserv/blob/main/docs/landscape.md">the landscape
+  study</a>.</p>
+
+  <h2>When you should not use it</h2>
+  <p class="lead">Honesty is the brand, so: if your team is fluent in Node and your stack
+  already hums, keep it. If you need heavy numeric computing, a mature ORM ecosystem, or
+  1.0-frozen APIs today, we are not there yet — 0.9 means ready to use and still moving.
+  And if you need the server itself to terminate TLS, we will keep saying no; the proxy
+  in front is the design, not a gap.</p>
+
+  <h2>The bigger bet</h2>
+  <p class="lead">RingServ is one piece of the Softanza project's wager: that programming
+  can be <b>fun and simple again like the eighties, yet modern and powerful like 2026</b>
+  — that a beginner's first backend and a professional's fiscal system can be the same
+  tool held at different depths. RingScript made the browser feel that way. This is the
+  server catching up.</p>
+
+  <div class="actions" style="justify-content:flex-start">
+    <a class="btn primary" href="start.html">Try the ninety seconds</a>
+    <a class="btn ghost" href="blog.html">More articles</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>

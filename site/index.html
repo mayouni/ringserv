@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RingServ — serve your backend in Ring, not in Node</title>
+<title>RingServ — a modern server for Ring apps and web services</title>
 <meta name="description" content="RingServ runs the real Ring VM on your server, in one static binary. Write clear, readable services — a database, a JavaScript engine and a web server are already inside. Nothing to install, nothing to configure.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css?v=0.9.0">
@@ -13,20 +13,22 @@
 <nav>
   <div class="wrap">
     <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
-    <a href="https://github.com/mayouni/ringserv/blob/main/docs/TUTORIAL.md">Start here</a>
-    <a href="https://github.com/mayouni/ringserv/tree/main/examples/comptoir">The reference app</a>
-    <a href="https://github.com/mayouni/ringserv/tree/main/docs">Docs</a>
+    <a href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a href="blog.html">Blog</a>
     <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
 </nav>
 
 <header class="hero wrap">
   <img class="logo" src="ringserv-logo.png" alt="RingServ">
-  <h1>Serve your backend in <em>Ring</em>.<br>Not in Node.</h1>
-  <p class="sub">RingServ puts a real programming-language VM on your server — one static
-  binary, resident, with a database, a JavaScript engine and a web server already inside it.
-  You write clear, boring, readable services. No Apache, no npm, no runtime to install,
-  nothing to configure.</p>
+  <h1>A modern server for <em>Ring</em> apps,<br>web services, and what comes next.</h1>
+  <p class="sub">Where RingScript makes Ring resident in the browser, RingServ makes it
+  resident on the server: one static binary that speaks HTTP by web standards, runs your
+  services in beautiful declarative Ring — or in JavaScript — stores data in embedded
+  SQLite, and syncs with local-first RingScript pages. No Apache, no npm, no runtime to
+  install, nothing to configure.</p>
   <div class="badges">
     <span class="badge">version 0.9</span>
     <span class="badge">one file per platform</span>
@@ -34,7 +36,7 @@
     <span class="badge">MIT</span>
   </div>
   <div class="actions">
-    <a class="btn primary" href="https://github.com/mayouni/ringserv/blob/main/docs/TUTORIAL.md">Start here &mdash; one file, one command</a>
+    <a class="btn primary" href="start.html">Start here &mdash; one file, one command</a>
     <a class="btn ghost" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Or download 0.9 <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
 </header>
@@ -188,6 +190,26 @@ app.listen(<span class="n">8080</span>)</pre>
 </section>
 
 <section class="wrap">
+  <h2>One programming model, two players</h2>
+  <p class="lead">RingServ and <a href="https://mayouni.github.io/ringscript/">RingScript</a>
+  are two halves of one idea. A page calls <code>serv.call("orders.place", {...})</code>;
+  a server declares <code>:orders</code> with a <code>:place</code> action. <b>The call
+  shape is identical on both sides</b>, so a fullstack application declares its services
+  and its data once, and a separate declaration — the topology — decides where each piece
+  lives: in the page, on the server, or on both with sync.</p>
+  <p class="lead">The consequence is the one-word move: a pricing rule that must work
+  offline runs in the page; the day it needs the whole dataset, change
+  <code>:site = :local</code> to <code>:site = :server</code> and deploy. The rule's code
+  does not change, the page's call does not change — only the answer's journey does.
+  No other pairing we know of — Node and its frameworks included — lets the same
+  declaration move between browser and server untouched.</p>
+  <div class="actions" style="justify-content:flex-start">
+    <a class="btn primary" href="unified.html">How the unified model works</a>
+    <a class="btn ghost" href="https://mayouni.github.io/ringscript/" target="_blank" rel="noopener">Meet RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</section>
+
+<section class="wrap">
   <h2>Trust, measured</h2>
   <p class="lead">"It runs Ring" is a claim worth checking, so it is checked continuously
   against the native interpreter — the whole official sample set and every code block in
@@ -260,6 +282,25 @@ app.listen(<span class="n">8080</span>)</pre>
     <a class="btn ghost" href="https://github.com/mayouni/ringserv" target="_blank" rel="noopener">GitHub <span class="newtab" aria-hidden="true">&#8599;</span></a>
     <a class="btn ghost" href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
   </div>
+</section>
+
+<section class="wrap narrow">
+  <h2>Standing on named shoulders</h2>
+  <p class="lead">One binary, zero dependencies — because the dependencies are inside,
+  vendored and pinned, and their authors deserve their names on the front page:
+  <b>Mahmoud Fayed</b> and the Ring team's
+  <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring VM</a> — the heart of
+  the whole thing; <b>Youssef Saeed</b>'s
+  <a href="https://github.com/ysdragon/tree-sitter-ring" target="_blank" rel="noopener">tree-sitter-ring</a>
+  grammar, which powers <code>ringserv check</code>; <b>Karl Seguin</b>'s
+  <a href="https://github.com/karlseguin/http.zig" target="_blank" rel="noopener">http.zig</a>
+  server core; <b>D. Richard Hipp</b>'s
+  <a href="https://sqlite.org" target="_blank" rel="noopener">SQLite</a>; the
+  <a href="https://github.com/quickjs-ng/quickjs" target="_blank" rel="noopener">QuickJS-ng</a>
+  engine descended from <b>Fabrice Bellard</b>'s QuickJS; and the
+  <a href="https://ziglang.org" target="_blank" rel="noopener">Zig</a> language that compiles
+  them all into one file. The exact pinned versions are in
+  <a href="https://github.com/mayouni/ringserv/blob/main/vendor/VENDOR.md" target="_blank" rel="noopener">vendor/VENDOR.md</a>.</p>
 </section>
 
 <footer>

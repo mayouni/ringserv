@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start here — RingServ</title>
+<meta name="description" content="From nothing to a running Ring service in ninety seconds: download one file, write plain functions, serve them. Then grow into tables, contracts and a journal, one step at a time.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a class="active" href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a href="blog.html">Blog</a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>One file, one command,<br>your first <em>service</em>.</h1>
+  <p class="sub">There is nothing to install first — not Ring, not Node, not a web server.
+  The binary you download <b>is</b> the whole stack. This page takes you from an empty
+  folder to a running API, then shows you where each next step lives.</p>
+</header>
+
+<section class="wrap">
+  <h2>Ninety seconds</h2>
+  <ol class="steps">
+    <li><b>Download one file.</b> Pick your platform on the
+      <a href="https://github.com/mayouni/ringserv/releases">releases page</a> — Linux,
+      macOS or Windows — and put it somewhere on your path. On Linux and macOS, make it
+      executable: <code>chmod +x ringserv</code>. That is the entire installation.</li>
+    <li><b>Write ordinary functions.</b> Create a file — say <code>calc.ring</code> —
+      containing nothing but functions:
+<pre class="code"><span class="k">func</span> add a, b
+    <span class="k">return</span> a + b
+
+<span class="k">func</span> hello name
+    <span class="k">return</span> <span class="s">"Ahlan, "</span> + name + <span class="s">"!"</span></pre></li>
+    <li><b>Serve them.</b> <code>ringserv serve calc.ring</code> — and every function in
+      the file is callable over the web, its parameters matched to your payload
+      <em>by name</em>:
+<pre class="code"><span class="c">$</span> curl -X POST localhost:8080/api/v1 <span class="t">\</span>
+    -d <span class="s">'{"service":"calc","action":"hello","payload":{"name":"Mansour"}}'</span>
+<span class="n">{"code":0,"message":"OK","data":"Ahlan, Mansour!"}</span></pre></li>
+  </ol>
+  <p class="lead">Not sure what you just published? <code>ringserv serve --explain
+  calc.ring</code> prints exactly which functions became callable — and which stayed
+  private (any name starting with <code>_</code>) — then exits without serving anything.
+  The tool states it, so you never have to guess.</p>
+</section>
+
+<section class="wrap">
+  <h2>Or scaffold it</h2>
+  <p class="lead">Two scaffolds, for two moods. <code>ringserv new myapp --gesture</code>
+  creates the pair you just met — a file of functions and a small
+  <code>ringserv.yaml</code> for the port and workers. Plain
+  <code>ringserv new myapp</code> creates the fuller shape: an <code>app.ring</code> with
+  a declared service and a table, a web page that calls its own API, and a test that
+  already passes.</p>
+<pre class="code"><span class="c">$</span> ringserv new myapp
+<span class="c">$</span> cd myapp
+<span class="c">$</span> ringserv dev        <span class="c"># serve, watch, reload on save</span>
+<span class="c">$</span> ringserv test       <span class="c"># run its tests against a scratch database</span></pre>
+  <p class="lead"><code>ringserv dev</code> is the daily loop: edit, save, and the server
+  reloads itself. When you want to see everything you are running in one place,
+  <code>ringserv panel .</code> opens a small admin page in your browser that starts,
+  stops and watches your applications.</p>
+</section>
+
+<section class="wrap">
+  <h2>Where each next step lives</h2>
+  <p class="lead">The <a href="https://github.com/mayouni/ringserv/blob/main/docs/TUTORIAL.md">tutorial
+  arc</a> sequences the whole journey — six runnable steps with a time on each. In brief:</p>
+  <ol class="steps">
+    <li><b>Tables and contracts.</b> Declare your data and what each request must contain;
+      bad requests are refused before your code runs.
+      <a href="https://github.com/mayouni/ringserv/blob/main/docs/getting-started.md">Getting started</a>
+      builds a whole application this way.</li>
+    <li><b>A JavaScript service.</b> Point a service at a <code>.js</code> file and it runs
+      inside the same binary, under the same rules, calling your Ring services by name —
+      <a href="https://github.com/mayouni/ringserv/blob/main/docs/JS.md">the JS guest</a>.</li>
+    <li><b>A record nobody can edit.</b> For sales, audits and anything the law says must
+      stay whole: <a href="https://github.com/mayouni/ringserv/blob/main/docs/COMMONS.md">the
+      journal</a>, where a cancellation is an event, never a deletion.</li>
+    <li><b>Place it.</b> Declare which pieces run in the page, which on the server, and
+      which sync — <a href="unified.html">the unified model</a> with RingScript.</li>
+  </ol>
+  <div class="actions" style="justify-content:flex-start">
+    <a class="btn primary" href="https://github.com/mayouni/ringserv/blob/main/docs/TUTORIAL.md">The full tutorial arc</a>
+    <a class="btn ghost" href="https://github.com/mayouni/ringserv/tree/main/examples/comptoir">Read a complete application <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</section>
+
+<section class="wrap narrow">
+  <h2>Before you deploy</h2>
+  <p class="lead">One rule, enforced by the server itself: for HTTPS, put a proxy in front
+  — Caddy, nginx or Traefik handle certificates in a few lines. RingServ speaks plain HTTP
+  on purpose and <em>refuses to start</em> on a public address until you confirm a proxy is
+  there, so traffic cannot go out in the clear by accident. The reasoning, and the two ways
+  forward, are in <a href="https://github.com/mayouni/ringserv/blob/main/docs/TLS.md">docs/TLS.md</a>.</p>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>

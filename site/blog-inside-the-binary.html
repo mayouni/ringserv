@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inside the one binary — RingServ</title>
+<meta name="description" content="A technical tour of RingServ's architecture: how Zig compiles the Ring VM, a web server, SQLite and QuickJS into one file, why there are N worker VMs and one writer, and how it is all verified against native Ring.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a class="active" href="blog.html">Blog</a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>Inside the <em>one</em> binary.</h1>
+  <p class="sub">Technical · 2026-08-22 · How a web server, a language VM, a SQL database
+  and a JavaScript engine become a single file — and the three design decisions that make
+  it behave under load.</p>
+</header>
+
+<section class="wrap narrow">
+  <h2>The bill of materials</h2>
+  <p class="lead">RingServ has zero dependencies because its dependencies are <em>inside
+  it</em>, vendored source by source, pinned commit by commit, and compiled together by
+  <a href="https://ziglang.org">Zig</a>: Mahmoud Fayed and the Ring team's
+  <a href="https://ring-lang.github.io/">Ring VM</a> — the same version 1.27 that
+  RingScript compiles to WebAssembly, here compiled natively; Karl Seguin's
+  <a href="https://github.com/karlseguin/http.zig">http.zig</a> in front; D. Richard
+  Hipp's <a href="https://sqlite.org">SQLite</a> underneath, in WAL mode; the
+  <a href="https://github.com/quickjs-ng/quickjs">QuickJS-ng</a> engine (Fabrice Bellard's
+  QuickJS, community-maintained) as the JavaScript guest; and Youssef Saeed's
+  <a href="https://github.com/ysdragon/tree-sitter-ring">tree-sitter-ring</a> grammar,
+  which lets <code>ringserv check</code> find mistakes without running anything.</p>
+  <p class="lead">Nothing is fetched at build time. <code>zig build</code> on a clean
+  clone touches the network zero times — which is also why the supply-chain audit of a
+  RingServ deployment is: read <a
+  href="https://github.com/mayouni/ringserv/blob/main/vendor/VENDOR.md">one file</a>.</p>
+
+  <h2>Decision one: N virtual machines, not one</h2>
+  <p class="lead">HTTP threads never touch the VM. Requests are queued to <b>N worker
+  threads, each owning a private Ring VM</b> — state is per-worker and thread-local, so
+  there is no lock around your code and a slow request delays one worker, not the server.
+  The workers proved out at roughly 9,500 evaluations per second on eight threads with
+  zero corruption before anything was built on them, and the whole server holds
+  <a href="https://github.com/mayouni/ringserv/blob/main/docs/BENCHMARKS.md">~5,700
+  requests/s at peak</a> with four.</p>
+
+  <h2>Decision two: many readers, one writer</h2>
+  <p class="lead">Every worker reads the database concurrently; <b>writes go through a
+  single writer</b>, one well-planned transaction at a time. That sounds like a
+  bottleneck and measures like a feature: a write costs about a read (0.94 vs
+  0.78&nbsp;ms), while the naive way — open, write, commit per statement — cost
+  <b>10.13&nbsp;ms</b> on the same path. The single writer is also what makes
+  exactly-once delivery for offline sync a property of the <em>database</em> rather than
+  of hopeful control flow: a change's claim and its work commit together or not at all.</p>
+
+  <h2>Decision three: the guest is a peer, not a plugin</h2>
+  <p class="lead">A <code>.js</code> service runs on QuickJS-ng inside the same process,
+  behind the same request contracts and the same placement rules as a Ring service, and
+  calls Ring services by name. Two details cost real engineering: <b>replies cross the
+  boundary as the guest's own JSON</b>, carried verbatim to the wire — Ring has no
+  <code>false</code> and no <code>null</code>, and re-encoding used to quietly turn one
+  into <code>0</code> and the other into <code>""</code>; and <b>the guest is measured,
+  not assumed</b>: 0.69&nbsp;ms per action against Ring's 0.75.</p>
+
+  <h2>How we know any of this is true</h2>
+  <p class="lead">The claim "it runs Ring" is tested by running <b>~970 programs</b> —
+  Ring's official samples and every code block in Ring's documentation — through RingServ
+  and through native Ring, and comparing output character by character, on every change,
+  on Linux, macOS and Windows. The documentation is held to the same standard: the guides'
+  own examples are extracted from the pages and executed, so prose that stops being true
+  stops the build. 625 tests, about seventy seconds, run constantly.</p>
+  <p class="lead">The first three-platform run was not a formality, and we published what
+  it caught — a cross-compile that had been silently broken, two strict-ISO compile traps,
+  and a stop button that hung only on Linux because of how process kill behaves on POSIX.
+  Testing on one platform had simply been unable to see any of them.</p>
+
+  <div class="actions" style="justify-content:flex-start">
+    <a class="btn primary" href="https://github.com/mayouni/ringserv/blob/main/docs/architecture.md">The architecture, in depth</a>
+    <a class="btn ghost" href="blog.html">More articles</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>

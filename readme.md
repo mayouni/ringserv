@@ -105,7 +105,7 @@ application.
 
 5. **Governed, testable Ring.** Ring's declarative style carries typed
    service *contracts* — validated at the door at runtime, checked
-   statically by the CLI using a vendored
+   statically by the CLI using **Youssef Saeed**'s vendored
    [tree-sitter-ring](https://github.com/ysdragon/tree-sitter-ring)
    grammar, and rendered into API docs automatically.
 
@@ -228,6 +228,19 @@ from a bare function to a hash-chained fiscal record, each one runnable.
 - [docs/TLS.md](docs/TLS.md) · [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — the deployment decisions, and the numbers
 - [docs/landscape.md](docs/landscape.md) — the study: Pionia, Hono, WinterTC, Bolt, and friends
 - [docs/roadmap.md](docs/roadmap.md) · [docs/PLAN.md](docs/PLAN.md) — what shipped, and what is next
+
+## Standing on named shoulders
+
+Zero dependencies means the dependencies are *inside* — vendored, pinned
+(`vendor/VENDOR.md`), and owed their names: **Mahmoud Fayed** and the Ring
+team's [Ring VM](https://ring-lang.github.io/); **Youssef Saeed**'s
+[tree-sitter-ring](https://github.com/ysdragon/tree-sitter-ring) grammar
+behind `ringserv check`; **Karl Seguin**'s
+[http.zig](https://github.com/karlseguin/http.zig) (with its metrics and
+websocket companions); **D. Richard Hipp**'s [SQLite](https://sqlite.org);
+[QuickJS-ng](https://github.com/quickjs-ng/quickjs), descended from
+**Fabrice Bellard**'s QuickJS; and the [Zig](https://ziglang.org) language
+and toolchain that compile them all into one file.
 
 ## License
 

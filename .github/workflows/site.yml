@@ -47,7 +47,7 @@ jobs:
       - name: Assemble
         run: |
           mkdir -p _site
-          cp site/index.html site/style.css site/favicon.svg site/ringserv-logo.png _site/
+          cp site/*.html site/*.css site/*.svg site/*.png _site/
           ls -la _site
 
       - uses: actions/configure-pages@v5
