@@ -265,6 +265,21 @@ fn runInVm(
         res.body = "{\"code\":1,\"message\":\"no workers available\",\"data\":\"\"}";
         return;
     }
+    // JSON is UTF-8 by definition (RFC 8259 §8.1), so a body that is not
+    // valid UTF-8 is refused AT THE DOOR — found the expensive way: a
+    // Latin-1 byte (a Windows curl sending "crème" unconverted) sailed
+    // through into the JOURNAL, where nothing may ever be deleted, and
+    // permanently broke every strict JSON consumer of that record. The
+    // journal kept its promise; the door had not kept its. Validating
+    // here protects every store at once, for one scan per request.
+    if (!std.unicode.utf8ValidateSlice(body)) {
+        res.status = 400;
+        res.content_type = .JSON;
+        res.body = "{\"code\":1,\"message\":\"malformed request: the body is not " ++
+            "valid UTF-8 — JSON is UTF-8 by definition (RFC 8259), and a byte " ++
+            "accepted here would poison durable records\",\"data\":\"\"}";
+        return;
+    }
     var job = Job{ .entry = entry, .body = body, .auth = auth };
     defer job.response.deinit(alloc);
     enqueue(&job);
