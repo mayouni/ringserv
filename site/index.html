@@ -42,20 +42,11 @@
 
 <section class="wrap" style="padding-top:1rem">
   <figure>
-<pre class="code"><span class="c"># calc.ring — the whole file. Ordinary functions, nothing else.</span>
-
-<span class="k">func</span> add a, b
-    <span class="k">return</span> a + b
-
-<span class="c">$</span> ringserv serve calc.ring
-<span class="c">$</span> curl -X POST localhost:8080/api/v1 <span class="t">\</span>
-      -d <span class="s">'{"service":"calc","action":"add",
-           "payload":{"a":19,"b":23}}'</span>
-<span class="n">{"code":0,"message":"OK","data":42}</span></pre>
-    <figcaption>The first touch: a file of plain functions, served as-is. Worried about what
-    you just published? <code>ringserv serve --explain calc.ring</code> prints exactly which
-    functions became callable, then exits.
-    <a href="https://github.com/mayouni/ringserv/blob/main/docs/gesture.md">How the mapping works</a></figcaption>
+    <img src="ringserv-admin-panel.png" alt="The RingServ admin panel — three applications hosted, one running, its log tail and a live call answering 42">
+    <figcaption>The admin panel: every application in one place — start it, stop it,
+    watch its log, and call any action right from the browser. It ships inside the
+    same binary: <code>ringserv panel .</code>
+    <a href="start.html">Start here</a></figcaption>
   </figure>
 </section>
 
@@ -154,6 +145,18 @@ app.listen(<span class="n">8080</span>)</pre>
       Move one between them by changing a word, not the application.</p>
     </div>
   </div>
+</section>
+
+<section class="wrap narrow">
+  <h2>One file, many homes</h2>
+  <p class="lead">The same application runs wherever a file can run: Linux, macOS and
+  Windows servers, a laptop under the counter, or a small ARM board like a
+  <b>Raspberry&nbsp;Pi</b> — one downloaded file each, nothing to install around it.
+  <b>Mobile phones are next</b> on the <a
+  href="https://github.com/mayouni/ringserv/blob/main/docs/PLAN.md">public plan</a>,
+  and so is <b>deploying agents</b> — long-running workers with journal-backed memory,
+  the hosting side of Softanza&nbsp;PI. The plan is public precisely so you can see
+  what is real today and what is next.</p>
 </section>
 
 <section class="wrap">
