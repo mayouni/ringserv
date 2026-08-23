@@ -242,8 +242,9 @@ behind `ringserv check`; **Karl Seguin**'s
 [http.zig](https://github.com/karlseguin/http.zig) (with its metrics and
 websocket companions); **D. Richard Hipp**'s [SQLite](https://sqlite.org);
 [QuickJS-ng](https://github.com/quickjs-ng/quickjs), descended from
-**Fabrice Bellard**'s QuickJS; and the [Zig](https://ziglang.org) language
-and toolchain that compile them all into one file.
+**Fabrice Bellard**'s QuickJS; and **Andrew Kelley** and the Zig team's
+[Zig](https://ziglang.org) language and toolchain, which compile them all
+into one file.
 
 ## License
 
