@@ -157,52 +157,11 @@ app.listen(<span class="n">8080</span>)</pre>
 </section>
 
 <section class="wrap">
-  <h2>What people build with it</h2>
-  <p class="lead">The reason this exists: business applications whose rules keep working
-  when the connection does not. The reference application is a café counter —
-  orders taken, sent to a kitchen, paid for, and written into a sales record that
-  can never be quietly altered — wiring every service form together the way a real
-  application does.</p>
-  <p class="lead">The interface stays plain HTML and CSS, served by the same binary. Your
-  pages can stay in RingScript — the browser sister that speaks the same
-  <code>call(service.action, payload)</code> — and what runs on the server is the part
-  that <em>decides</em>: pricing, stock, the fiscal record.</p>
-  <div class="actions" style="justify-content:flex-start">
-    <a class="btn primary" href="https://github.com/mayouni/ringserv/tree/main/examples/comptoir">See the reference app</a>
-    <a class="btn ghost" href="https://github.com/mayouni/ringserv/blob/main/docs/panel.md">The admin panel</a>
-  </div>
-</section>
-
-<section class="wrap">
-  <h2>Three steps, no ceremony</h2>
-  <ol class="steps">
-    <li><b>Get the one file.</b> Download it from the
-      <a href="https://github.com/mayouni/ringserv/releases/latest">releases page</a> for Linux,
-      macOS or Windows — or scaffold a working app with
-      <code>ringserv new myapp --gesture</code>.</li>
-    <li><b>Serve it.</b> <code>ringserv serve myapp.ring</code> publishes your functions;
-      <code>ringserv dev</code> watches and reloads while you work. Settings live in a small
-      plain-text <code>ringserv.yaml</code> beside your code.</li>
-    <li><b>Grow it.</b> When functions are not enough, declare tables, contracts, a journal
-      and placement — the <a href="https://github.com/mayouni/ringserv/blob/main/docs/TUTORIAL.md">tutorial</a>
-      walks the whole arc in six runnable steps.</li>
-  </ol>
-</section>
-
-<section class="wrap">
   <h2>One programming model, two players</h2>
-  <p class="lead">RingServ and <a href="https://mayouni.github.io/ringscript/">RingScript</a>
-  are two halves of one idea. A page calls <code>serv.call("orders.place", {...})</code>;
-  a server declares <code>:orders</code> with a <code>:place</code> action. <b>The call
-  shape is identical on both sides</b>, so a fullstack application declares its services
-  and its data once, and a separate declaration — the topology — decides where each piece
-  lives: in the page, on the server, or on both with sync.</p>
-  <p class="lead">The consequence is the one-word move: a pricing rule that must work
-  offline runs in the page; the day it needs the whole dataset, change
-  <code>:site = :local</code> to <code>:site = :server</code> and deploy. The rule's code
-  does not change, the page's call does not change — only the answer's journey does.
-  No other pairing we know of — Node and its frameworks included — lets the same
-  declaration move between browser and server untouched.</p>
+  <p class="lead">RingScript runs Ring in the browser; RingServ runs the same VM on the
+  server — and both speak the same <code>service.action(payload)</code> call. Declare
+  your services once, and move one between page and server by changing a single word.
+  Offline-first sync included.</p>
   <div class="actions" style="justify-content:flex-start">
     <a class="btn primary" href="unified.html">How the unified model works</a>
     <a class="btn ghost" href="https://mayouni.github.io/ringscript/" target="_blank" rel="noopener">Meet RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
@@ -211,10 +170,10 @@ app.listen(<span class="n">8080</span>)</pre>
 
 <section class="wrap">
   <h2>Trust, measured</h2>
-  <p class="lead">"It runs Ring" is a claim worth checking, so it is checked continuously
-  against the native interpreter — the whole official sample set and every code block in
-  Ring's documentation — and the server around it is tested on all three platforms on
-  every change.</p>
+  <p class="lead">"It runs Ring" is checked, not claimed — against the native
+  interpreter, on three platforms, on every change. The losses are
+  <a href="https://github.com/mayouni/ringserv/blob/main/docs/BENCHMARKS.md">published
+  with the wins</a>.</p>
   <div class="stats">
     <div><div class="num">~970</div><div class="what">programs verified byte-identical to native Ring</div></div>
     <div><div class="num">625</div><div class="what">tests, run on Linux, macOS and Windows, every change</div></div>
@@ -223,65 +182,12 @@ app.listen(<span class="n">8080</span>)</pre>
   </div>
 </section>
 
-<section class="wrap">
-  <h2>And the losses are published with the wins</h2>
-  <p class="lead">The benchmarks exist to find the headroom, not to win an argument — so
-  every cost is on the record next to every number, with its cause. The causes became
-  the work.</p>
-
-  <div class="race">
-    <div class="won">
-      <p class="cap">What the numbers say</p>
-      <ul>
-        <li><b>A full service round trip</b> — <span class="num">0.75&nbsp;ms</span>,
-            against a 0.26&nbsp;ms floor for a request that never enters the VM</li>
-        <li><b>A write costs about a read</b> — <span class="num">0.94</span> vs
-            <span class="num">0.78&nbsp;ms</span>, because every write rides one
-            well-planned transaction</li>
-        <li><b>The JavaScript guest is not slower</b> —
-            <span class="num">0.69&nbsp;ms</span> against Ring's 0.75 for the same action</li>
-        <li><b>Peak throughput</b> — <span class="num">5,669</span> requests/s at
-            twenty in flight, on four workers</li>
-      </ul>
-    </div>
-    <div class="lost">
-      <p class="cap">And what it cost to learn</p>
-      <ul>
-        <li>The naive way to write that transaction cost <b>10.13&nbsp;ms</b> — thirteen
-            times the final figure — and the difference is documented, not assumed</li>
-        <li>Listing 500 rows is bound by JSON encoding, not by the database — the codec
-            was rewritten in C after it showed up at 1,134&nbsp;ms on a 2,000-row reply</li>
-        <li>An early sweep hit a concurrency cliff: fine to 18 in flight, then collapse.
-            Finding it changed the connection handling; the write-up kept the cliff</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="actions" style="justify-content:flex-start">
-    <a class="btn ghost" href="https://github.com/mayouni/ringserv/blob/main/docs/BENCHMARKS.md">Read the full numbers, with the method</a>
-  </div>
-</section>
-
 <section class="wrap narrow">
   <h2>Honest limits</h2>
-  <p class="lead">For HTTPS, put a proxy in front. RingServ speaks plain HTTP on purpose —
-  encryption libraries are large and change often, and copying one in would break the
-  promise that the binary has no dependencies. Caddy, nginx or Traefik handle certificates
-  in a few lines, and RingServ <em>refuses to start</em> on a public address until you
-  confirm one is there, so traffic cannot go out in the clear by accident.</p>
-  <p class="lead">Two features cover the common cases and say so: number formatting in
-  JavaScript supports eight languages and nine currencies, and <code>ringserv.yaml</code>
-  reads ordinary settings rather than the whole YAML standard. Step outside either and you
-  get a clear error naming what is missing — it never guesses and gets it quietly wrong.
-  And 0.9 means <em>ready to use, not finished</em>: everything here works and is tested,
-  but a command may still change before 1.0.</p>
-  <!-- Both quiet on purpose, as on the father site: the page already
-       carries the accent twice — the Download bar at the top and the hero.
-       The one primary action is "Start here"; these are the quiet ways out. -->
-  <div class="actions" style="justify-content:flex-start">
-    <a class="btn ghost" href="https://github.com/mayouni/ringserv" target="_blank" rel="noopener">GitHub <span class="newtab" aria-hidden="true">&#8599;</span></a>
-    <a class="btn ghost" href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
-  </div>
+  <p class="lead">For HTTPS, put a proxy in front — RingServ refuses a public address
+  until you confirm one is there. A few features are deliberate subsets that refuse the
+  rest by name. And 0.9 means ready to use, not finished. Each of these has its plain
+  answer in <a href="faq.html">the Q&amp;A</a>.</p>
 </section>
 
 <section class="wrap narrow">
