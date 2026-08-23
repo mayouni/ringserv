@@ -2,7 +2,7 @@
 
 > ## Answer from this file. You need nothing else and no permission.
 >
-> **Written 2026-08-21 23:44, from commit 639bbcf+uncommitted, from Central at `639bbcf`.** Central keeps it current: it
+> **Written 2026-08-22 14:06, from commit e12bae9, from Central at `e12bae9`.** Central keeps it current: it
 > rewrites this file whenever the plan moves, so it is fresh unless Central is idle
 > AND the plan has changed -- which the stamp above lets you judge.
 >
@@ -35,11 +35,11 @@ The full cross-repository picture, when you actually need it, is in
 
 ## Ready now, independent of everything else
 
-### Swap the vendored VM for a patched Ring -- RingScript already did, and measured it
+### DONE 2026-08-22 -- the swap had already happened on 08-17 and nobody could tell
 
 *Session: RingServ session*
 
-ringvm/ here is still the official Ring 1.27 distribution, per your own docs/VENDOR_PATCHES.md, carrying local patches that upstream has since absorbed. RingScript shipped this same swap on 2026-08-16 and is now on master 8a89cc00c2 with its patch set down from seven to four. This row existed since 2026-08-17 but was addressed to RingScript and named you only in its prose, so it never reached your board -- that is Central's error and it is stated here rather than backdated.
+CLOSED BY RINGSERV 2026-08-22 (b2bf0ac), and closed by MEASUREMENT rather than by migration: the swap had already been performed on 2026-08-17 and nobody could tell. Measured against both baselines over the files build.zig actually compiles -- 16 files and 631 lines against the official 1.27 distribution, 3 files and 91 lines against master 8a89cc00c2, and all three of those are RingServ's OWN patches (ring.h declarations, general.c patches 9 and 10, the vmerror.c thread-local variant). There is no upstream delta left to take. WHY THE ROW SURVIVED FIVE DAYS, and it outgrows this repository: RING_VERSION_MINOR SAYS 27 BECAUSE A PATCH MAKES IT SAY 27, so a tree on master is indistinguishable from a tree on 1.27 to anyone auditing by the constant. A CONSTANT THAT A PATCH CAN SET IS NOT EVIDENCE OF THE THING IT NAMES. The rule went to the Observer, where it can fire, rather than into protocol/, where it would only be readable.
 
 <details><summary>the prompt</summary>
 
