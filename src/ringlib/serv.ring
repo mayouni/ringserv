@@ -220,6 +220,13 @@ func __rs_serv_config aIgnored
 		:host       = "" + RsDeclGet(aRsServDecl, "host", "127.0.0.1"),
 		:behindproxy = RsBool(RsDeclGet(aRsServDecl, "behindproxy", 0)),
 		:workers  = RsDeclGet(aRsServDecl, "workers", 0),
+		# The family handshake (docs/PLAN.md phase 12). ON by default —
+		# zero-config symbiosis is the point — and :announce = false
+		# refuses ENTIRELY: no socket, no beacon, nothing to overhear.
+		:announce = RsBool(RsDeclGet(aRsServDecl, "announce", 1)),
+		:app      = "" + RsDeclGet(aRsServDecl, "app", "app"),
+		:custody  = "" + RsDeclGet(RsDeclGet(aRsServDecl, "identity", []), "custody", "L0"),
+		:alg      = "" + RsDeclGet(RsDeclGet(aRsServDecl, "identity", []), "alg", "none"),
 		:database = RsDeclGet(aRsServDecl, "database", ":memory:"),
 		:static   = RsStaticRoutes()
 	]

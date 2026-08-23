@@ -453,6 +453,37 @@ outside, which was the claim.
 
 **Phase 11 is delivered.**
 
+## Phase 12 — The family handshake ✅ (delivered 2026-08-23)
+
+The vision's symbiosis promise made executable ([FAMILY.md](FAMILY.md)):
+two RingServ processes on one host or LAN discover each other with zero
+configuration and call each other by name — `Family()` and
+`FamilyCall("beta", "hello.greet", …)` — while `:announce = false`
+refuses by ABSENCE: no socket, nothing to overhear, proven by packet
+capture rather than trust.
+
+One boring transport: a JSON beacon on UDP multicast 239.255.71.74:47474,
+carrying the device-identity fields relayed from microring (custody as
+the axis, the algorithm named even when "none") — shape routed to
+Central as PLAN-HANDSHAKE-12 before it freezes, provisional until
+answered. The roster is a phone book, not a trust store: a family call
+is dispatched by the called server's ordinary door, because over the
+wire family is a stranger with a known address.
+
+Two findings, each from a failing gate, each now a comment where the
+code is: **multicast, not unicast** (N sockets sharing a port all hear a
+multicast; only one hears a unicast — the suite's own capture socket ate
+the beacons and proved it), and **the beacon carries the bind address**,
+so reachability mirrors the TLS rule instead of lying — a loopback-bound
+sibling honestly advertises same-host-only.
+
+**Gate — passed:** 13 gates (`tests/family-gates.js`): discovery with
+zero config, identity round-trip, the placed call, refusals unchanged
+for family callers, packet-captured silence, junk/wrong-family/wrong-
+version ignored by shape. 23 suites.
+
+**Phase 12 is delivered.**
+
 ## Standing risks (tracked, not hidden)
 
 - **VM concurrency** — the N-worker model is designed, not proven;

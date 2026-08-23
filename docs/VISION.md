@@ -99,9 +99,11 @@ when the prose rots; born-from-RestoLean primitives. **Since phase 10
   `Intl` and `crypto.subtle.digest`, and the Node benchmark is published
   losses-first (phase 11, 2026-08-23). Still open: TypeScript, and any
   npm story (currently a named refusal, not a gap).
-- *Family symbiosis*: C3 is ratified and enforced; the device-identity
-  contract is relayed; but "two family processes find each other with zero
-  configuration" is not yet demonstrable end to end.
+- *Family symbiosis*: two RingServ processes now find each other with
+  zero configuration and call each other by name (phase 12, 2026-08-23,
+  [FAMILY.md](FAMILY.md)); still open: MicroRing/RingScript joining the
+  same handshake, which is theirs to adopt once the identity shape
+  freezes.
 - *Cloud*: cross-compilation is proven, deployment ergonomics are not.
 
 **Not started.**

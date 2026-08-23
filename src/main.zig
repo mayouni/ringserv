@@ -35,6 +35,10 @@ const ServDecl = struct {
     workers: u32,
     database: []const u8,
     statics: []const serve.StaticRoute,
+    announce: bool = true,
+    app: []const u8 = "app",
+    custody: []const u8 = "L0",
+    alg: []const u8 = "none",
 };
 
 /// Ask the (already evaluated) app whether it declared Serv(), and with
@@ -74,6 +78,18 @@ fn servConfig(arena: std.mem.Allocator) ?ServDecl {
         .string => |h| if (h.len == 0) "127.0.0.1" else h,
         else => "127.0.0.1",
     };
+    const app_name = switch (obj.get("app") orelse std.json.Value{ .string = "app" }) {
+        .string => |a| if (a.len == 0) "app" else a,
+        else => "app",
+    };
+    const custody = switch (obj.get("custody") orelse std.json.Value{ .string = "L0" }) {
+        .string => |a| a,
+        else => "L0",
+    };
+    const alg = switch (obj.get("alg") orelse std.json.Value{ .string = "none" }) {
+        .string => |a| a,
+        else => "none",
+    };
     return .{
         .port = if (port_f >= 1 and port_f <= 65535) @intFromFloat(port_f) else 8080,
         .host = host,
@@ -81,6 +97,10 @@ fn servConfig(arena: std.mem.Allocator) ?ServDecl {
         .workers = @intFromFloat(@max(1, @min(64, workers_f))),
         .database = database,
         .statics = statics.items,
+        .announce = (jsonNum(obj.get("announce")) orelse 1) != 0,
+        .app = app_name,
+        .custody = custody,
+        .alg = alg,
     };
 }
 
@@ -439,6 +459,19 @@ pub fn main() !u8 {
                 "ringserv: serving plain HTTP on {s}:{d} — :behindproxy is set, " ++
                     "so TLS is the proxy's job.\n",
                 .{ cfg.host, cfg.port },
+            );
+        }
+
+        // The family handshake, ON by default (docs/PLAN.md phase 12):
+        // zero-config symbiosis is the point, and refusing is one word.
+        // Started before serve.start because serve.start blocks.
+        if (cfg.announce) {
+            bridge.family.start(
+                try arena.dupe(u8, cfg.app),
+                try arena.dupe(u8, cfg.host),
+                cfg.port,
+                try arena.dupe(u8, cfg.custody),
+                try arena.dupe(u8, cfg.alg),
             );
         }
 

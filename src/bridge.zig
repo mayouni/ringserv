@@ -17,6 +17,7 @@
 //!   rs_set_echo(b)                also stream output to C stdout (CLI mode)
 
 const std = @import("std");
+pub const family = @import("family.zig");
 pub const db = @import("db.zig");
 /// The second guest. Lives in THIS module, beside db.zig and for the same
 /// reason: the Ring hooks that reach it are registered here, and a hook
@@ -385,6 +386,8 @@ const journal_ring_src = @embedFile("ringlib/journal.ring");
 
 const gesture_ring_src = @embedFile("ringlib/gesture.ring");
 
+const family_ring_src = @embedFile("ringlib/family.ring");
+
 const config_ring_src = @embedFile("ringlib/config.ring");
 /// actorlib — who is calling, and whether they may. Loaded after
 /// contract.ring, whose per-action spec it reads.
@@ -467,6 +470,7 @@ const ringlib_files = [_]RingLibFile{
     .{ .name = "actor.ring", .src = actor_ring_src, .provides = "rsactorcheck" },
     .{ .name = "journal.ring", .src = journal_ring_src, .provides = "journalappend" },
     .{ .name = "gesture.ring", .src = gesture_ring_src, .provides = "rsgesturecall" },
+    .{ .name = "family.ring", .src = family_ring_src, .provides = "family" },
     .{ .name = "config.ring", .src = config_ring_src, .provides = "rsconfigfold" },
     .{ .name = "testing.ring", .src = testing_ring_src, .provides = "ask", .testing_only = true },
 };
@@ -516,6 +520,8 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__rs_authtoken", &authTokenHook);
     ring_vm_funcregister2(st, "__rs_jwt_verify", &jwtVerifyHook);
     ring_vm_funcregister2(st, "__rs_sha256", &sha256Hook);
+    ring_vm_funcregister2(st, "__rs_family", &familyHook);
+    ring_vm_funcregister2(st, "__rs_family_call", &familyCallHook);
     ring_vm_funcregister2(st, "__js_load", &jsLoadHook);
     ring_vm_funcregister2(st, "__js_module", &jsModuleHook);
     ring_vm_funcregister2(st, "__js_load_module", &jsLoadModuleHook);
@@ -708,6 +714,71 @@ pub export fn rs_append_output(ptr: [*]const u8, len: usize) void {
 // deliberate: RING resolves and reads the file, the GUEST only ever sees
 // source text. That is what keeps "the JS guest has no filesystem" true
 // as a property of the build rather than a promise in a document.
+
+/// Ring: __rs_family() -> the discovery roster as JSON. Self excluded,
+/// stale entries dropped. Advisory by design: the truth about a sibling
+/// is its own /topology, not a datagram somebody could forge.
+fn familyHook(p: ?*anyopaque) callconv(.c) void {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(alloc);
+    family.rosterJson(&out) catch {
+        ring_vm_api_retstring2(p, "[]", 2);
+        return;
+    };
+    ring_vm_api_retstring2(p, out.items.ptr, @intCast(out.items.len));
+}
+
+/// Ring: __rs_family_call(cHost, nPort, cBodyJson) -> the sibling's reply
+/// body. One plain HTTP/1.1 POST, Connection: close — the same
+/// hand-rolled shape the panel proxies with, because a discovered
+/// sibling is just an HTTP server that happens to share your family.
+fn familyCallHook(p: ?*anyopaque) callconv(.c) void {
+    const host = argZ(p, 1) orelse {
+        ring_vm_error(p, "__rs_family_call: expects host, port, body");
+        return;
+    };
+    defer alloc.free(host);
+    const port_f = ring_vm_api_getnumber(p, 2);
+    const body = argZ(p, 3) orelse {
+        ring_vm_error(p, "__rs_family_call: expects host, port, body");
+        return;
+    };
+    defer alloc.free(body);
+    if (port_f < 1 or port_f > 65535) {
+        ring_vm_error(p, "__rs_family_call: not a port");
+        return;
+    }
+    var arena_state = std.heap.ArenaAllocator.init(alloc);
+    defer arena_state.deinit();
+    const reply = familyPost(arena_state.allocator(), host, @intFromFloat(port_f), body) catch |e| {
+        var msg: [128]u8 = undefined;
+        const m = std.fmt.bufPrintZ(&msg, "family call failed: {s}", .{@errorName(e)}) catch "family call failed";
+        ring_vm_error(p, m.ptr);
+        return;
+    };
+    ring_vm_api_retstring2(p, reply.ptr, @intCast(reply.len));
+}
+
+fn familyPost(arena: std.mem.Allocator, host: []const u8, port: u16, body: []const u8) ![]const u8 {
+    const stream = try std.net.tcpConnectToHost(arena, host, port);
+    defer stream.close();
+    var wbuf: [1024]u8 = undefined;
+    var w = stream.writer(&wbuf);
+    try w.interface.print("POST /api/v1 HTTP/1.1\r\nHost: {s}\r\nContent-Type: application/json\r\n" ++
+        "Content-Length: {d}\r\nConnection: close\r\n\r\n", .{ host, body.len });
+    try w.interface.writeAll(body);
+    try w.interface.flush();
+    var rbuf: [4096]u8 = undefined;
+    var r = stream.reader(&rbuf);
+    var all: std.ArrayList(u8) = .empty;
+    while (true) {
+        const chunk = r.interface().takeByte() catch break;
+        try all.append(arena, chunk);
+        if (all.items.len > 8 * 1024 * 1024) break;
+    }
+    const sep = std.mem.indexOf(u8, all.items, "\r\n\r\n") orelse return error.BadReply;
+    return all.items[sep + 4 ..];
+}
 
 /// Ring: __js_load(cName, cSource) — register a JS service in this
 /// worker's guest. Raises a trappable Ring error carrying the guest's own

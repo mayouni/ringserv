@@ -47,6 +47,7 @@ const suites = [
     { name: "gesture + config  ", node: "gesture-gates.js" },
     { name: "the panel         ", node: "panel-gates.js" },
     { name: "comptoir (broad)  ", node: "comptoir-gates.js" },
+    { name: "family handshake  ", node: "family-gates.js" },
 ];
 
 if (full) {

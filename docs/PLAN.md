@@ -64,35 +64,12 @@ intact (Ring walks the graph; the guest still has no filesystem),
 published losses-first in [BENCHMARKS.md](BENCHMARKS.md). One scoping
 note in the change log.
 
-## Phase 12 — The family handshake
+## Phase 12 — The family handshake ✅ (delivered 2026-08-23)
 
-**Vision:** *"the family must know each other and work seamlessly by default
-and without complex configuration."* C3 placement and the device-identity
-relay (microring's `docs/identity.md` §9) are the two bricks already laid.
-
-**Deliverables.**
-- **Announce and discover**: a RingServ process can announce itself (name,
-  topology role, contract versions) and discover siblings on the same host and
-  LAN with **zero configuration** — one primitive, boring transport (likely
-  UDP beacon + the existing `/topology` endpoint as the truth), refusable by a
-  single `:announce = false`.
-- **The identity seam honoured**: discovery carries the device-identity
-  contract's fields, custody-axis included, so a MicroRing device and a
-  RingServ host recognise each other by the relayed contract rather than by a
-  parallel invention. **Coordination note:** the contract has two owners
-  (ringserv and zing) — the shape goes through Central before it freezes.
-- **The demo that is the point**: two processes on one machine find each other
-  and route a call with *no* config file, shown in the didactic docs through
-  the phase-10 gesture.
-
-**Gate.** Two fixtures discover each other and exchange a placed call with
-zero lines of discovery config; `:announce = false` is silent on the wire
-(gated by packet capture, not by trust); the identity fields round-trip; a
-third, non-family process on the same port range is ignored, by name.
-
-**Risk.** Discovery protocols rot into complexity. The scope fence: same
-host and LAN only — cross-network topology stays C3's declared, explicit
-business, and this phase does not touch it.
+The record is in [roadmap.md](roadmap.md); the doc is
+[FAMILY.md](FAMILY.md). Zero-config discovery on host+LAN, the placed
+call by name, refusal by absence (packet-captured), the identity fields
+carried provisionally pending Central's PLAN-HANDSHAKE-12 answer.
 
 ## Phase 13 — RestoLean on RingServ
 
@@ -207,6 +184,10 @@ reason; js-gates extended.
 ## Change log
 
 *Reorderings and scope changes land here, one line each, newest first.*
+
+- 2026-08-23 — phase 12 delivered. The beacon shape is provisional until
+  Central answers PLAN-HANDSHAKE-12 (identity co-owned with zing);
+  adopting an answer is a datagram change, not an API change.
 
 - 2026-08-23 — phase 11 delivered. Scoping: the WinterTC widening was
   digest (+ modules) rather than the full fetch/timers list sketched —
