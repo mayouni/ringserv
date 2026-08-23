@@ -25,7 +25,7 @@ programmer, Ring or not, **without Softanza**.
 
 Two audiences, one binary:
 
-- **The Softanza estate** — RestoLean and the author's other real applications,
+- **The Softanza estate** — the author's real-world field applications,
   the Ring family (RingScript, MicroRing, RingFlex, …), powered where it fits
   by Ring++ and RingFace, with Zig where it belongs: in the internal engine.
 - **Any programmer** — who should be able to pick up RingServ with no knowledge
@@ -39,7 +39,7 @@ RingServ must be **genuinely impressive in how easily it runs everywhere**:
 |--------------------|-------------------------------------------------------------|
 | a normal server    | delivered — one static binary, zero dependencies             |
 | cloud scalers      | cross-compiles today; the operational story is still owed    |
-| an Android phone   | **RestoLean has done this** — learn from it, do not re-invent |
+| an Android phone   | **proven in the field** by a prior application of the author's |
 | a microcontroller  | MicroRing's territory — the seam must exist on this side too |
 
 And across whatever topology a programmer chooses, the **family must know each
@@ -73,12 +73,12 @@ and engaging like 2026 and after**.
 
 ## Born in real constraints
 
-RingServ will be used by the author's real-world applications — RestoLean
-first. It must learn from them so it is **not a research tool and not a
+RingServ will be used by the author's real-world applications, a
+restaurant counter first. It must learn from them so it is **not a research tool and not a
 beautiful toy**: a tool born in real-world constraints and tailored to
 practical use, like everything Softanza does. (The journaled store is the
-first primitive extracted this way — from RestoLean's Commons germ, French
-anti-fraud constraints included.)
+first primitive extracted this way — from a fielded counter application,
+French anti-fraud constraints included.)
 
 ---
 
@@ -89,7 +89,7 @@ Honest ledger — what exists, what is partial, what is not started:
 **Standing.** One static Zig-built binary; declarative `RingServ([...])`
 services; `Data()`, `Journal()`, contracts, sync, C3 placement; JS services on
 QuickJS-ng with a WinterTC-shaped prelude; didactic docs with gates that fail
-when the prose rots; born-from-RestoLean primitives. **Since phase 10
+when the prose rots; primitives born from field applications. **Since phase 10
 (2026-08-22):** the one-gesture function→service path (`ringserv serve`,
 [gesture.md](gesture.md)) and the yaml-like config-file form
 (`ringserv.yaml`).
@@ -107,8 +107,8 @@ when the prose rots; born-from-RestoLean primitives. **Since phase 10
 - *Cloud*: cross-compilation is proven, deployment ergonomics are not.
 
 **Not started.**
-- *Android as a first-class target* — RestoLean's experience exists to be
-  mined; nothing in this tree runs there yet.
+- *Android as a first-class target* — the author's prior field experience
+  exists to be mined; nothing in this tree runs there yet.
 - *Agent hosting* as a named capability with its own gesture.
 - *TypeScript.*
 

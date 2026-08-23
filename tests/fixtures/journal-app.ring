@@ -1,6 +1,6 @@
 # Phase-9 fixture: the journaled store.
 #
-# Modelled on the germ this design comes from (RestoLean's Commons): orders
+# Modelled on the germ this design comes from (a fielded counter): orders
 # advance through a monotonic state machine, and the per-day order NUMBER is
 # derived from replay rather than stored — which is the property that makes
 # a restart mid-service lose nothing.

@@ -1,14 +1,13 @@
 # Hosting the Commons — five designs for a journaled, partition-tolerant server
 
-**Status**: design, per the kit's own rule — *"Design is acceptable; vagueness is
-not."* Nothing in this document is implemented yet; everything in it is specified
-so the next session builds it without re-deciding it.
-**Sources**: `restolean/livrable/makeen/KIT-RINGSERV-ARTICLE.md` (the article; its
-laws are cited as **Law 1–6**), `restolean/commons/serveur.js` (the germ, 521
-lines, read in full), `restolean/livrable/resilience/NETWORK-RESILIENCE-BRIEF.md`,
-`softanza/prompts/17-zing-local-first-seam.md` §5 and
-`22-partition-tolerance-placement.md`, and **this repository's own tree**.
-**Date**: 2026-08-19.
+**Status**: section 1 is built (see below); the rest is design.
+**Provenance**: distilled from a proprietary customer application of the
+author's — a restaurant counter under French anti-fraud constraints — whose
+germ was read in full during design. The customer's name and its files stay
+out of this open repository; the open re-creation of the same shape is
+[examples/comptoir](../examples/comptoir). Cross-project seams cite
+`softanza/prompts` 17 §5 and 22.
+**Date**: 2026-08-19, provenance scrubbed 2026-08-23.
 
 ---
 
@@ -107,7 +106,7 @@ name, the mirror image of it refusing a non-shape today (`tests/sync-gates.js`,
 
 One JSONL line per event, the germ's shape kept deliberately so a Commons
 journal *deverses* into a RingServ one without translation (the germ's own
-stated migration plan, `serveur.js` header comment):
+stated migration plan):
 
 ```json
 { "type": "passer_commande", "ts": 1755624000000,
@@ -115,7 +114,7 @@ stated migration plan, `serveur.js` header comment):
 ```
 
 - `hash = sha256(prev + canonical(event-without-hash))`, hex, as the germ does
-  (`journaliser`, serveur.js:76–83). RingServ keeps the full 64 hex chars where
+  (`journaliser`, its journal write path). RingServ keeps the full 64 hex chars where
   the germ truncates to 16: the truncation was a display economy, not a design
   position, and a fiscal chain should not spot the auditor 48 characters.
 - `prev` of the first record is `"GENESE"` — kept verbatim, so an imported germ
@@ -158,7 +157,7 @@ interchange format; the table is the durable form, the JSONL is the ambassador.
 `:apply` folds events into state at boot, per worker, exactly as every worker
 already evaluates the app and applies schema (`serve.zig` `workerMain`). The
 germ's per-day order number is the worked case: `compteur` is **recomputed
-during replay** (serveur.js:63 — `if (ev.commande.jour === etat.jour &&
+during replay** (its server germ:63 — `if (ev.commande.jour === etat.jour &&
 ev.commande.numero > etat.compteur)`), never persisted as a counter. RingServ
 adopts that as the rule: **no derived value may be stored outside the journal**;
 a restart mid-service loses nothing because there is nothing outside the journal
@@ -167,7 +166,7 @@ the journal, not from memory").
 
 ### Verification is a protocol answer
 
-`INTACTE`/`ROMPUE` is already API in the germ (serveur.js:491). RingServ keeps
+`INTACTE`/`ROMPUE` is already API in the germ (its server germ:491). RingServ keeps
 it as one:
 
 - `GET /journal/<name>/verify` → `{ "events": n, "chain": "INTACTE" }` or
@@ -236,7 +235,7 @@ transaction so the offset and the state agree.
 
 - `HEAD` is answered on every route that answers `GET` — already true for
   static files (`serve.zig`: "sonder un fichier n'est pas une faute" has an
-  exact analogue in the germ at serveur.js:501); extended to `/health`,
+  exact analogue in the germ at its server germ:501); extended to `/health`,
   `/topology`, `/journal/*`.
 - Probe requests are excluded from any future request log/anomaly layer *by
   method*, at the layer that writes the log — the germ's finding is that
@@ -384,7 +383,7 @@ will meet the same fate:
 |---|---|---|
 | **Listen** on an address:port | httpz, `:host` gated by the TLS refusal | same binary; hotspot gateway address is stable *by construction* (measured twice: `10.221.160.66` — article §4) |
 | **Append durably** | SQLite WAL on a real fs | app-sandbox storage; same file, path from the host |
-| **Describe its interfaces** | — (gap) | `GET /api/reseau` analogue: the addresses the host serves on, feeding QR provisioning (the germ's `/api/reseau`, serveur.js:388) |
+| **Describe its interfaces** | — (gap) | `GET /api/reseau` analogue: the addresses the host serves on, feeding QR provisioning (the germ's `/api/reseau`, its server germ:388) |
 | **Survive screen-off** | n/a | the host's duty (foreground service + wake lock); the runtime's duty is only to *tolerate* clock jumps and suspended timers |
 | **Say who it is** | `/health` per §2 | same — doubly vital where "reinstall the APK" is the update story |
 
@@ -401,7 +400,7 @@ Stated as prohibitions because each was a field incident:
   gateway address *because it is stable by construction*, never a leased one.
 - **No filesystem outside the sandbox.** The database path comes from the
   host; the runtime never derives paths from its own location (the germ's
-  RACINE dance, serveur.js:19–26, is host code — RingServ keeps it out of the
+  RACINE dance, its server germ:19–26, is host code — RingServ keeps it out of the
   runtime).
 - **Never the only instance on the port.** Law 5. The `/health` identity check
   (§2) is the mechanism; `dev`'s refusal-to-lie is the policy.
@@ -465,11 +464,11 @@ Primitives, each with defined semantics rather than vibes:
 - **`Partition(a, b, …)`** — the bridge between the named planes drops every
   request in the window (connection refused, not timeout — both cases exist;
   a flag selects). Simulated time, like the germ's `tsSimule`, **accepted only
-  under `--sim`** (serveur.js:29 — "jamais en production"), and RingServ makes
+  under `--sim`** (its server germ:29 — "jamais en production"), and RingServ makes
   that structural: the sim clock hook exists only in the harness build path.
 - **`LostCustomers(p)`** — traffic that would have arrived during a partition
   is dropped *and counted*, because the germ's enriched Thursday distinguishes
-  lost customers from delayed ones (serveur.js, the 15-August re-enactment
+  lost customers from delayed ones (its server germ, the 15-August re-enactment
   comment) and an analytics layer must see the écart.
 - **`ReconnectBurst()`** — the held traffic arrives compressed at heal, which
   is the load shape that actually breaks queues.
@@ -508,16 +507,16 @@ bridge against this scenario, and the five assertions above are its gate.**
 
 | Ruling here | Source |
 |---|---|
-| Journal is append-only, replay-derived, one write path | Law 1; serveur.js `journaliser`/`rejouerJournal` |
+| Journal is append-only, replay-derived, one write path | Law 1; its server germ `journaliser`/`rejouerJournal` |
 | Journal ≠ shape log; never compacted | Article §1 (fiscal inalterability) vs `docs/topology.md` §7 (compaction) |
-| Chain over stored bytes, full sha256, `GENESE` kept | serveur.js:76–83; migration-by-déversement (serveur.js header) |
+| Chain over stored bytes, full sha256, `GENESE` kept | its journal write path; migration-by-déversement (its server germ header) |
 | Append rides the one-writer transaction | `docs/WRITES.md`; `db.zig` `g_in_write_txn` |
 | Snapshot replaces, never merges | Law 2 (ghost ticket); `must-refetch` in `sync.ring` |
-| Bytes decoded once; U+FFFD refused at the door | Article §2 (mojibake); serveur.js `lireCorps` |
+| Bytes decoded once; U+FFFD refused at the door | Article §2 (mojibake); its server germ `lireCorps` |
 | Named machine-word refusals | Law 3; already RingServ's envelope practice |
-| HEAD answered, probes not logged | Law 4; serveur.js:501; `serve.zig` static path |
+| HEAD answered, probes not logged | Law 4; its server germ:501; `serve.zig` static path |
 | `/health` carries build + data dir; `dev` refuses to lie | Law 5; `docs/WRITES.md` stale-server incident (paid twice) |
-| Simulator ships in the server, deterministic seed | Law 6; serveur.js `lancerSimulation5Jours` |
+| Simulator ships in the server, deterministic seed | Law 6; its server germ `lancerSimulation5Jours` |
 | No CRDT / no LWW for business truth; conflict → named actor | 17 §5, doctrine 3 |
 | Monotonic hook built, not ruled | Prompt 22 (pending); article §4 boundary case |
 | Payment refused across the bridge | Article §4 ("refused rather than risked") |
