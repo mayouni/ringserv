@@ -96,6 +96,42 @@ It is published unresolved rather than benchmarked around. A server whose
 published throughput quietly avoids its own bad case has published a
 number about the benchmark, not about the server.
 
+## Against Node — losses first
+
+Measured 2026-08-23 (`node tests/bench-vs-node.js 400`): the same three
+service-shaped workloads, same logic on both sides, RingServ's JS guest
+(module form) against a plain `node:http` server — no framework on
+either side, because the comparison is engines, not ecosystems. Node
+v22.20.0, sequential requests, medians.
+
+| scenario | RingServ | Node | verdict |
+|---|---:|---:|---|
+| dispatch + JSON (hello) | 0.77 ms | 0.42 ms | **Node, 1.8×** |
+| JSON-heavy (100-item list) | 1.37 ms | 0.36 ms | **Node, 3.8×** |
+| SQLite write+read | 10.47 ms | 10.06 ms | parity |
+
+**The losses, with their causes.** V8 and QuickJS are different weight
+classes: V8 is a multi-tier JIT the size of RingServ's entire binary
+many times over; QuickJS-ng is a small embeddable interpreter. On pure
+JS work QuickJS typically runs 5–30× behind V8, so a gap of only
+1.8–3.8× at the wire says the fixed cost of dispatch is doing most of
+the talking. The JSON-heavy row is the honest worst case: the list is
+built and encoded inside the guest, exactly where the engine difference
+is largest.
+
+**The parity, with its cause.** The SQLite row is the one closest to a
+real business action, and both sides answer in ~10 ms — because both
+are paying the same disk flush, not their engines. On durable writes
+the engine war is noise.
+
+**What this means for choosing.** If raw JS throughput is the
+requirement, Node's engine is faster and this document says so plainly.
+RingServ's case was never winning that row: it is 0.77 ms — far under
+network jitter for the applications this exists for — from a binary
+~7 MB on disk with nothing to install, no `node_modules` to audit, and
+the Ring, data, journal and sync machinery in the same file. The same
+comparison harness is committed, so re-measuring is one command.
+
 ## What is deliberately not measured
 
 - **Sustained load over hours.** `tests/soak-lite.js` and

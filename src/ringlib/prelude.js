@@ -81,6 +81,31 @@
             view.set(bytes);
             return array;
         },
+        // SubtleCrypto, the DIGEST QUARTER of it — the part services
+        // actually reach for (chain fingerprints, ETags, content hashes).
+        // The hash itself is computed by the host's native crypto, never
+        // by JS. Everything else SubtleCrypto names — keys, signing,
+        // encryption — is still absent AND SAYS SO below, because a
+        // half-present crypto API is worse than an absent one; a wrong
+        // sign() cannot be allowed to look like a slow one.
+        subtle: {
+            async digest(algorithm, data) {
+                const alg = typeof algorithm === "string" ? algorithm
+                    : (algorithm && algorithm.name);
+                if (["SHA-256", "SHA-384", "SHA-512", "SHA-1"].indexOf(alg) < 0) {
+                    throw new TypeError(
+                        "crypto.subtle.digest: '" + alg + "' is not in RingServ's " +
+                        "subset — SHA-256, SHA-384, SHA-512 and SHA-1 are supported");
+                }
+                let bytes;
+                if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+                else if (ArrayBuffer.isView(data)) {
+                    bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+                } else throw new TypeError("crypto.subtle.digest: data must be an ArrayBuffer or a view");
+                const out = __host.digest(alg, Array.from(bytes));
+                return Uint8Array.from(out).buffer;
+            },
+        },
         randomUUID() {
             const b = __host.randomBytes(16);
             b[6] = (b[6] & 0x0f) | 0x40;   // version 4
@@ -92,6 +117,19 @@
                 h.slice(10, 16).join("");
         },
     };
+    for (const missing of ["encrypt", "decrypt", "sign", "verify",
+                           "generateKey", "importKey", "exportKey",
+                           "deriveKey", "deriveBits", "wrapKey", "unwrapKey"]) {
+        Object.defineProperty(crypto.subtle, missing, {
+            get() {
+                throw new TypeError(
+                    "crypto.subtle." + missing + " is not in RingServ's subset — " +
+                    "only digest() is provided; key operations belong outside the " +
+                    "request path (docs/JS.md states the boundary)");
+            },
+            enumerable: false, configurable: true,
+        });
+    }
 
     // ------------------------------------------------- URL, and its query
     //

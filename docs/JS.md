@@ -138,9 +138,14 @@ reason placement exists.
 - **`URL` is not WHATWG-complete.** It parses absolute URLs and the one
   relative form a server meets. It is a parser for service code, not a
   browser's.
-- **No `crypto.subtle`, no streams, no `Blob`, no `WebSocket`** — each
-  recorded in `wintertc.json` with a reason. A half-present
-  `SubtleCrypto` is worse than an absent one.
+- **`crypto.subtle` is digest-only.** `digest()` ships (SHA-256/384/512
+  and SHA-1, computed by the host's native crypto — never by JS, because
+  a hash that is merely plausible is the most dangerous kind). Every
+  other SubtleCrypto member — `sign`, `encrypt`, `generateKey`, … —
+  **throws by name**: key operations belong outside the request path,
+  and a wrong `sign()` must not be able to look like a slow one.
+- **No streams, no `Blob`, no `WebSocket`** — each recorded in
+  `wintertc.json` with a reason.
 - **Memory and stack limits are the server's**, not the application's:
   128 MB and 4 MB. Hitting one is an ordinary trapped error.
 - **`Intl` is a named subset, not ICU.** Real `Intl` is ~30 MB of locale

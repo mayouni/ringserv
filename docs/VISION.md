@@ -95,9 +95,10 @@ when the prose rots; born-from-RestoLean primitives. **Since phase 10
 (`ringserv.yaml`).
 
 **Partial.**
-- *JS parity with Node/Bun*: services run, `serv.call` bridges, async settles —
-  but there is no module story (npm-shaped or otherwise), no TS, and no
-  benchmark against Node on the workloads a JS programmer would bring.
+- *JS parity with Node/Bun*: services run as ES modules with `serv.call`,
+  `Intl` and `crypto.subtle.digest`, and the Node benchmark is published
+  losses-first (phase 11, 2026-08-23). Still open: TypeScript, and any
+  npm story (currently a named refusal, not a gap).
 - *Family symbiosis*: C3 is ratified and enforced; the device-identity
   contract is relayed; but "two family processes find each other with zero
   configuration" is not yet demonstrable end to end.

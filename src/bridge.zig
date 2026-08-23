@@ -517,6 +517,8 @@ pub export fn rs_init() i32 {
     ring_vm_funcregister2(st, "__rs_jwt_verify", &jwtVerifyHook);
     ring_vm_funcregister2(st, "__rs_sha256", &sha256Hook);
     ring_vm_funcregister2(st, "__js_load", &jsLoadHook);
+    ring_vm_funcregister2(st, "__js_module", &jsModuleHook);
+    ring_vm_funcregister2(st, "__js_load_module", &jsLoadModuleHook);
     ring_vm_funcregister2(st, "__js_call", &jsCallHook);
     ring_vm_funcregister2(st, "__js_has", &jsHasHook);
     ring_vm_funcregister2(st, "__js_actions", &jsActionsHook);
@@ -728,6 +730,58 @@ fn jsLoadHook(p: ?*anyopaque) callconv(.c) void {
     defer alloc.free(src);
 
     if (js.js_load_service(name, src) != 0) {
+        ring_vm_error(p, js.js_last_error());
+        return;
+    }
+    ring_vm_api_retnumber(p, 1);
+}
+
+/// Ring: __js_module(cName, cSource) — stage one module's source in the
+/// guest's in-memory store, keyed by app-root-relative name. Ring walks
+/// the import graph and reads every file; the guest can only import what
+/// was staged here — the module story inherits the no-filesystem property
+/// instead of weakening it.
+fn jsModuleHook(p: ?*anyopaque) callconv(.c) void {
+    if (js.js_init() != 0) {
+        ring_vm_error(p, js.js_last_error());
+        return;
+    }
+    const name = argZ(p, 1) orelse {
+        ring_vm_error(p, "__js_module: expects a module name and its source");
+        return;
+    };
+    defer alloc.free(name);
+    const src = argZ(p, 2) orelse {
+        ring_vm_error(p, "__js_module: expects a module name and its source");
+        return;
+    };
+    defer alloc.free(src);
+    if (js.js_module_add(name, src) != 0) {
+        ring_vm_error(p, "__js_module: cannot stage the module");
+        return;
+    }
+    ring_vm_api_retnumber(p, 1);
+}
+
+/// Ring: __js_load_module(cService, cEntryName) — load a staged ES-module
+/// entry as a service; its `export const service` lands in the same
+/// registry the classic form uses.
+fn jsLoadModuleHook(p: ?*anyopaque) callconv(.c) void {
+    if (js.js_init() != 0) {
+        ring_vm_error(p, js.js_last_error());
+        return;
+    }
+    const name = argZ(p, 1) orelse {
+        ring_vm_error(p, "__js_load_module: expects a service and an entry module");
+        return;
+    };
+    defer alloc.free(name);
+    const entry = argZ(p, 2) orelse {
+        ring_vm_error(p, "__js_load_module: expects a service and an entry module");
+        return;
+    };
+    defer alloc.free(entry);
+    if (js.js_load_service_module(name, entry) != 0) {
         ring_vm_error(p, js.js_last_error());
         return;
     }

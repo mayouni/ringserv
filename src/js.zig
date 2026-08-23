@@ -45,6 +45,50 @@ threadlocal var g_out: std.ArrayList(u8) = .empty;
 /// the Ring side streams `see`.
 threadlocal var g_echo: bool = false;
 
+// ---------------------------------------------------------- ES modules
+//
+// THE SECURITY STANCE SURVIVES THE MODULE STORY. This host has no
+// path-taking function — Ring reads every file and hands the host
+// source, never a name to open. Modules keep that: Ring walks the
+// import graph itself (with the same app-root anchoring and escape
+// refusal its own loader learned the hard way) and deposits each
+// module's source HERE, keyed by its app-root-relative name. The
+// QuickJS loader below serves ONLY from this map. An import that is
+// not in the map — an npm package, an escaped path, a file Ring
+// declined to read — fails with the boundary named, and the filesystem
+// was never reachable from inside the engine at any point.
+threadlocal var g_modules: std.StringHashMapUnmanaged([]const u8) = .empty;
+
+pub export fn js_module_add(name: [*:0]const u8, source: [*:0]const u8) i32 {
+    const n = alloc.dupe(u8, std.mem.span(name)) catch return 1;
+    const src = alloc.dupeZ(u8, std.mem.span(source)) catch return 1;
+    if (g_modules.fetchRemove(n)) |old_entry| {
+        alloc.free(old_entry.key);
+        alloc.free(old_entry.value);
+    }
+    g_modules.put(alloc, n, src) catch return 1;
+    return 0;
+}
+
+fn moduleLoader(ctx: ?*c.JSContext, module_name: [*c]const u8, opaque_: ?*anyopaque) callconv(.c) ?*c.JSModuleDef {
+    _ = opaque_;
+    const name = std.mem.span(@as([*:0]const u8, @ptrCast(module_name)));
+    const src = g_modules.get(name) orelse {
+        // Ring stages every statically-imported file BEFORE evaluation,
+        // so a miss here is one of exactly two things — an npm-shaped
+        // bare specifier, or a dynamic import() of a file nothing
+        // declared — and after the resolver has normalized the name the
+        // two are indistinguishable. So the refusal names both honestly
+        // rather than guessing one.
+        _ = c.JS_ThrowReferenceError(ctx, "cannot import '%s': not one of this application's loaded modules. Imports are STATIC, by relative path, inside the application's own directory — npm packages and dynamic import() of undeclared files are not available (docs/JS.md states the boundary)", module_name);
+        return null;
+    };
+    const v = c.JS_Eval(ctx, src.ptr, src.len, module_name, c.JS_EVAL_TYPE_MODULE | c.JS_EVAL_FLAG_COMPILE_ONLY);
+    if (c.JS_IsException(v)) return null;
+    const m: ?*c.JSModuleDef = @ptrCast(@alignCast(c.JS_VALUE_GET_PTR(v)));
+    return m;
+}
+
 extern fn rs_echo_write(pData: [*]const u8, nLen: usize) void;
 
 pub export fn js_set_echo(on: u32) void {
@@ -163,6 +207,7 @@ pub export fn js_init() i32 {
     };
     g_rt = rt;
     g_ctx = ctx;
+    c.JS_SetModuleLoaderFunc(rt, null, moduleLoader, null);
     if (installHost(ctx) != 0) {
         setError("cannot install the host surface", .{});
         return 1;
@@ -380,6 +425,7 @@ fn installHost(ctx: *c.JSContext) i32 {
     installOne(ctx, host, "b64Encode", hostB64Encode, 1);
     installOne(ctx, host, "b64Decode", hostB64Decode, 1);
     installOne(ctx, host, "randomBytes", hostRandomBytes, 1);
+    installOne(ctx, host, "digest", hostDigest, 2);
     installOne(ctx, host, "nowMs", hostNowMs, 0);
     installOne(ctx, host, "setTimeout", hostSetTimeout, 2);
     installOne(ctx, host, "clearTimeout", hostClearTimeout, 1);
@@ -460,6 +506,71 @@ pub export fn js_load_service(name: [*:0]const u8, source: [*:0]const u8) i32 {
     setError("{s} declares no `service` object — a JS service is a file that " ++
         "assigns `const service = {{ action(payload) {{ … }} }}`", .{sname});
     return 1;
+}
+
+/// Load a service whose file is an ES MODULE: evaluated with real import
+/// semantics, its graph served from the in-memory store above, and its
+/// `export const service` pulled from the module namespace into the same
+/// registry the classic form uses — so everything downstream (has, call,
+/// actions, the trampoline) cannot tell the two forms apart.
+pub export fn js_load_service_module(name: [*:0]const u8, entry: [*:0]const u8) i32 {
+    const ctx = g_ctx orelse {
+        setError("no JS context (js_init first)", .{});
+        return 1;
+    };
+    g_err.clearRetainingCapacity();
+    const sname = std.mem.span(name);
+    const entry_name = std.mem.span(entry);
+
+    const src = g_modules.get(entry_name) orelse {
+        setError("module {s} was not staged before loading", .{entry_name});
+        return 1;
+    };
+
+    const compiled = c.JS_Eval(ctx, src.ptr, src.len, entry, c.JS_EVAL_TYPE_MODULE | c.JS_EVAL_FLAG_COMPILE_ONLY);
+    if (c.JS_IsException(compiled)) {
+        captureException(ctx);
+        return 1;
+    }
+    const m: ?*c.JSModuleDef = @ptrCast(@alignCast(c.JS_VALUE_GET_PTR(compiled)));
+
+    // Evaluating a module yields a promise (top-level await exists);
+    // drain the job queue so it settles before we read the namespace.
+    const ret = c.JS_EvalFunction(ctx, compiled);
+    defer c.JS_FreeValue(ctx, ret);
+    if (c.JS_IsException(ret)) {
+        captureException(ctx);
+        return 1;
+    }
+    drainJobs(ctx);
+
+    const ns = c.JS_GetModuleNamespace(ctx, m);
+    defer c.JS_FreeValue(ctx, ns);
+    if (c.JS_IsException(ns)) {
+        captureException(ctx);
+        return 1;
+    }
+    const svc = c.JS_GetPropertyStr(ctx, ns, "service");
+    defer c.JS_FreeValue(ctx, svc);
+    if (c.JS_IsUndefined(svc) or c.JS_IsNull(svc)) {
+        setError("{s} is an ES module but exports no `service` — a module-form " ++
+            "service says `export const service = {{ action(payload) {{ … }} }}`", .{sname});
+        return 1;
+    }
+
+    const global = c.JS_GetGlobalObject(ctx);
+    defer c.JS_FreeValue(ctx, global);
+    var reg = c.JS_GetPropertyStr(ctx, global, "__rs_services");
+    if (c.JS_IsUndefined(reg)) {
+        c.JS_FreeValue(ctx, reg);
+        reg = c.JS_NewObject(ctx);
+        _ = c.JS_SetPropertyStr(ctx, global, "__rs_services", c.JS_DupValue(ctx, reg));
+    }
+    defer c.JS_FreeValue(ctx, reg);
+    var buf: [256]u8 = undefined;
+    const key = std.fmt.bufPrintZ(&buf, "{s}", .{sname}) catch return 1;
+    _ = c.JS_SetPropertyStr(ctx, reg, key, c.JS_DupValue(ctx, svc));
+    return 0;
 }
 
 /// The registered service object, or null. Caller owns the value.
@@ -778,6 +889,68 @@ fn hostB64Decode(
         if (have == 3) out.append(alloc, @truncate(n >> 8)) catch return rs_js_null();
     }
     return c.JS_NewStringLen(ctx, out.items.ptr, out.items.len);
+}
+
+/// __host.digest(alg, byteArray) -> byte array. The four SHA family
+/// members WinterTC's SubtleCrypto.digest names, computed by Zig's own
+/// std.crypto — never a JS implementation, because a hash that is merely
+/// plausible is the most dangerous kind. Anything else is refused BY
+/// NAME in the prelude before it gets here.
+fn hostDigest(
+    ctx: ?*c.JSContext,
+    this_val: c.JSValue,
+    argc: c_int,
+    argv: [*c]c.JSValue,
+) callconv(.c) c.JSValue {
+    _ = this_val;
+    if (argc < 2) return c.JS_ThrowTypeError(ctx, "digest: algorithm and data required");
+    const alg_c = c.JS_ToCString(ctx, argv[0]);
+    if (alg_c == null) return c.JS_ThrowTypeError(ctx, "digest: bad algorithm");
+    defer c.JS_FreeCString(ctx, alg_c);
+    const alg_s = std.mem.span(@as([*:0]const u8, @ptrCast(alg_c)));
+    if (alg_s.len >= 16) return c.JS_ThrowTypeError(ctx, "digest: bad algorithm");
+
+    var len_v: u32 = 0;
+    const len_prop = c.JS_GetPropertyStr(ctx, argv[1], "length");
+    _ = c.JS_ToUint32(ctx, &len_v, len_prop);
+    c.JS_FreeValue(ctx, len_prop);
+    if (len_v > 16 * 1024 * 1024) return c.JS_ThrowRangeError(ctx, "digest: data over 16 MB");
+
+    const data = alloc.alloc(u8, len_v) catch return c.JS_ThrowOutOfMemory(ctx);
+    defer alloc.free(data);
+    var i: u32 = 0;
+    while (i < len_v) : (i += 1) {
+        const el = c.JS_GetPropertyUint32(ctx, argv[1], i);
+        var b: u32 = 0;
+        _ = c.JS_ToUint32(ctx, &b, el);
+        c.JS_FreeValue(ctx, el);
+        data[i] = @truncate(b);
+    }
+
+    var out: [64]u8 = undefined;
+    var out_len: usize = 0;
+    if (std.mem.eql(u8, alg_s, "SHA-256")) {
+        std.crypto.hash.sha2.Sha256.hash(data, out[0..32], .{});
+        out_len = 32;
+    } else if (std.mem.eql(u8, alg_s, "SHA-384")) {
+        std.crypto.hash.sha2.Sha384.hash(data, out[0..48], .{});
+        out_len = 48;
+    } else if (std.mem.eql(u8, alg_s, "SHA-512")) {
+        std.crypto.hash.sha2.Sha512.hash(data, out[0..64], .{});
+        out_len = 64;
+    } else if (std.mem.eql(u8, alg_s, "SHA-1")) {
+        std.crypto.hash.Sha1.hash(data, out[0..20], .{});
+        out_len = 20;
+    } else {
+        return c.JS_ThrowTypeError(ctx, "digest: unsupported algorithm");
+    }
+
+    const arr = c.JS_NewArray(ctx);
+    var j: u32 = 0;
+    while (j < out_len) : (j += 1) {
+        _ = c.JS_SetPropertyUint32(ctx, arr, j, c.JS_NewInt32(ctx, out[j]));
+    }
+    return arr;
 }
 
 fn hostRandomBytes(

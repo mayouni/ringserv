@@ -1,13 +1,13 @@
 {
   "_comment": [
     "The WinterTC / ECMA-429 Minimum Common API, as a checklist RingServ is",
-    "measured against — someone else's list, which is the point. A surface",
+    "measured against \u2014 someone else's list, which is the point. A surface",
     "graded by its own author grades itself generous.",
     "",
     "Each entry says what RingServ claims for that name, and tests/js-gates.js",
     "verifies EVERY claim in both directions: `present` must exist and behave,",
     "`absent` must be genuinely absent. A capability that quietly appears later",
-    "is as much a defect as one that quietly disappears — this file is what",
+    "is as much a defect as one that quietly disappears \u2014 this file is what",
     "makes either one fail a build.",
     "",
     "Source: the Minimum Common API list published by WinterTC (formerly",
@@ -16,30 +16,121 @@
   ],
   "version": "wintertc-minimum-common-api, read 2026-08-19",
   "entries": [
-    { "name": "console", "status": "present", "probe": "typeof console.log" },
-    { "name": "globalThis", "status": "present", "probe": "typeof globalThis" },
-    { "name": "self", "status": "present", "probe": "typeof self" },
-    { "name": "queueMicrotask", "status": "present", "probe": "typeof queueMicrotask" },
-    { "name": "structuredClone", "status": "present", "probe": "typeof structuredClone" },
-    { "name": "atob", "status": "present", "probe": "typeof atob" },
-    { "name": "btoa", "status": "present", "probe": "typeof btoa" },
-    { "name": "setTimeout", "status": "present", "probe": "typeof setTimeout" },
-    { "name": "clearTimeout", "status": "present", "probe": "typeof clearTimeout" },
-    { "name": "TextEncoder", "status": "present", "probe": "typeof TextEncoder" },
-    { "name": "TextDecoder", "status": "present", "probe": "typeof TextDecoder" },
-    { "name": "URL", "status": "present", "probe": "typeof URL" },
-    { "name": "URLSearchParams", "status": "present", "probe": "typeof URLSearchParams" },
-    { "name": "Event", "status": "present", "probe": "typeof Event" },
-    { "name": "EventTarget", "status": "present", "probe": "typeof EventTarget" },
-    { "name": "AbortController", "status": "present", "probe": "typeof AbortController" },
-    { "name": "AbortSignal", "status": "present", "probe": "typeof AbortSignal" },
-    { "name": "Headers", "status": "present", "probe": "typeof Headers" },
-    { "name": "Request", "status": "present", "probe": "typeof Request" },
-    { "name": "Response", "status": "present", "probe": "typeof Response" },
-    { "name": "crypto.getRandomValues", "status": "present", "probe": "typeof crypto.getRandomValues" },
-    { "name": "crypto.randomUUID", "status": "present", "probe": "typeof crypto.randomUUID" },
-    { "name": "performance.now", "status": "present", "probe": "typeof performance.now" },
-
+    {
+      "name": "console",
+      "status": "present",
+      "probe": "typeof console.log"
+    },
+    {
+      "name": "globalThis",
+      "status": "present",
+      "probe": "typeof globalThis"
+    },
+    {
+      "name": "self",
+      "status": "present",
+      "probe": "typeof self"
+    },
+    {
+      "name": "queueMicrotask",
+      "status": "present",
+      "probe": "typeof queueMicrotask"
+    },
+    {
+      "name": "structuredClone",
+      "status": "present",
+      "probe": "typeof structuredClone"
+    },
+    {
+      "name": "atob",
+      "status": "present",
+      "probe": "typeof atob"
+    },
+    {
+      "name": "btoa",
+      "status": "present",
+      "probe": "typeof btoa"
+    },
+    {
+      "name": "setTimeout",
+      "status": "present",
+      "probe": "typeof setTimeout"
+    },
+    {
+      "name": "clearTimeout",
+      "status": "present",
+      "probe": "typeof clearTimeout"
+    },
+    {
+      "name": "TextEncoder",
+      "status": "present",
+      "probe": "typeof TextEncoder"
+    },
+    {
+      "name": "TextDecoder",
+      "status": "present",
+      "probe": "typeof TextDecoder"
+    },
+    {
+      "name": "URL",
+      "status": "present",
+      "probe": "typeof URL"
+    },
+    {
+      "name": "URLSearchParams",
+      "status": "present",
+      "probe": "typeof URLSearchParams"
+    },
+    {
+      "name": "Event",
+      "status": "present",
+      "probe": "typeof Event"
+    },
+    {
+      "name": "EventTarget",
+      "status": "present",
+      "probe": "typeof EventTarget"
+    },
+    {
+      "name": "AbortController",
+      "status": "present",
+      "probe": "typeof AbortController"
+    },
+    {
+      "name": "AbortSignal",
+      "status": "present",
+      "probe": "typeof AbortSignal"
+    },
+    {
+      "name": "Headers",
+      "status": "present",
+      "probe": "typeof Headers"
+    },
+    {
+      "name": "Request",
+      "status": "present",
+      "probe": "typeof Request"
+    },
+    {
+      "name": "Response",
+      "status": "present",
+      "probe": "typeof Response"
+    },
+    {
+      "name": "crypto.getRandomValues",
+      "status": "present",
+      "probe": "typeof crypto.getRandomValues"
+    },
+    {
+      "name": "crypto.randomUUID",
+      "status": "present",
+      "probe": "typeof crypto.randomUUID"
+    },
+    {
+      "name": "performance.now",
+      "status": "present",
+      "probe": "typeof performance.now"
+    },
     {
       "name": "fetch",
       "status": "absent",
@@ -55,9 +146,9 @@
     },
     {
       "name": "crypto.subtle",
-      "status": "absent",
-      "probe": "typeof crypto.subtle",
-      "why": "Not yet implemented. Recorded here rather than left to be discovered, because a half-present SubtleCrypto is worse than an absent one."
+      "status": "partial",
+      "probe": "typeof crypto.subtle.digest",
+      "why": "digest() only, computed by the host's native crypto -- the quarter services actually reach for. Key operations (sign, encrypt, generateKey, ...) remain absent AND THROW BY NAME, because a half-present SubtleCrypto is worse than an absent one."
     },
     {
       "name": "Blob",
@@ -75,7 +166,7 @@
       "name": "ReadableStream",
       "status": "absent",
       "probe": "typeof ReadableStream",
-      "why": "Not yet implemented — see CompressionStream."
+      "why": "Not yet implemented \u2014 see CompressionStream."
     },
     {
       "name": "WebSocket",

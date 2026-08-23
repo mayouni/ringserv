@@ -65,9 +65,192 @@ func RsJsEnsure cService, cFile
 	ok
 
 	cSource = read(cPath)
-	__js_load(cService, cSource)
+
+	# TWO FORMS, detected from the source. A file using ES modules
+	# (top-level import/export) is loaded WITH ITS GRAPH and must say
+	# `export const service = ...`; anything else is the classic form,
+	# unchanged. Ring walks the graph and reads every file itself — the
+	# guest still has no filesystem, it can only import what was staged.
+	if RsJsIsModule(cSource)
+		cEntry = RsJsModKey(cFile)
+		RsJsStageGraph(cEntry, cSource, cRoot, [])
+		__js_load_module(cService, cEntry)
+	else
+		__js_load(cService, cSource)
+	ok
 	add(aRsJsLoaded, lower(cService))
 	return 1
+
+# Does this source use ES modules at the top level? A textual test, and
+# honestly so: it looks at line starts, so `import` inside a string on
+# its own line can fool it — at the cost of loading as a module, whose
+# error will say exactly what it expected. The VM stays the authority.
+func RsJsIsModule cSource
+	for cLine in str2list(cSource)
+		cT = trim(cLine)
+		if RsJsLineImports(cT) return 1 ok
+		if left(cT, 7) = "export " return 1 ok
+	next
+	return 0
+
+# Does this line begin an import statement? One place, because Ring's
+# parser dislikes conditions continued across lines and this test is
+# needed twice.
+func RsJsLineImports cT
+	if left(cT, 7) = "import " return 1 ok
+	if left(cT, 7) = "import" + char(34) return 1 ok
+	if left(cT, 7) = "import" + char(39) return 1 ok
+	return 0
+
+# The app-root-relative key of a declared :js path — forward slashes,
+# dot-segments collapsed. BOTH sides of the seam use this shape: Ring
+# stages modules under these keys, and QuickJS's resolver produces the
+# same shape when it joins an import against its importer.
+func RsJsModKey cFile
+	cK = ""
+	for i = 1 to len(cFile)
+		c = substr(cFile, i, 1)
+		if c = "\"
+			cK += "/"
+		else
+			cK += c
+		ok
+	next
+	return RsJsCollapse(cK)
+
+# Collapse "." and ".." segments. Answers "" when the path escapes above
+# its root — the caller turns that into a refusal WITH the rule, because
+# an import that climbs out of the application is not a path problem, it
+# is a boundary problem.
+func RsJsCollapse cPath
+	aOut = []
+	aSegs = []
+	cCur = ""
+	for i = 1 to len(cPath)
+		c = substr(cPath, i, 1)
+		if c = "/"
+			add(aSegs, cCur)
+			cCur = ""
+		else
+			cCur += c
+		ok
+	next
+	add(aSegs, cCur)
+	for cSeg in aSegs
+		if cSeg = "" or cSeg = "."
+			loop
+		ok
+		if cSeg = ".."
+			if len(aOut) = 0
+				return ""
+			ok
+			del(aOut, len(aOut))
+			loop
+		ok
+		add(aOut, cSeg)
+	next
+	cJoined = ""
+	for cSeg in aOut
+		if cJoined != "" cJoined += "/" ok
+		cJoined += cSeg
+	next
+	return cJoined
+
+# The directory part of a module key, or "".
+func RsJsModDir cKey
+	nLast = 0
+	for i = 1 to len(cKey)
+		if substr(cKey, i, 1) = "/" nLast = i ok
+	next
+	if nLast = 0
+		return ""
+	ok
+	return left(cKey, nLast - 1)
+
+# Walk one module's static imports, read each file, stage it, recurse.
+# Cycle-safe: a module already on the visited list is staged once and
+# only once (ES modules link cycles; the walk just must not loop).
+func RsJsStageGraph cKey, cSource, cRoot, aSeen
+	if find(aSeen, cKey)
+		return aSeen
+	ok
+	add(aSeen, cKey)
+	__js_module(cKey, cSource)
+
+	for cSpec in RsJsImportsOf(cSource)
+		# The boundary, stated at load time rather than discovered at
+		# call time: modules are the application's own files.
+		if left(cSpec, 1) != "."
+			raise("service module `" + cKey + "` imports `" + cSpec + "` — " +
+			      "npm packages are not available; modules are your " +
+			      "application's own .js files, imported by relative path " +
+			      "(docs/JS.md states the boundary)")
+		ok
+		cChild = RsJsCollapse(RsJsModDir(cKey) + "/" + cSpec)
+		if cChild = ""
+			raise("service module `" + cKey + "` imports `" + cSpec + "`, " +
+			      "which escapes the application's directory — imports " +
+			      "resolve inside the application and never leave it")
+		ok
+		cChildPath = cChild
+		if cRoot != ""
+			cChildPath = cRoot + "/" + cChild
+		ok
+		if not fexists(cChildPath)
+			raise("service module `" + cKey + "` imports `" + cSpec + "` " +
+			      "(" + cChild + "), which does not exist")
+		ok
+		aSeen = RsJsStageGraph(cChild, read(cChildPath), cRoot, aSeen)
+	next
+	return aSeen
+
+# The static import specifiers of one source: `import ... from "x"`,
+# `export ... from "x"`, and bare `import "x"`. Dynamic import() is not
+# in the subset — the engine's own loader refuses it at call time with
+# the boundary named, because a graph that can grow at runtime is a
+# graph nobody reviewed.
+func RsJsImportsOf cSource
+	aOut = []
+	for cLine in str2list(cSource)
+		cT = trim(cLine)
+		lRelevant = RsJsLineImports(cT)
+		if left(cT, 7) = "export " and substr(cT, " from ") > 0
+			lRelevant = 1
+		ok
+		if lRelevant = 0
+			loop
+		ok
+		# the specifier is the first quoted string after `from`, or the
+		# first quoted string at all for a bare `import "x"`
+		nFrom = substr(cT, " from ")
+		cTail = cT
+		if nFrom > 0
+			cTail = substr(cT, nFrom + 6)
+		ok
+		cSpec = RsJsFirstQuoted(cTail)
+		if cSpec != ""
+			add(aOut, cSpec)
+		ok
+	next
+	return aOut
+
+func RsJsFirstQuoted cText
+	cQ = ""
+	cOut = ""
+	for i = 1 to len(cText)
+		c = substr(cText, i, 1)
+		if cQ = ""
+			if c = char(34) or c = char(39)
+				cQ = c
+			ok
+		else
+			if c = cQ
+				return cOut
+			ok
+			cOut += c
+		ok
+	next
+	return ""
 
 # A path that already names its own root. Windows drive letters count,
 # which is why this is not just a leading-slash test.

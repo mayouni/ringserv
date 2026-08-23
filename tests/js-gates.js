@@ -258,8 +258,10 @@ check("AbortController fires its listener and carries a reason",
 // The narrow door: the whole platform surface stands on ONE object, and
 // this gate is what keeps the list of capabilities short as it grows.
 r = js("console.log(Object.keys(__host).sort().join(\",\"));");
-check("the host door stays narrow — nine primitives, no more",
-    r.out.trim() === "b64Decode,b64Encode,clearTimeout,nowMs,randomBytes," +
+// `digest` joined in phase 11 (crypto.subtle.digest rides it) — this
+// gate exists precisely so that sentence gets written each time.
+check("the host door stays narrow — ten primitives, no more",
+    r.out.trim() === "b64Decode,b64Encode,clearTimeout,digest,nowMs,randomBytes," +
         "servCall,setTimeout,utf8Decode,utf8Encode",
     r.out.trim());
 

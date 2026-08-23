@@ -249,6 +249,78 @@ server.on("exit", () => { died = true; });
         check("a .js file that declares no `service` object does not crash the catalog",
             rr.status === 0, (rr.stdout + rr.stderr).slice(0, 200));
     }
+
+    // ==================================== phase 11: the ES module story
+    //
+    // Ring walks the import graph and stages every file; the guest can
+    // only import what was staged — the no-filesystem property survives
+    // the module story instead of being weakened by it.
+    {
+        const modApp = path.join(ROOT, "tests", "fixtures", "jsmod", "app.ring");
+        const srv = spawn(RINGSERV, ["run", modApp], { stdio: ["ignore", "ignore", "pipe"] });
+        let up = false;
+        for (let i = 0; i < 100; i++) {
+            try { if ((await fetch("http://127.0.0.1:8118/health")).status === 200) { up = true; break; } } catch {}
+            await new Promise(r => setTimeout(r, 150));
+        }
+        check("a module-form service (export const service) comes up", up);
+        const res = await (await fetch("http://127.0.0.1:8118/api/v1", {
+            method: "POST",
+            body: JSON.stringify({ service: "shop", action: "price",
+                payload: { qty: 3, unit: 180 } }),
+        })).json();
+        check("its import graph linked — a diamond, sibling-relative paths",
+            res.code === 0 && res.data.total === 594, JSON.stringify(res));
+        // The space before the euro sign is U+00A0 — real fr-FR
+        // formatting uses a no-break space, and so does ours.
+        check("Intl works inside a module", res.data.formatted === "5,94 €",
+            JSON.stringify(res.data.formatted));
+        check("a re-exported const crossed the graph", res.data.rate === 0.1);
+        check("false and null still survive to the wire from a module",
+            res.data.paid === false && res.data.ref === null, JSON.stringify(res.data));
+        srv.kill();
+        await new Promise(r => setTimeout(r, 700));
+    }
+
+    // The three refusals, each named. Boot-time for static imports;
+    // call-time for dynamic ones the walk could never see.
+    for (const [label, source, want] of [
+        ["an npm bare specifier is refused, naming the boundary",
+            'import _ from "lodash";\nexport const service = { async go(p){ return {code:0,message:"OK",data:1}; } };\n',
+            /npm packages are not available/],
+        ["an import that escapes the application is refused, naming the rule",
+            'import { x } from "../../outside.js";\nexport const service = { async go(p){ return {code:0,message:"OK",data:1}; } };\n',
+            /escapes the application/],
+        ["a missing module is reported by its resolved name",
+            'import { x } from "./ghost.js";\nexport const service = { async go(p){ return {code:0,message:"OK",data:1}; } };\n',
+            /ghost\.js.*does not exist/],
+        ["a dynamic import of an undeclared file is refused at call time",
+            'export const service = { async go(p){ await import("./late.js"); return {code:0,message:"OK",data:1}; } };\n',
+            /not one of this application's loaded modules/],
+        ["a module that exports no `service` says what one looks like",
+            'export const other = 1;\n',
+            /exports no `service`/],
+    ]) {
+        const dir = path.join(tmp, "mod-" + label.slice(0, 12).replace(/\W/g, ""));
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "svc.js"), source);
+        fs.writeFileSync(path.join(dir, "app.ring"),
+            'RingServ([ :port = 8117, :services = [ :m = [ :js = "svc.js" ] ] ])\n');
+        const srv = spawn(RINGSERV, ["run", path.join(dir, "app.ring")],
+            { stdio: ["ignore", "ignore", "pipe"] });
+        for (let i = 0; i < 100; i++) {
+            try { if ((await fetch("http://127.0.0.1:8117/health")).status === 200) break; } catch {}
+            await new Promise(r => setTimeout(r, 150));
+        }
+        const res = await (await fetch("http://127.0.0.1:8117/api/v1", {
+            method: "POST",
+            body: JSON.stringify({ service: "m", action: "go", payload: {} }),
+        })).json();
+        check(label, res.code === 1 && want.test(res.message),
+            JSON.stringify(res).slice(0, 180));
+        srv.kill();
+        await new Promise(r => setTimeout(r, 700));
+    }
 })().catch(e => {
     check("the suite ran to completion", false, e.stack || String(e));
 }).finally(async () => {

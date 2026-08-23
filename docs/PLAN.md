@@ -56,29 +56,13 @@ Delivered the day the plan was adopted; the record is in
 `ringserv.yaml` with refusals by name, 41 gates. One scope note recorded in
 the change log below.
 
-## Phase 11 — JS, honestly measured
+## Phase 11 — JS, honestly measured ✅ (delivered 2026-08-23)
 
-**Vision:** *"offer JS programmers the same ease and power… the bar is NodeJS,
-even Bun — not for the sake of competing."*
-
-**Deliverables.**
-- **A module story**: ES module imports between the application's own `.js`
-  files, resolved relative to the app (the loader discipline learned in the
-  Ring path applies verbatim — anchor by search root, never by moving the
-  working directory). Explicitly *not* npm compatibility in this phase; the
-  boundary is stated in the doc, with the reasoning, so nobody discovers it as
-  a disappointment.
-- **The WinterTC surface widened** where RestoLean-shaped applications actually
-  need it (fetch to loopback services, timers, TextEncoder family, crypto
-  digest — driven by real code, not by the spec's table of contents).
-- **The benchmark, published like BENCHMARKS.md** — the same service written
-  for RingServ-JS and Node, measured on service-shaped workloads (dispatch,
-  JSON, SQLite round-trip), with the losses printed as plainly as the wins.
-  The vision's bar is only meaningful if we know where we stand against it.
-
-**Gate.** A multi-file JS app with imports runs; js-gates extended to cover the
-module graph and each new surface; the benchmark document exists with numbers
-on both columns and a method section; sweep and oracle stay green (`--full`).
+The record is in [roadmap.md](roadmap.md). ES modules with the sandbox
+intact (Ring walks the graph; the guest still has no filesystem),
+`crypto.subtle.digest` and only digest, and the Node comparison
+published losses-first in [BENCHMARKS.md](BENCHMARKS.md). One scoping
+note in the change log.
 
 ## Phase 12 — The family handshake
 
@@ -223,6 +207,11 @@ reason; js-gates extended.
 ## Change log
 
 *Reorderings and scope changes land here, one line each, newest first.*
+
+- 2026-08-23 — phase 11 delivered. Scoping: the WinterTC widening was
+  digest (+ modules) rather than the full fetch/timers list sketched —
+  atob/btoa already existed, and nothing RestoLean-shaped asked for the
+  rest yet; the door widens by need, not by list.
 
 - 2026-08-22 — **two standing rules from the author**, recorded where the
   plan lives: (1) every delivered phase closes with an INTERACTIVE example

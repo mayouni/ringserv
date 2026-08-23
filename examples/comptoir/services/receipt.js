@@ -10,25 +10,13 @@
 // already has habits for, and the point of the JS guest is that those
 // habits keep working.
 
-const CURRENCY = "EUR";
+// Phase 11: this file is an ES MODULE — the money maths lives in its own
+// file and is imported, exactly as a JS programmer would split it. Ring
+// walks the graph and stages both files; the guest still has no
+// filesystem. `export const service` replaces `const service`.
+import { money, line, CURRENCY } from "./money.js";
 
-// Private by construction — not on `service`, so unreachable from the
-// wire. The JS analogue of the class form's Action suffix.
-function money(cents) {
-    const n = Number(cents) || 0;
-    return new Intl.NumberFormat("fr-FR", {
-        style: "currency", currency: CURRENCY,
-    }).format(n / 100);
-}
-
-function line(label, value, width = 34) {
-    const l = String(label);
-    const v = String(value);
-    const pad = Math.max(1, width - l.length - v.length);
-    return l + " ".repeat(pad) + v;
-}
-
-const service = {
+export const service = {
     // The receipt for one ticket. Reaches back into the Ring side for
     // the ticket itself — two languages, one dispatcher, one envelope.
     async render(payload) {

@@ -410,6 +410,49 @@ Also standing from the same order: **every phase closes with an
 interactive browser demo** the author can drive — recorded in
 [PLAN.md](PLAN.md)'s change log as a gate on communication.
 
+## Phase 11 — JS, honestly measured ✅ (delivered 2026-08-23)
+
+The plan's second phase ([PLAN.md](PLAN.md)): the module story, the
+surface widened by real need, and the Node comparison published with its
+losses on top.
+
+**ES modules, without surrendering the sandbox.** A service file using
+top-level `import`/`export` loads as a real ES module (live bindings,
+diamonds, cycles — the engine's own semantics) and says `export const
+service`. The design decision that mattered: **the guest still has no
+filesystem.** Ring walks the static import graph itself — the same
+app-root anchoring its own loader learned the hard way — reads every
+file, and stages sources in the guest's in-memory store; QuickJS's
+loader serves only from that store. Three boundaries enforced by
+structure and named when hit: relative paths inside the application
+only, no npm (a statement, not a gap), static imports only. The
+reference application's receipt service now runs as a module
+([examples/comptoir/services](../examples/comptoir/services)).
+
+**`crypto.subtle.digest`, and only digest.** SHA-256/384/512 and SHA-1,
+computed by Zig's native crypto through one new host primitive — the
+narrow-door gate widened from nine to ten, on the record, which is that
+gate's whole job. Every other SubtleCrypto member throws by name: a
+wrong `sign()` must not be able to look like a slow one. Verified
+against the textbook SHA-256 of `"abc"`.
+
+**The Node comparison, losses first**
+([BENCHMARKS.md](BENCHMARKS.md) § Against Node): Node wins dispatch
+1.8× and JSON-heavy 3.8× — V8 and QuickJS are different weight classes
+and the document says so plainly — while the SQLite row lands at parity
+because both sides pay the disk, not their engines. The harness is
+committed (`tests/bench-vs-node.js`); re-measuring is one command.
+
+**Gate — passed:** jsserv-gates grew to 43 (module diamond, sibling
+imports, re-exported consts, `false`/`null` from modules, and five named
+refusals: npm, escape, missing file, dynamic import, no-service-export);
+js-gates to 45 (the digest quartet, the by-name refusals of the other
+SubtleCrypto members, the widened door). Comptoir's 38 pass unchanged
+over the module-form receipt — the forms are indistinguishable from
+outside, which was the claim.
+
+**Phase 11 is delivered.**
+
 ## Standing risks (tracked, not hidden)
 
 - **VM concurrency** — the N-worker model is designed, not proven;
