@@ -1,11 +1,26 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "The Diagnostic Contract — the envelope",
-  "description": "C2 of the Softanza reference design: the shape of every diagnostic a conforming court emits in machine form. One object per diagnostic; the object that CARRIES them is definitions.report, added at v1.1. Prose governing this shape is doc/diagnostic-contract.md; this file is what a court validates against. Version v1.1, 2026-08-20.",
-  "version": "1.1",
+  "description": "C2 of the Softanza reference design: the shape of every diagnostic a conforming court emits in machine form. One object per diagnostic; the object that CARRIES them is definitions.report, added at v1.1. Prose governing this shape is doc/diagnostic-contract.md; this file is what a court validates against. Version v1.2.0, 2026-08-23. (The v1.1.2 bytes carried a description reading 'Version v1.1.1' beside a version field of 1.1.2 -- two editions answering to one file. Corrected here rather than in place, because §4 says a version denotes exactly one pair of files and the bytes had to move.)",
+  "version": "1.2.0",
   "type": "object",
-  "required": ["code", "severity", "message", "span", "cites", "language"],
-  "additionalProperties": true,
+  "required": [
+    "code",
+    "severity",
+    "message",
+    "span",
+    "cites",
+    "language"
+  ],
+  "additionalProperties": {
+    "description": "EXTENSION PROPERTIES ARE PERMITTED AND CONSTRAINED, v1.2.0. A court may add fields of its own -- the zui court adds level and subject -- but no extension property may be a bare boolean or null. Ring's jsonlib returns true, false and null as the STRINGS \"true\", \"false\" and \"null\" on a round trip, in every position, with no error raised: the document stays valid JSON and stays a DIFFERENT document, and a consumer testing x = true reads a string and is wrong without knowing. Numbers survive. The six contract fields are unaffected -- none is boolean-typed, which was a field choice before v1.2.0 and is a requirement after it. THE REACH OF THIS CLAUSE IS ONE LEVEL: a boolean nested inside an extension object is forbidden by §2.8 and caught by this court's validator, which scans to full depth, but not by this schema keyword. Measured by RingFlex on Ring 1.27, carried as CENTRAL-JSONSCALAR-01.",
+    "not": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
+  },
   "properties": {
     "code": {
       "description": "The court's stable diagnostic identifier. Stable forever, never reused, unique within its language. Attested forms: MISSING_UNDO, ZUI-W001.",
@@ -14,7 +29,10 @@
     },
     "severity": {
       "description": "The two-rung ladder, closed: error (unlawful; a build must fail) or warning (lawful but suspect, or undecidable without more input).",
-      "enum": ["error", "warning"]
+      "enum": [
+        "error",
+        "warning"
+      ]
     },
     "message": {
       "description": "Human prose, in whatever language the operator reads. Never compared, never normative — the code and the cites carry the law.",
@@ -24,12 +42,24 @@
     "span": {
       "description": "Where the finding lands. line 0 means the finding is file-wide. col is reserved: optional, >= 1 when known.",
       "type": "object",
-      "required": ["file", "line"],
+      "required": [
+        "file",
+        "line"
+      ],
       "additionalProperties": false,
       "properties": {
-        "file": { "type": "string", "minLength": 1 },
-        "line": { "type": "integer", "minimum": 0 },
-        "col": { "type": "integer", "minimum": 1 }
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "cites": {
@@ -48,15 +78,27 @@
   },
   "definitions": {
     "report": {
-      "description": "The outer shape, added at v1.1: what carries a run's diagnostics. ONE OBJECT, NEVER A TOP-LEVEL ARRAY — measured, not argued: the jsonlib shipped with Ring 1.27 returns a one-element list for a bare JSON array, so a court emitting an array emits something the family cannot read, and it fails quietly. The diagnostics travel under the key \"diagnostics\", present even when empty, so clean is distinguishable from no output. A court may add outer keys of its own; the zui court adds level, contract, files and counts.",
+      "description": "The outer shape, added at v1.1: what carries a run's diagnostics. ONE OBJECT, NEVER A TOP-LEVEL ARRAY. Justification corrected at v1.1.1 and the requirement is unchanged: Ring's jsonlib DOES read a bare top-level array, it wraps it in one extra level (an object is spread, an array is wrapped, an array under a key is not), so the bare form is surprising rather than unreadable. The load-bearing argument is one consumer across every court, plus diagnostics:[] being distinguishable from absent. Do NOT cite the jsonlib encoder for this rule -- not because it points the other way but because it describes an operation no court performs: re-encoding decoded JSON. Corrected at v1.1.2: the encoder DOES discriminate, and in this rule's favour. The object form round-trips intact; a bare array of strings silently becomes an object and a bare array of pairs emits a double brace that raises. The collapse trigger is a 2-element list WHOSE FIRST ELEMENT IS A STRING, not a two-string list -- so [line,col] as numbers is safe and [[\"k\",\"v\"],...] is not. See doc/diagnostic-contract.md section 2.7 for the measurements. The diagnostics travel under the key \"diagnostics\", present even when empty, so clean is distinguishable from no output. A court may add outer keys of its own; the zui court adds level, contract, files and counts. Constrained at v1.2.0: an added key may not be a bare boolean or null, for the round-trip reason stated on additionalProperties.",
       "type": "object",
-      "required": ["diagnostics"],
-      "additionalProperties": true,
+      "required": [
+        "diagnostics"
+      ],
+      "additionalProperties": {
+        "description": "EXTENSION PROPERTIES ARE PERMITTED AND CONSTRAINED, v1.2.0. A court may add fields of its own -- the zui court adds level and subject -- but no extension property may be a bare boolean or null. Ring's jsonlib returns true, false and null as the STRINGS \"true\", \"false\" and \"null\" on a round trip, in every position, with no error raised: the document stays valid JSON and stays a DIFFERENT document, and a consumer testing x = true reads a string and is wrong without knowing. Numbers survive. The six contract fields are unaffected -- none is boolean-typed, which was a field choice before v1.2.0 and is a requirement after it. THE REACH OF THIS CLAUSE IS ONE LEVEL: a boolean nested inside an extension object is forbidden by §2.8 and caught by this court's validator, which scans to full depth, but not by this schema keyword. Measured by RingFlex on Ring 1.27, carried as CENTRAL-JSONSCALAR-01.",
+        "not": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
       "properties": {
         "diagnostics": {
           "description": "Every diagnostic of the run, each one an envelope. Empty when the run is clean — the key is never omitted and never null.",
           "type": "array",
-          "items": { "$ref": "#" }
+          "items": {
+            "$ref": "#"
+          }
         }
       }
     }

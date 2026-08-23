@@ -40,6 +40,10 @@ const usage =
     \\  ringserv journal list   [app.ring]   the journals this app declares
     \\  ringserv journal verify [app.ring]   INTACTE or ROMPUE, and where
     \\  ringserv journal export [app.ring]   JSONL, one event per line
+    \\  ringserv journal import [app.ring] --in <file.jsonl>
+    \\                                       fill an EMPTY journal from the
+    \\                                       interchange format (legacy 16-hex
+    \\                                       chains honoured, verified first)
     \\
     \\  --journal <name>   which journal (required when the app declares > 1)
     \\  --db <path>        read this database instead of the declared one
@@ -103,7 +107,8 @@ pub fn journal(arena: std.mem.Allocator, args: []const [:0]u8) !u8 {
     const op = args[0];
     if (!std.mem.eql(u8, op, "list") and
         !std.mem.eql(u8, op, "verify") and
-        !std.mem.eql(u8, op, "export"))
+        !std.mem.eql(u8, op, "export") and
+        !std.mem.eql(u8, op, "import"))
     {
         try out.print("ringserv journal: no such subcommand `{s}`\n\n{s}", .{ op, usage });
         try out.flush();
@@ -114,6 +119,7 @@ pub fn journal(arena: std.mem.Allocator, args: []const [:0]u8) !u8 {
     var name: []const u8 = "";
     var db_override: []const u8 = "";
     var out_path: []const u8 = "";
+    var in_path: []const u8 = "";
     var as_json = false;
 
     var i: usize = 1;
@@ -122,7 +128,7 @@ pub fn journal(arena: std.mem.Allocator, args: []const [:0]u8) !u8 {
         if (std.mem.eql(u8, a, "--json")) {
             as_json = true;
         } else if (std.mem.eql(u8, a, "--journal") or std.mem.eql(u8, a, "--db") or
-            std.mem.eql(u8, a, "--out"))
+            std.mem.eql(u8, a, "--out") or std.mem.eql(u8, a, "--in"))
         {
             if (i + 1 >= args.len) {
                 try out.print("ringserv journal: {s} needs a value\n", .{a});
@@ -133,6 +139,7 @@ pub fn journal(arena: std.mem.Allocator, args: []const [:0]u8) !u8 {
             if (std.mem.eql(u8, a, "--journal")) name = args[i];
             if (std.mem.eql(u8, a, "--db")) db_override = args[i];
             if (std.mem.eql(u8, a, "--out")) out_path = args[i];
+            if (std.mem.eql(u8, a, "--in")) in_path = args[i];
         } else if (std.mem.startsWith(u8, a, "--")) {
             try out.print("ringserv journal: unknown option `{s}`\n\n{s}", .{ a, usage });
             try out.flush();
@@ -195,10 +202,29 @@ pub fn journal(arena: std.mem.Allocator, args: []const [:0]u8) !u8 {
     }
 
     // ---------------------------------------------------- ask the VM
+    // `import` carries the file's whole text through the same JSON seam —
+    // escaped properly, because a journal line is exactly the kind of
+    // content that contains quotes and backslashes.
+    var text_json: []const u8 = "\"\"";
+    if (std.mem.eql(u8, op, "import")) {
+        if (in_path.len == 0) {
+            try out.print("ringserv journal import: --in <file.jsonl> is required\n", .{});
+            try out.flush();
+            return 2;
+        }
+        const f = std.fs.cwd().openFile(in_path, .{}) catch |e| {
+            try out.print("ringserv journal import: cannot open {s}: {s}\n", .{ in_path, @errorName(e) });
+            try out.flush();
+            return 1;
+        };
+        defer f.close();
+        const text = try f.readToEndAlloc(arena, 256 * 1024 * 1024);
+        text_json = try std.fmt.allocPrint(arena, "{f}", .{std.json.fmt(text, .{})});
+    }
     const arg = try std.fmt.allocPrintSentinel(
         arena,
-        "{{\"op\":\"{s}\",\"journal\":\"{s}\"}}",
-        .{ op, name },
+        "{{\"op\":\"{s}\",\"journal\":\"{s}\",\"text\":{s}}}",
+        .{ op, name, text_json },
         0,
     );
     const raw = std.mem.span(bridge.rs_call("__rs_journal_cli", arg));
@@ -265,6 +291,20 @@ pub fn journal(arena: std.mem.Allocator, args: []const [:0]u8) !u8 {
     }
 
     const which = str(res.get("journal"));
+
+    // ---------------------------------------------------------- import
+    if (std.mem.eql(u8, op, "import")) {
+        const imported: u64 = @intFromFloat(@max(0, num(res.get("imported"))));
+        const events: u64 = @intFromFloat(@max(0, num(res.get("events"))));
+        const chain = str(res.get("chain"));
+        if (as_json) {
+            try out.print("{s}\n", .{raw});
+        } else {
+            try out.print("{s} — {s}: imported {d} record(s), {d} event(s), chain {s}\n", .{ db_shown, which, imported, events, chain });
+        }
+        try out.flush();
+        return if (std.mem.eql(u8, chain, "INTACTE")) 0 else 1;
+    }
 
     // ---------------------------------------------------------- verify
     if (std.mem.eql(u8, op, "verify")) {

@@ -290,6 +290,89 @@ async function stop() {
     check("...naming the record where the chain broke",
         c.stdout.includes("seq " + target), c.stdout);
 
+    // ================================ the deversement (phase 13)
+    // A journal written elsewhere, in the legacy interchange dialect
+    // (16-hex chains), imports into an empty Journal() and verifies
+    // INTACTE — then NATIVE appends continue the same chain. The fixture
+    // is SYNTHESIZED by the legacy discipline itself, right here, so the
+    // gate proves the documented algorithm and never carries anyone's
+    // data.
+    {
+        const crypto = require("crypto");
+        let prev = "GENESE";
+        const lines = [];
+        for (const [type, extra] of [
+            ["passer_commande", { who: "ada", total: 580 }],
+            ["faire_avancer", { id: 1, etat: "prete" }],
+            ["passer_commande", { who: "grace", total: 320 }],
+        ]) {
+            const ev = { type, ...extra, ts: 1787000000000 + lines.length * 60000 };
+            ev.prev = prev;
+            ev.hash = crypto.createHash("sha256")
+                .update(prev + JSON.stringify({ ...ev, hash: undefined }))
+                .digest("hex").slice(0, 16);
+            prev = ev.hash;
+            lines.push(JSON.stringify(ev));
+        }
+        const legacy = path.join(tmp, "legacy.jsonl");
+        fs.writeFileSync(legacy, lines.join("\n") + "\n");
+
+        const impDb = path.join(tmp, "imp.db").replace(/\\/g, "/");
+        const run = (args) => spawnSync(RINGSERV, ["journal", ...args, FIXTURE], {
+            encoding: "utf8", env: { ...process.env, RINGSERV_TEST_DB: impDb },
+        });
+
+        let r7 = run(["import", "--in", legacy]);
+        check("a legacy journal imports into an empty Journal()",
+            r7.status === 0 && /INTACTE/.test(r7.stdout + r7.stderr),
+            (r7.stdout + r7.stderr).slice(0, 160));
+
+        r7 = run(["verify"]);
+        check("...and verifies INTACTE by the legacy discipline",
+            r7.status === 0 && /3 event\(s\)/.test(r7.stdout + r7.stderr),
+            (r7.stdout + r7.stderr).slice(0, 160));
+
+        const rt = path.join(tmp, "rt.jsonl");
+        run(["export", "--out", rt]);
+        check("export round-trips the imported bytes identically",
+            fs.readFileSync(legacy, "utf8").replace(/\r\n/g, "\n") ===
+            fs.readFileSync(rt, "utf8").replace(/\r\n/g, "\n"));
+
+        r7 = run(["import", "--in", legacy]);
+        check("importing over a non-empty journal is refused, with the count",
+            r7.status === 1 && /already holds 3/.test(r7.stdout + r7.stderr),
+            (r7.stdout + r7.stderr).slice(0, 160));
+
+        const bad = path.join(tmp, "bad.jsonl");
+        fs.writeFileSync(bad, fs.readFileSync(legacy, "utf8").replace("ada", "eve"));
+        const badDb = path.join(tmp, "bad.db").replace(/\\/g, "/");
+        r7 = spawnSync(RINGSERV, ["journal", "import", "--in", bad, FIXTURE], {
+            encoding: "utf8", env: { ...process.env, RINGSERV_TEST_DB: badDb },
+        });
+        check("a tampered file is refused AT ITS LINE, never laundered",
+            r7.status === 1 && /ROMPUE at line 1/.test(r7.stdout + r7.stderr),
+            (r7.stdout + r7.stderr).slice(0, 160));
+
+        // The prize: boot the app on the imported journal — legacy events
+        // REPLAY through :apply — then a native append continues the
+        // legacy chain, and verify stays INTACTE across the seam.
+        server = spawn(RINGSERV, ["run", FIXTURE], {
+            stdio: ["ignore", "ignore", "pipe"],
+            env: { ...process.env, RINGSERV_TEST_DB: impDb },
+        });
+        check("the app boots over the imported journal", await waitUp());
+        let st = (await call("orders", "state", {})).data;
+        check("legacy events replayed through :apply",
+            st.count === 2 && st.numero === 2, JSON.stringify(st));
+        const more2 = (await call("orders", "place", { who: "joan", total: 5 })).data;
+        check("a NATIVE append continues the legacy chain",
+            more2.seq === 4 && /^[0-9a-f]{64}$/.test(more2.hash), JSON.stringify(more2));
+        const v7 = (await call("journal", "verify", {})).data;
+        check("...and the mixed chain verifies INTACTE across the seam",
+            v7.chain === "INTACTE" && v7.events === 4, JSON.stringify(v7));
+        await stop();
+    }
+
     console.log(`\n${passed} passed, ${failed} failed`);
     process.exit(failed ? 1 : 0);
 })().catch(async e => {

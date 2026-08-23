@@ -104,6 +104,13 @@ exists with every entry dispositioned.
 
 **Placement note.** Interleaves with 14–15 rather than blocking them.
 
+**Progress, 2026-08-23:** the session-side deliverables are built —
+`ringserv journal import` with the legacy dialect (verify-before-write,
+byte-identical round-trip, native appends continuing an imported chain;
+9 gates) and [FRICTIONS.md](FRICTIONS.md) opened with its first three
+entries dispositioned. The gate that closes the phase — a real counter
+running on it — remains the author's to give.
+
 ## Phase 14 — The phone
 
 **Vision:** *"even on an Android phone"* — proven in the field by a prior

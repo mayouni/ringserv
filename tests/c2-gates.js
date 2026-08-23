@@ -31,7 +31,13 @@ const RINGSERV = path.join(ROOT, "zig-out", "bin",
     process.platform === "win32" ? "ringserv.exe" : "ringserv");
 const SCHEMA_FILE = path.join(ROOT, "vendor", "c2", "diagnostic-contract.schema.json");
 const UPSTREAM = path.join(ROOT, "..", "stzzui", "doc", "diagnostic-contract.schema.json");
-const PINNED = "1.1";
+// Re-pinned 1.1 -> 1.2.0 on 2026-08-23, deliberately: v1.2.0's one
+// substantive move opens extension properties under a constraint (no
+// bare booleans or nulls, because Ring's jsonlib stringifies them on a
+// round trip). RingServ emits NO extension properties, so its 1.1-shaped
+// envelopes are 1.2-valid unchanged — adoption costs nothing and staying
+// behind would make every future upstream patch a red gate.
+const PINNED = "1.2.0";
 
 let passed = 0, failed = 0;
 function check(name, cond, detail) {

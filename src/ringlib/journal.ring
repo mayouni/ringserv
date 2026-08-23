@@ -114,6 +114,54 @@ func RsJournalHead cName
 func RsJournalHash cPrev, cBody
 	return __rs_sha256(cPrev + cBody)
 
+# Does one record's hash hold? TWO DIALECTS, told apart by hash length:
+#
+#   64 hex — native. hash = sha256(prev + body), body excludes prev/hash.
+#   16 hex — the LEGACY INTERCHANGE dialect (phase 13): records imported
+#            from an older journal whose writer hashed sha256(prev +
+#            line-without-its-hash-field) and kept 16 chars. The body
+#            stored here is the ORIGINAL LINE, hash field included, so
+#            the hashed bytes are reconstructed by stripping exactly that
+#            field — textually, never by re-serialising.
+#
+# The dialect is honoured, not upgraded: re-hashing an inalterable record
+# to 64 chars would break the very chain it came with.
+func RsJournalCheckOne cPrev, cBody, cHash
+	if len(cHash) = 16
+		if left(RsJournalHash(cPrev, RsJournalStripHash(cBody)), 16) = cHash
+			return 1
+		ok
+		return 0
+	ok
+	if RsJournalHash(cPrev, cBody) = cHash
+		return 1
+	ok
+	return 0
+
+# The stored line minus its own `,"hash":"…"` — the bytes the legacy
+# writer hashed. The field sits LAST in every line that writer produced;
+# a line where it does not simply fails verification, which is the
+# honest outcome for bytes nobody can prove.
+func RsJournalStripHash cLine
+	cNeedle = "," + char(34) + "hash" + char(34) + ":" + char(34)
+	nAt = 0
+	nFrom = 1
+	while true
+		nHit = substr(substr(cLine, nFrom), cNeedle)
+		if nHit = 0 exit ok
+		nAt = nFrom + nHit - 1
+		nFrom = nAt + 1
+	end
+	if nAt = 0
+		return cLine
+	ok
+	# the field runs to its closing quote; keep whatever follows (`}`)
+	nClose = nAt + len(cNeedle)
+	while nClose <= len(cLine) and substr(cLine, nClose, 1) != char(34)
+		nClose++
+	end
+	return left(cLine, nAt - 1) + substr(cLine, nClose + 1)
+
 # ------------------------------------------------------------- the write
 
 func JournalAppend cName, aEvent
@@ -302,7 +350,7 @@ func JournalVerify cName
 			return [ :events = nCount, :chain = "ROMPUE",
 				 :at = aRow[:seq], :why = "prev does not name the record before it" ]
 		ok
-		if RsJournalHash(aRow[:prev], aRow[:body]) != aRow[:hash]
+		if RsJournalCheckOne(aRow[:prev], aRow[:body], aRow[:hash]) = 0
 			return [ :events = nCount, :chain = "ROMPUE",
 				 :at = aRow[:seq], :why = "the body does not hash to its recorded hash" ]
 		ok
@@ -332,6 +380,94 @@ func JournalRead cName, nFrom, nLimit
 			    :prev = aRow[:prev], :hash = aRow[:hash], :event = pEvent ])
 	next
 	return aOut
+
+# --------------------------------------------------------- the deversement
+#
+# Import a journal written elsewhere, in the JSONL interchange format —
+# including the LEGACY DIALECT: lines carrying their own `prev` and a
+# 16-hex `hash` computed by the older discipline (see RsJournalCheckOne).
+#
+# Three rules, each one a refusal:
+#
+#   EMPTY TARGET ONLY. Importing over existing records would graft two
+#   chains onto one head; the command says which journal and how many
+#   records stand in the way.
+#
+#   VERIFY BEFORE WRITE. A broken chain is refused at its line number —
+#   an importer that accepts a broken chain launders it into a store
+#   whose whole value is that it cannot be quietly wrong.
+#
+#   STORED BYTES ARE THE ORIGINAL LINE. The record's body is the exact
+#   line that arrived, so verification keeps working forever and export
+#   round-trips byte-identical. A deversement, not a translation.
+func JournalImport cName, cText
+	if not islist(RsJournalDecl(cName))
+		raise("JournalImport(): no journal named `" + cName + "`")
+	ok
+	cT = RsJournalTable(cName)
+	nHave = DataValue("select count(*) as n from " + cT, [], 0)
+	if nHave > 0
+		raise("JournalImport(): journal `" + cName + "` already holds " +
+		      nHave + " record(s) — import fills an empty journal only")
+	ok
+
+	# pass 1: verify the whole chain as written, before touching the table
+	aLines = []
+	cPrev = "GENESE"
+	nLine = 0
+	for cRaw in str2list(cText)
+		nLine++
+		cLine = cRaw
+		while len(cLine) > 0 and ascii(right(cLine, 1)) = 13
+			cLine = left(cLine, len(cLine) - 1)
+		end
+		if trim(cLine) = ""
+			loop
+		ok
+		try
+			aEv = JsonDecode(cLine)
+		catch
+			raise("JournalImport(): line " + nLine + " is not JSON")
+		done
+		cLinePrev = "" + RsDeclGet(aEv, "prev", "")
+		cLineHash = "" + RsDeclGet(aEv, "hash", "")
+		if cLineHash = ""
+			raise("JournalImport(): line " + nLine + " carries no hash — " +
+			      "not the interchange format")
+		ok
+		if cLinePrev != cPrev
+			raise("JournalImport(): ROMPUE at line " + nLine + " — prev does " +
+			      "not name the record before it; a broken chain is refused, " +
+			      "not laundered")
+		ok
+		if RsJournalCheckOne(cLinePrev, cLine, cLineHash) = 0
+			raise("JournalImport(): ROMPUE at line " + nLine + " — the line " +
+			      "does not hash to its recorded hash")
+		ok
+		nTs = RsDeclGet(aEv, "ts", 0)
+		if not isnumber(nTs) nTs = 0 ok
+		add(aLines, [ :ts = nTs, :type = "" + RsDeclGet(aEv, "type", "event"),
+			      :prev = cLinePrev, :hash = cLineHash, :body = cLine ])
+		cPrev = cLineHash
+	next
+	if len(aLines) = 0
+		raise("JournalImport(): the file holds no records")
+	ok
+
+	# pass 2: one transaction, the stored bytes are the original lines
+	__db_write_begin()
+	try
+		for aL in aLines
+			__db_exec("INSERT INTO " + cT + " (ts, type, prev, hash, body) " +
+				"VALUES (?, ?, ?, ?, ?)",
+				[ aL[:ts], aL[:type], aL[:prev], aL[:hash], aL[:body] ])
+		next
+	catch
+		__db_write_rollback()
+		raise(cCatchError)
+	done
+	__db_write_commit()
+	return len(aLines)
 
 # The interchange format: one JSON object per line, the germ's own shape, so
 # a journal moves between a Commons and a RingServ without translation.
@@ -444,7 +580,16 @@ func __rs_journal_cli aArgs
 
 	aRes = []
 	try
-		if cOp = "export"
+		if cOp = "import"
+			# The one verb allowed to create the schema: its whole job is
+			# to fill emptiness, so an absent table is its starting state,
+			# not its error. verify/export keep refusing to create.
+			RsJournalApply()
+			nDone = JournalImport(cName, "" + RsDeclGet(aArgs, "text", ""))
+			aV = JournalVerify(cName)
+			aRes = [ :ok = 1, :error = "", :journal = cName,
+				 :imported = nDone, :chain = aV[:chain], :events = aV[:events] ]
+		but cOp = "export"
 			aRes = [ :ok = 1, :error = "", :journal = cName,
 				 :text = JournalExport(cName) ]
 		but cOp = "verify"
