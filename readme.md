@@ -10,12 +10,6 @@
   sister of <a href="https://github.com/mayouni/ringscript">RingScript</a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/mayouni/ringserv/actions/workflows/gates.yml"><img
-    src="https://github.com/mayouni/ringserv/actions/workflows/gates.yml/badge.svg"
-    alt="gates"></a>
-</p>
-
 RingServ is the backend counterpart of
 [RingScript](https://github.com/mayouni/ringscript). Where RingScript
 makes [Ring](https://ring-lang.github.io/) resident in the browser,

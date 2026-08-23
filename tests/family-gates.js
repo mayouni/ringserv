@@ -75,6 +75,38 @@ async function stopAll() {
     });
     await new Promise((res, rej) => { cap.once("error", rej); cap.bind(FPORT, res); });
 
+    // THE ENVIRONMENT PROBE, before anything is asserted. GitHub's macOS
+    // runners deliver neither UDP multicast nor broadcast, so this suite
+    // failed there for every push while Ubuntu and Windows passed — a
+    // red X for a network the code never gets to touch. The repo's own
+    // law (PX): a gate that cannot run is NAMED and skipped, never
+    // dropped and never left red. The probe sends a datagram to the
+    // family group and to broadcast through a plain socket; if our own
+    // capture cannot hear either within three seconds, this machine
+    // cannot carry the transport, and the suite says so by name.
+    let probeHeard = false;
+    cap.on("message", m => { if (m.toString() === "rs-probe") probeHeard = true; });
+    {
+        const probe = dgram.createSocket("udp4");
+        await new Promise(r => probe.bind(0, r));
+        probe.setBroadcast(true);
+        for (let i = 0; i < 6 && !probeHeard; i++) {
+            probe.send(Buffer.from("rs-probe"), FPORT, "239.255.71.74", () => {});
+            probe.send(Buffer.from("rs-probe"), FPORT, "255.255.255.255", () => {});
+            await new Promise(r => setTimeout(r, 500));
+        }
+        probe.close();
+    }
+    if (!probeHeard) {
+        console.log("SKIP  the family handshake — this machine delivers neither UDP " +
+            "multicast nor broadcast (GitHub macOS runners are the known case). " +
+            "The suite is skipped BY NAME, not silently: 13 gates owned, 0 run here.");
+        cap.close();
+        console.log(`
+0 passed, 0 failed (13 skipped by name)`);
+        process.exit(0);
+    }
+
     boot("alpha.ring");
     boot("beta.ring");
     boot("gamma.ring");
