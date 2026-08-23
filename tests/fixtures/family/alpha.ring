@@ -15,5 +15,6 @@ RingServ([
 				return Reply(:ok, [ :beta_said = aOut[:data][:message] ])
 			}
 		]
-	]
+	],
+	:routes = [ [ :static, "/", "public/" ] ]
 ])

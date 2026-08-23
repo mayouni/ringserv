@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>alpha · the family handshake</title>
+<style>
+  body { font-family: ui-sans-serif, system-ui; max-width: 620px; margin: 3rem auto;
+         color: #1d1a16; line-height: 1.6; padding: 0 1rem; }
+  h1 { font-size: 22px; } h1 em { color: #8a2be2; font-style: normal; }
+  .sib { border: 1px solid #e7dfd3; border-radius: 10px; padding: 12px 16px; margin: 10px 0;
+         display: flex; justify-content: space-between; align-items: center; }
+  .tag { font-size: 12px; color: #6b6157; }
+  button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 0;
+           background: #8a2be2; color: #fff; cursor: pointer; }
+  pre { background: #f4efe7; border-radius: 8px; padding: 12px; min-height: 2em; }
+  .muted { color: #6b6157; }
+</style>
+<h1>I am <em>alpha</em> — who else is here?</h1>
+<p class="muted">Nothing on this page was configured. Every sibling below announced
+itself; the button calls one <b>by name</b>, at an address the handshake supplied.</p>
+<div id="sibs"><span class="muted">listening…</span></div>
+<p><button onclick="ask()">Ask beta to greet me</button></p>
+<pre id="out">—</pre>
+<script>
+const api = (service, action, payload = {}) =>
+  fetch("/api/v1", { method: "POST",
+    body: JSON.stringify({ service, action, payload }) }).then(r => r.json());
+async function refresh() {
+  const r = await api("me", "family");
+  const sibs = (r.data && r.data.siblings) || [];
+  document.getElementById("sibs").innerHTML = sibs.length
+    ? sibs.map(s => `<div class="sib"><b>${s.app}</b>
+        <span class="tag">${s.host}:${s.port} · custody ${s.custody} · ${s.alg}
+        · heard ${(s.age_ms/1000).toFixed(1)}s ago</span></div>`).join("")
+    : '<span class="muted">nobody announcing yet…</span>';
+}
+async function ask() {
+  document.getElementById("out").textContent = "calling beta…";
+  const r = await api("me", "ask", { name: "the browser" });
+  document.getElementById("out").textContent = JSON.stringify(r, null, 2);
+}
+refresh(); setInterval(refresh, 2000);
+</script>
