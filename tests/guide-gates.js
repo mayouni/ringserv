@@ -124,6 +124,38 @@ const norm = s => s.split("\n").map(l => l.trim()).filter(Boolean).join("\n");
             docs.length >= 20, `${docs.length} files scanned`);
     }
 
+    // ---- the front door may not fall behind the roadmap
+    //
+    // Twice now an outside reader has measured readme.md claiming fewer
+    // delivered phases than docs/roadmap.md records — three behind, fixed,
+    // then two behind again. The cause is not carelessness: a number
+    // TRANSCRIBED BY HAND into a second file drifts at the rate the first
+    // file moves, and this one moves about a phase a day. So the readme no
+    // longer carries the number, and this gate is what keeps it honest —
+    // if the count ever comes back, it has to be right.
+    {
+        const readme = read(path.join(ROOT, "readme.md"));
+        const roadmap = read(path.join(ROOT, "docs", "roadmap.md"));
+        const delivered = [...roadmap.matchAll(/^## Phase (\d+)[^\n]*(?:✅|delivered)/gim)]
+            .map(m => parseInt(m[1], 10));
+        const highest = delivered.length ? Math.max(...delivered) : 0;
+        check("the roadmap records delivered phases this gate can count",
+            highest >= 12, `highest delivered = ${highest}`);
+
+        // Any phase count the readme states must match the roadmap's.
+        const claims = [...readme.matchAll(/\b(\w+)\s+phases?\s+(?:are\s+)?delivered/gi)]
+            .map(m => m[1].toLowerCase());
+        const WORDS = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7,
+                        eight:8, nine:9, ten:10, eleven:11, twelve:12,
+                        thirteen:13, fourteen:14, fifteen:15 };
+        const wrong = claims
+            .map(w => (WORDS[w] !== undefined ? WORDS[w] : parseInt(w, 10)))
+            .filter(n => !isNaN(n) && n !== highest);
+        check("readme.md states no phase count that disagrees with the roadmap",
+            wrong.length === 0,
+            `readme says ${wrong.join(",")} — roadmap's highest delivered is ${highest}`);
+    }
+
     // ------------------------------------------- and it serves what it says
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ringserv-guide-"));
     fs.copyFileSync(APP, path.join(tmp, "app.ring"));

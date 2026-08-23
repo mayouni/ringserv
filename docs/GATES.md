@@ -4,9 +4,13 @@
 all:*
 
 ```bash
-zig build gates             # the six fast suites
-zig build gates -- --full   # ...plus soak and the native oracle
+zig build -j2 gates             # the fast suites
+zig build -j2 gates -- --full   # ...plus soak and the native oracle
 ```
+
+> The `-j2` is a cap for *this project's development host*, whose small
+> page file makes a full-fanout build a freeze risk — not advice about
+> yours. On an ordinary machine `zig build gates` is faster and fine.
 
 Suites run in dependency order — bridge, services, data, CLI — and
 none stops the others: a full picture beats an early exit.

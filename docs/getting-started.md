@@ -6,9 +6,16 @@ validated API and a page that calls it.*
 ## 1. One binary
 
 ```bash
-zig build
+zig build -j2
 ./zig-out/bin/ringserv version
 ```
+
+> **Why `-j2`?** It is a property of *this project's development machine*,
+> not of your machine or of RingServ. A build that fans out across every
+> core can overcommit memory on a host with little swap, and this one has
+> frozen doing it. On an ordinary machine, drop the flag — plain
+> `zig build` is faster and perfectly safe. The cap is written here only
+> so a copied line never costs someone a restart.
 
 That is the whole install. There is no runtime to install beside it, no
 package manager, no `node_modules`: the Ring VM, SQLite, the HTTP server,

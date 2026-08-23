@@ -170,7 +170,9 @@ cd myapp && ringserv serve myapp.ring
 
 Building from source needs only [Zig](https://ziglang.org) 0.15.2:
 `zig build` — every dependency is vendored in `vendor/`, nothing is
-fetched.
+fetched. (Contributors on *this project's* development host use
+`zig build -j2`; that cap is about that machine's small page file, not
+about RingServ or yours.)
 
 > The package deliberately carries **no** binary: one is ~7 MB, and five
 > platforms of it would live in git history forever. `ringpm install`
@@ -181,7 +183,7 @@ fetched.
 ## Where it stands — 0.9
 
 **0.9 means the surface is complete and exercised, and the API is
-stabilising rather than frozen.** Ten phases are delivered and gated;
+stabilising rather than frozen.** Every phase so far is delivered and gated;
 each one's record, with its gate results, is in
 [docs/roadmap.md](docs/roadmap.md).
 

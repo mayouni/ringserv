@@ -207,9 +207,13 @@ reason; js-gates extended.
   real"; every public mention scrubbed to neutral wording; lessons from
   real usage arrive as frictions or features, never as the customer.
 
-- 2026-08-23 — phase 12 delivered. The beacon shape is provisional until
-  Central answers PLAN-HANDSHAKE-12 (identity co-owned with zing);
-  adopting an answer is a datagram change, not an API change.
+- 2026-08-23 — PLAN-HANDSHAKE-12 **answered and closed**: zing asked for
+  no field added, removed or renamed, so the beacon shape stopped being
+  provisional without a wire change. Their one behavioural note — the
+  custody set is closed at v1, an unrecognised value is not higher — is
+  now contract text in FAMILY.md and in family.zig's header.
+- 2026-08-23 — phase 12 delivered. The beacon shape was routed for
+  cross-project review before freezing (identity co-owned with zing).
 
 - 2026-08-23 — phase 11 delivered. Scoping: the WinterTC widening was
   digest (+ modules) rather than the full fetch/timers list sketched —

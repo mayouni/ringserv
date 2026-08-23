@@ -4,7 +4,8 @@
 [`8a89cc00c2`](https://github.com/ring-lang/ring/commit/8a89cc00c2)** —
 the same base RingScript took on 2026-08-16. Patches are marked with
 `RINGSERV` or `RINGSCRIPT PATCH` comments at the site. **Any future vendor
-swap must re-apply the live ones** — then run `zig build` and
+swap must re-apply the live ones** — then run `zig build` (`-j2` on the
+project host, see [GATES.md](GATES.md)) and
 `node tests/all.js`.
 
 ## The base, measured — and a correction this file owes
@@ -56,6 +57,35 @@ re-applied). Ours:
 Sections 3, 4, 7 and 8 below are kept as **history, not as instructions**:
 they record why a change was made and how it was measured, and a future
 swap must not try to re-apply them.
+
+## Before you call Ring from C: the door is `ring_vm_callfuncwithouteval`
+
+Not a patch — a note kept here because this is the file anyone touching
+the vendored VM reads first, and it costs a whole day to learn otherwise.
+RingServ does not call Ring from C today (grep for either symbol outside
+`ringvm/` returns nothing), so this is **preventive, not a defect**.
+
+`ring_vm_callfunction` reads as the general-purpose door and is not one.
+In this very tree, `ringvm/src/vmeval.c:34` has it delete the *calling* C
+function's frame (`RING_VM_DELETELASTFUNCCALL`) before loading anything,
+then set `pVM->lActiveCatch = 1` at `:44` under the comment *"Avoid normal
+steps after this function, because we deleted the scope in Prepare"*. The
+VM is left mid-catch, so the **next** Ring call from that same C function
+dies with *"Deleting scope while no scope"* — a message that names
+nothing about the code that reported it.
+
+Use what Ring itself uses: `ring_vm_callfuncwithouteval`, at
+`ringvm/src/vmerror.c:43` and `ringvm/src/vmoop.c:1402`. It saves the PC,
+runs the function and pushes the result — no frame deletion, no
+`lActiveCatch`, and errors raised from C with `ring_vm_error` stay
+catchable.
+
+Found by microring, which paid for it twice from opposite directions, and
+routed here by Central on 2026-08-23 (MICRORING-VMCALLBACK-01) after
+verifying the diagnosis against *these* line numbers. The reusable half
+is not the function name: it is that **a name describing an API more
+generously than its body does costs every reader the same day, one at a
+time, and none of them can see the previous one paying it.**
 
 ## 1. `ringvm/src/vmeval.c` — keep line numbers in eval'd bytecode
 

@@ -8,8 +8,10 @@
 //! about any sibling is its own /topology endpoint, fetched over plain
 //! HTTP when it matters.
 //!
-//! The datagram (shape PROVISIONAL until Central answers
-//! PLAN-HANDSHAKE-12 — the identity half is co-owned with zing):
+//! The datagram. The shape was routed for review as PLAN-HANDSHAKE-12
+//! because the identity half is co-owned with zing; zing answered on
+//! 2026-08-23 asking for NO field added, removed or renamed. It is a
+//! reviewed shape now, not a provisional one:
 //!
 //!   { "v": 1, "family": "ringserv", "app": "comptoir", "port": 8110,
 //!     "contracts": { "c2": "1.1", "c3": "1.0" },
@@ -20,6 +22,27 @@
 //! L2 = fused secret behind secure boot. `alg` is present even when
 //! "none", because a host that hardcodes one algorithm has silently
 //! excluded hardware custody — the column is not decorative.
+//!
+//! THREE RULES FROM ZING'S REVIEW, and the second is the one a consumer
+//! must obey (docs/FAMILY.md states them for readers):
+//!
+//!   1. `alg: "none"` is a FACT, not a gap. A consumer cannot tell an
+//!      empty value from an absent one after the fact: "none" says this
+//!      host was asked and has none; a missing `alg` says nobody thought
+//!      about algorithms.
+//!   2. `custody` IS NOT ORDINAL. L0/L1/L2 invites `custody >= "L1"`,
+//!      which would silently accept an unrecognised "L3" AS BETTER. The
+//!      set is CLOSED at v1: an unrecognised value is UNRECOGNISED, not
+//!      higher, and a host wanting new custody vocabulary raises `v`.
+//!   3. `identity` describes the HOST'S KEY CUSTODY, not this datagram's
+//!      authentication. At v1 the beacon carries no signature, so `alg`
+//!      names a CAPABILITY — a consumer hunting for a `sig` will not
+//!      find one, and the beacon is not malformed for lacking it.
+//!
+//! Considered and DECLINED at v1, recorded because declined is a
+//! different fact from never-raised: a key fingerprint or key id. That
+//! would turn zero-configuration discovery into an identity system by
+//! accident; identity-of-instance is C3's declared business.
 //!
 //! What this deliberately is NOT: cross-network discovery (C3's
 //! declared, explicit business), a health check (last-seen is not

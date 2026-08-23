@@ -26,8 +26,9 @@ and the gate proves it by packet capture rather than trust.
 
 One boring transport: a JSON beacon over UDP multicast (group
 `239.255.71.74`, port `47474`), sent every two seconds, heard by every
-family process sharing the port. The beacon (shape **provisional** until
-the cross-project identity contract freezes — it is co-owned with zing):
+family process sharing the port. The shape was reviewed across projects
+before it froze (the identity half is co-owned) and **no field was added,
+removed or renamed**:
 
 ```json
 { "v": 1, "family": "ringserv", "app": "beta",
@@ -50,6 +51,31 @@ Three design decisions worth knowing, each learned by a failing gate:
   by the *called* server's ordinary door — contracts, placement, actors —
   exactly as for a stranger, because over the wire, family *is* a
   stranger with a known address.
+
+## The identity contract — three rules
+
+**1. `alg: "none"` is a fact, not a gap.** A consumer cannot tell an
+empty value from an absent one after the event. `"none"` says *this host
+was asked and has none*; a missing `alg` would say *nobody thought about
+algorithms*. Emit it always.
+
+**2. `custody` is not ordinal — do not compare it.** `L0`/`L1`/`L2` looks
+orderable and invites `custody >= "L1"`, which would silently accept an
+unrecognised `"L3"` **as better**. The set is **closed at v1**: an
+unrecognised value is *unrecognised*, not higher. A host that wants new
+custody vocabulary raises `v` instead. Match exactly, and treat anything
+you do not know as unknown.
+
+**3. `identity` describes the host's key custody, not this datagram's
+authentication.** At v1 the beacon carries **no signature**, so `alg`
+names a *capability*, not the algorithm that signed these bytes. Do not
+hunt for a `sig` field — its absence is the design, not a malformed
+beacon.
+
+*Considered and declined at v1* (a different fact from never raised): a
+key fingerprint or key id. In a zero-configuration beacon that would turn
+discovery into an identity system by accident; identity-of-instance is
+[C3's](topology.md) declared business.
 
 ## The identity fields
 

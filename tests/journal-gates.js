@@ -373,6 +373,61 @@ async function stop() {
         await stop();
     }
 
+    // ============ 8. no value can forge a record boundary (routed finding)
+    //
+    // ringflex found that a journal whose canonical line RESERVES bytes
+    // (TAB, US, LF) must refuse them at the writer, because no upstream
+    // validator knows a format's private separators. Central routed it
+    // here to be CHECKED, not assumed.
+    //
+    // Measured, and this format answers differently: the record separator
+    // is LF and the body is JSON, so the ENCODER escapes LF, TAB and US
+    // before they are ever stored -- a value cannot forge a boundary by
+    // construction rather than by refusal. That is a stronger position
+    // than a blocklist, and this gate is what keeps it true: it puts each
+    // reserved byte inside a value and proves the export still holds
+    // exactly one line per record.
+    {
+        const ctlDb = path.join(tmp, "ctl.db").replace(/\\/g, "/");
+        server = spawn(RINGSERV, ["run", FIXTURE], {
+            stdio: ["ignore", "ignore", "pipe"],
+            env: { ...process.env, RINGSERV_TEST_DB: ctlDb },
+        });
+        check("a journal for the control-byte gate comes up", await waitUp());
+
+        const evil = [
+            ["LF",  "ada\nEVE"],
+            ["TAB", "ada\tEVE"],
+            ["US",  "ada\u001fEVE"],
+            ["DEL", "ada\u007fEVE"],
+        ];
+        for (const [label, who] of evil) {
+            const rr = await call("orders", "place", { who, total: 1 });
+            check("a " + label + " inside a value is accepted, not lost",
+                rr.code === 0, JSON.stringify(rr).slice(0, 120));
+        }
+
+        const ctlOut = path.join(tmp, "ctl.jsonl");
+        spawnSync(RINGSERV, ["journal", "export", "--out", ctlOut, FIXTURE], {
+            encoding: "utf8", env: { ...process.env, RINGSERV_TEST_DB: ctlDb },
+        });
+        const text = fs.readFileSync(ctlOut, "utf8").replace(/\r\n/g, "\n");
+        const lines = text.split("\n").filter(l => l.trim() !== "");
+        check("ONE LINE PER RECORD -- no value forged a boundary",
+            lines.length === evil.length,
+            lines.length + " lines for " + evil.length + " records");
+        check("...and every line is parseable JSON",
+            lines.every(l => { try { JSON.parse(l); return true; } catch { return false; } }));
+        check("...with the control bytes preserved inside the values",
+            lines.some(l => JSON.parse(l).who === "ada\nEVE") &&
+            lines.some(l => JSON.parse(l).who === "ada\u001fEVE"));
+
+        const v8 = (await call("journal", "verify", {})).data;
+        check("...and the chain still verifies INTACTE",
+            v8.chain === "INTACTE" && v8.events === evil.length, JSON.stringify(v8));
+        await stop();
+    }
+
     console.log(`\n${passed} passed, ${failed} failed`);
     process.exit(failed ? 1 : 0);
 })().catch(async e => {
