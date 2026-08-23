@@ -85,9 +85,18 @@ pub fn start(app: []const u8, host: []const u8, port: u16, custody: []const u8, 
         std.debug.print("family: no UDP socket ({s}) — announce disabled\n", .{@errorName(e)});
         return;
     };
-    // N processes on one machine must all hear the port.
+    // N processes on one machine must all hear the port. REUSEADDR is
+    // enough on Linux and the whole story on Windows — but Darwin
+    // requires SO_REUSEPORT for a second process to bind at all: without
+    // it the bind fails EADDRINUSE, announce silently disabled itself,
+    // and CI's macOS runner reported an empty roster while Ubuntu and
+    // Windows passed. Found by that exact red, on 2026-08-23.
     std.posix.setsockopt(sock, std.posix.SOL.SOCKET, std.posix.SO.REUSEADDR,
         &std.mem.toBytes(@as(c_int, 1))) catch {};
+    if (builtin.os.tag != .windows) {
+        std.posix.setsockopt(sock, std.posix.SOL.SOCKET, std.posix.SO.REUSEPORT,
+            &std.mem.toBytes(@as(c_int, 1))) catch {};
+    }
     std.posix.setsockopt(sock, std.posix.SOL.SOCKET, std.posix.SO.BROADCAST,
         &std.mem.toBytes(@as(c_int, 1))) catch {};
     // The receive loop doubles as the beacon clock.
