@@ -173,10 +173,18 @@ committing that on every release would bloat git history
 permanently. They belong on releases instead; the install story
 ("download one file, run it") is unchanged.
 
-Honest status: **only the Windows binary has been run.** The other
-four cross-compile cleanly from one machine, which is not the same as
-being tested on their platforms — the roadmap's cross-platform gate
-stays open until they are.
+The same reasoning governs **the RingPM package** (`package.ring`):
+`ringpm install ringserv from mayouni` fetches a small package and its
+`:setup` downloads the ONE binary the installing machine needs from the
+tagged release. A machine that installs without a network still gets a
+working package — `ringpm run ringserv` names the missing file, its URL
+and its path, rather than failing later somewhere else.
+
+Status, updated 2026-08-23: **all three platforms are built and tested
+on every push** (`.github/workflows/gates.yml` — ubuntu, macos-14,
+windows), and `zig build dist` proves all five shipped targets still
+cross-compile. The cross-platform gate that stood open here is closed;
+see the roadmap's phase 4 for the five defects that closing it found.
 
 ## Design rules
 

@@ -170,6 +170,20 @@
   <h2 class="group">Practical</h2>
 
   <div class="qa">
+    <h3>Can I install it with Ring's package manager?</h3>
+    <p><span class="verdict yes">Yes — one line</span></p>
+    <p><code>ringpm install ringserv from mayouni</code>, then
+    <code>ringpm run ringserv</code>. That brings the guides and both example
+    applications too, so <code>ring main.ring example comptoir</code> runs a whole
+    application straight away.</p>
+    <p>The package carries no binary on purpose — one is ~7&nbsp;MB, and five
+    platforms of it would live in git history forever — so installing downloads
+    the single binary your machine needs from the tagged release. With no network
+    it still installs, and tells you exactly which file is missing and where it
+    goes.</p>
+  </div>
+
+  <div class="qa">
     <h3>What platforms?</h3>
     <p>Linux (x64, arm64), macOS (Intel, Apple Silicon) and Windows — one file each,
     built and tested by CI from the tagged commit, with checksums beside them, on the

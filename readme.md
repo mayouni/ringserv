@@ -146,9 +146,21 @@ simple and beautiful way to write any backend in Ring.
 
 ## Install
 
-Download one file for your platform from
+**If you already have Ring**, use its package manager — RingPM fetches the
+package and downloads the one binary your machine needs:
+
+```bash
+ringpm install ringserv from mayouni
+ringpm run ringserv          # what is installed, and what to try next
+```
+
+That also brings the guides and both example applications with it, so
+`ring main.ring example comptoir` runs a whole application immediately.
+
+**If you do not have Ring** — and you do not need it — download one file
+for your platform from
 [Releases](https://github.com/mayouni/ringserv/releases), make it
-executable, and run it. There is nothing else to install — not Ring, not
+executable, and run it. There is nothing else to install: not Ring, not
 Node, not a runtime, not a web server.
 
 ```bash
@@ -159,6 +171,12 @@ cd myapp && ringserv serve myapp.ring
 Building from source needs only [Zig](https://ziglang.org) 0.15.2:
 `zig build` — every dependency is vendored in `vendor/`, nothing is
 fetched.
+
+> The package deliberately carries **no** binary: one is ~7 MB, and five
+> platforms of it would live in git history forever. `ringpm install`
+> downloads the single binary your machine needs from the tagged release.
+> Installing without a network still works — `ringpm run ringserv` then
+> names the file it is missing, its URL, and where to put it.
 
 ## Where it stands — 0.9
 

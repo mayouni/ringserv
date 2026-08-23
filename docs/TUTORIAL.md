@@ -36,6 +36,13 @@ ringserv serve calc.ring
 ringserv serve --explain calc.ring    # exactly what got exposed, and how
 ```
 
+**Getting the command.** If you already have Ring:
+`ringpm install ringserv from mayouni`, then `ringpm run ringserv` — which
+also brings these guides and both example applications with it. If you do
+not have Ring, download one file from
+[Releases](https://github.com/mayouni/ringserv/releases) and put it on your
+path; nothing else is needed.
+
 **The lesson to carry forward:** the tool tells you what it did. You will
 meet `--explain`, `check`, `docs` and `topology` again — RingServ prefers
 printing the truth over asking you to trust it.

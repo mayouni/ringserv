@@ -32,10 +32,15 @@
 <section class="wrap">
   <h2>Ninety seconds</h2>
   <ol class="steps">
-    <li><b>Download one file.</b> Pick your platform on the
-      <a href="https://github.com/mayouni/ringserv/releases/latest">releases page</a> — Linux,
-      macOS or Windows — and put it somewhere on your path. On Linux and macOS, make it
-      executable: <code>chmod +x ringserv</code>. That is the entire installation.</li>
+    <li><b>Get it.</b> Two roads, both one step.
+      <b>With Ring installed</b>, its package manager does everything —
+      the guides and both example applications come with it:
+<pre class="code"><span class="c">$</span> ringpm install ringserv from mayouni
+<span class="c">$</span> ringpm run ringserv</pre>
+      <b>Without Ring</b> — and you do not need it — pick your platform on the
+      <a href="https://github.com/mayouni/ringserv/releases/latest">releases page</a>,
+      put the file somewhere on your path, and on Linux or macOS make it executable
+      (<code>chmod +x ringserv</code>). That is the entire installation either way.</li>
     <li><b>Write ordinary functions.</b> Create a file — say <code>calc.ring</code> —
       containing nothing but functions:
 <pre class="code"><span class="k">func</span> add a, b
