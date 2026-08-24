@@ -62,6 +62,61 @@ if (!inGit) {
     process.exit(0);
 }
 
+// ---------------------------------------------------------------- gate 0
+//
+// A TRAILER GIT CANNOT PARSE IS A TRAILER 4.4 CANNOT SELECT ON, and it
+// looks perfectly correct read by eye. Every other gate in this file
+// asks what a trailer OWES; this one asks whether the trailer EXISTS as
+// far as git is concerned -- because a raw grep and git's own parser can
+// disagree, and when they do, the grep is the one lying.
+//
+// Two ways to get it wrong, both measured in this very repository before
+// this gate existed:
+//   * a blank line INSIDE the trailer block -- git reads only the LAST
+//     paragraph, so Co-Authored-By parses and Autopilot-Run does not;
+//   * no blank line BEFORE the block -- neither parses.
+//
+// GIT IS ITS OWN ORACLE here, the same pattern the loader gates use
+// against native ring: ask the parser, not the text. Routed by Central
+// on 2026-08-24 after they broke it on themselves three times in forty
+// minutes WHILE reporting it -- which is the argument for a gate rather
+// than more care, and the reason this is not simply a note in a guide.
+{
+    // THE FROZEN BASELINE. These two commits are already pushed, and
+    // rewriting published history to repair a trailer is a worse act than
+    // the defect — the estate's ruling on its own worst case (16 in
+    // softanza) is "not back-filled, and will not be". So they are named
+    // here, once, and THIS LIST MAY NEVER GROW: any new unparsed trailer
+    // fails the gate. A gate that stays permanently red teaches people to
+    // ignore it, which is the failure this whole suite exists to prevent.
+    const BASELINE = new Set([
+        "461fcb51d69f7ac2b873df4a37081802ebe02196",
+        "283ff140ced7ba06e60c72b78f88c293bb5cd281",
+    ]);
+    const shas = git(["log", "--all", "--format=%H"]).split("\n").filter(Boolean);
+    const unparsed = [];
+    for (const sha of shas) {
+        const body = git(["log", "-1", "--format=%B", sha]);
+        if (!/^\s*Autopilot-Run:/m.test(body)) continue;
+        const parsed = git(["log", "-1",
+            "--format=%(trailers:key=Autopilot-Run,valueonly)", sha]).trim();
+        if (parsed === "" && !BASELINE.has(sha)) {
+            unparsed.push(sha.slice(0, 7) + " " +
+                git(["log", "-1", "--format=%s", sha]).trim().slice(0, 52));
+        }
+    }
+    if (shas.length === 0) {
+        skip("0 every Autopilot-Run trailer PARSES as a trailer", "no commits");
+    } else {
+        check(`0 every NEW Autopilot-Run trailer PARSES as a trailer `
+            + `(${BASELINE.size} historical, named and frozen)`,
+            unparsed.length === 0,
+            unparsed.length + " commit(s) git cannot select: " +
+            unparsed.join(" | ") +
+            "  -- put ONE blank line before the trailer block and NONE inside it");
+    }
+}
+
 // Every stamp the history claims, and every stamp the logs and tags carry.
 const trailers = new Set(
     git(["log", "--format=%B"]).split("\n")
