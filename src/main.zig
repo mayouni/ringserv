@@ -2,6 +2,7 @@
 //! (`build` — a single self-contained executable — is still ahead.)
 
 const std = @import("std");
+const builtin = @import("builtin");
 const bridge = @import("bridge");
 const bench = @import("bench.zig");
 const serve = @import("serve.zig");
@@ -180,7 +181,15 @@ pub fn main() !u8 {
     }
 
     if (std.mem.eql(u8, cmd, "version")) {
-        std.debug.print("RingServ {s} (Ring 1.27, resident)\n", .{bridge.RINGSERV_VERSION});
+        // THE BUILD MODE IS PRINTED, ALWAYS. Estate rule (decisions/LEDGER
+        // line 106): a repository publishing benchmark numbers names the
+        // mode WHERE THE NUMBERS ARE READ. This binary defaults to
+        // ReleaseFast and `-Ddebug` is opt-in — but a safe default
+        // satisfies the condition, not the rule: a correct measurement
+        // published with no mode named is still a number a later reader
+        // cannot check. So the binary answers for itself, in every mode.
+        std.debug.print("RingServ {s} (Ring 1.27, resident, {s})\n",
+            .{ bridge.RINGSERV_VERSION, @tagName(builtin.mode) });
         return 0;
     }
 

@@ -102,7 +102,10 @@ Measured 2026-08-23 (`node tests/bench-vs-node.js 400`): the same three
 service-shaped workloads, same logic on both sides, RingServ's JS guest
 (module form) against a plain `node:http` server — no framework on
 either side, because the comparison is engines, not ecosystems. Node
-v22.20.0, sequential requests, medians.
+v22.20.0, sequential requests, medians. **RingServ built ReleaseFast**
+(the default; `ringserv version` prints the mode of whatever binary you
+are holding) — a number published without its build mode is a number a
+later reader cannot check.
 
 | scenario | RingServ | Node | verdict |
 |---|---:|---:|---|

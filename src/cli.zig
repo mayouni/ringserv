@@ -5,6 +5,7 @@
 //! process against the dispatcher, `dev` supervises a child `run`.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const bridge = @import("bridge");
 
 const tpl_app = @embedFile("templates/app.ring");
@@ -313,6 +314,8 @@ fn newestRingMtime(arena: std.mem.Allocator, dir_path: []const u8) !i128 {
 // ---------------------------------------------------------------- where
 
 pub fn where(arena: std.mem.Allocator) !u8 {
+    // The build mode, beside the versions — same estate rule as `version`.
+    std.debug.print("Build     {s}\n", .{@tagName(builtin.mode)});
     const exe = std.fs.selfExePathAlloc(arena) catch "?";
     const cwd = std.process.getCwdAlloc(arena) catch "?";
     var stdout_buf: [2048]u8 = undefined;
