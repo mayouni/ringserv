@@ -228,6 +228,145 @@ fn getSyncShape(req: *httpz.Request, res: *httpz.Response) !void {
     return runInVm(res, "__rs_sync_shape", body.items, "");
 }
 
+/// How many streams this server will hold open at once.
+///
+/// A held-open connection is a real resource and a browser tab is free to
+/// open one, so the cap is part of the feature rather than a follow-up.
+/// The refusal NAMES the cap: a client told "busy" learns nothing, and a
+/// client told the number can decide whether to wait or to poll.
+const STREAM_CAP: u32 = 64;
+/// A stream lives ten minutes, then closes cleanly and the browser
+/// reconnects by itself with Last-Event-ID. Bounded on purpose: a
+/// forgotten tab must not hold a thread for a week, and a client that
+/// resumes from its own offset loses nothing by being recycled.
+const STREAM_MAX_MS: u32 = 600_000;
+var g_streams: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+
+/// GET /sync/stream?shape=<name>&offset=<n> - Server-Sent Events.
+///
+/// WHAT CROSSES THE WIRE IS AN OFFSET, NEVER A PAYLOAD. The event says
+/// "shape `menu` advanced to 47" and the client fetches through the same
+/// /sync/shape path it already uses. Two things are bought by that
+/// constraint and both are load-bearing:
+///
+///   ONE CODE PATH FOR DATA - paging, must-refetch and the placement rules
+///   keep working, because the data still travels the way it did.
+///
+///   A DROPPED NOTIFICATION COSTS LATENCY, NEVER CORRECTNESS - the
+///   client's existing poll still converges, so a browser that missed an
+///   event, a proxy that buffered one, and a server that never sent one
+///   all end at the same state. That is what makes this safe to ship
+///   rather than a second source of truth.
+///
+/// SSE and not WebSocket, for the reasons in docs/PLAN.md phase 18: the
+/// flow is one-way, plain HTTP survives the reverse proxy this server
+/// MANDATES for TLS, and Last-Event-ID maps onto the shape-log offset
+/// exactly - so a reconnecting browser resumes by itself.
+///
+/// Like the long poll above, this parks on an HTTP THREAD and asks the VM
+/// only for a cheap indexed max(). It never holds a VM worker.
+fn getSyncStream(req: *httpz.Request, res: *httpz.Response) !void {
+    const q = try req.query();
+    const shape = q.get("shape") orelse "";
+    if (shape.len == 0) {
+        res.status = 400;
+        res.content_type = .JSON;
+        res.body =
+            \\{"code":1,"message":"name the shape: /sync/stream?shape=<name>","data":""}
+        ;
+        return;
+    }
+
+    // The browser's own resume token wins over the query string: on a
+    // reconnect the browser replays Last-Event-ID by itself, and that is a
+    // more recent fact than whatever offset the page first opened with.
+    var from: i64 = std.fmt.parseInt(i64, q.get("offset") orelse "0", 10) catch 0;
+    if (req.header("last-event-id")) |lei| {
+        from = std.fmt.parseInt(i64, lei, 10) catch from;
+    }
+
+    if (g_streams.fetchAdd(1, .monotonic) >= STREAM_CAP) {
+        _ = g_streams.fetchSub(1, .monotonic);
+        res.status = 503;
+        res.content_type = .JSON;
+        var msg: std.ArrayList(u8) = .empty;
+        defer msg.deinit(alloc);
+        try msg.writer(alloc).print(
+            "{{\"code\":1,\"message\":\"this server holds at most {d} live streams and all are in use - poll /sync/shape instead, which always works\",\"data\":\"\"}}",
+            .{STREAM_CAP});
+        res.body = try res.arena.dupe(u8, msg.items);
+        return;
+    }
+    defer _ = g_streams.fetchSub(1, .monotonic);
+
+    // SSE's own headers. `X-Accel-Buffering: no` is the one people forget:
+    // nginx buffers a proxied response by default, so events arrive in
+    // clumps or not at all until the buffer fills -- and this server
+    // MANDATES a proxy for TLS, which makes the header a requirement here
+    // rather than a nicety. `no-transform` asks intermediaries not to
+    // compress, since a compressor with its own buffer reintroduces the
+    // same delay a different way.
+    res.content_type = .EVENTS;
+    res.header("Cache-Control", "no-cache, no-transform");
+    res.header("X-Accel-Buffering", "no");
+    res.header("Connection", "keep-alive");
+
+    // THE STREAM RUNS ON THIS THREAD, by res.chunk(), and does NOT use
+    // httpz's disown/startEventStream path. Both of those were tried
+    // first and both answered error.Unexpected on Windows: they hand the
+    // socket to a spawned thread, and the worker loop that owns it does
+    // not survive being disowned on every platform. Holding the HTTP
+    // thread is also the shape this server already chose for the long
+    // poll above -- an HTTP thread is cheap, a VM WORKER is what must
+    // never be parked, and neither of these parks one.
+    //
+    // Chunked transfer is ordinary for SSE; EventSource reads it happily.
+    var buf: [256]u8 = undefined;
+
+    // An opening event, so a page knows it is connected rather than
+    // inferring it from silence - and it carries the head, so a client
+    // that subscribed while behind catches up at once.
+    {
+        const head = headOf(shape) catch 0;
+        const msg = std.fmt.bufPrint(&buf,
+            "retry: 2000\nevent: open\nid: {d}\ndata: {{\"shape\":\"{s}\",\"offset\":{d}}}\n\n",
+            .{ head, shape, head }) catch return;
+        res.chunk(msg) catch return;
+        if (head > from) from = head;
+    }
+
+    // The loop. A heartbeat every 15 s doubles as dead-peer detection:
+    // the write fails on a closed socket, which is the only reliable
+    // signal a server gets that a browser tab is gone. It also keeps
+    // proxies from closing an idle connection they think is dead.
+    var since_beat: u32 = 0;
+    var lived: u32 = 0;
+    while (lived < STREAM_MAX_MS) {
+        std.Thread.sleep(200 * std.time.ns_per_ms);
+        since_beat += 200;
+        lived += 200;
+
+        const head = headOf(shape) catch 0;
+        if (head > from) {
+            from = head;
+            since_beat = 0;
+            const msg = std.fmt.bufPrint(&buf,
+                "event: advanced\nid: {d}\ndata: {{\"shape\":\"{s}\",\"offset\":{d}}}\n\n",
+                .{ head, shape, head }) catch return;
+            res.chunk(msg) catch return;
+        } else if (since_beat >= 15_000) {
+            since_beat = 0;
+            // A comment line: valid SSE, ignored by every client, and it
+            // fails to write exactly when the peer is gone.
+            res.chunk(": beat\n\n") catch return;
+        }
+    }
+    // A bounded life, then a clean close. The browser reconnects by
+    // itself with Last-Event-ID -- which is the whole reason SSE was
+    // chosen -- so a recycled connection costs nothing and stops a
+    // forgotten tab from holding a thread for a week.
+    res.chunk("event: bye\ndata: {}\n\n") catch {};
+}
 /// The shape's highest offset, asked of a worker. Cheap — one indexed
 /// max() — which is what makes polling for it affordable.
 fn headOf(shape: []const u8) !i64 {
@@ -394,6 +533,7 @@ pub fn start(config: Config) !void {
     router.get("/health", getHealth, .{});
     router.get("/topology", getTopology, .{});
     router.get("/sync/shape", getSyncShape, .{});
+    router.get("/sync/stream", getSyncStream, .{});
     router.post("/sync/push", postSyncPush, .{});
     router.post("/sync/state", postSyncState, .{});
     if (g_statics.len > 0) {
