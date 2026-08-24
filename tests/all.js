@@ -49,6 +49,7 @@ const suites = [
     { name: "comptoir (broad)  ", node: "comptoir-gates.js" },
     { name: "family handshake  ", node: "family-gates.js" },
     { name: "stzlib profile    ", node: "stzprofile-gates.js" },
+    { name: "harness record    ", node: "harness-gates.js" },
 ];
 
 if (full) {
