@@ -207,6 +207,63 @@ fs.writeFileSync(path.join(mwDir, "app.ring"),
     "\t]\n" +
     "])\n");
 
+// ------------------------------------------- an `eval`'d load is a TOP-LEVEL
+// load, wherever the `eval` sits
+//
+// Added 2026-08-24. `load` takes a literal string, so a configurable path has
+// to go through `eval` — and that form is now being proposed across the estate
+// as how one repository depends on another, usually with a RELATIVE fallback
+// beside the environment variable. These gates are why that fallback should be
+// absolute: the constructed load anchors on the PROCESS WORKING DIRECTORY, so
+// the identical command resolves from one folder and fails from the next.
+// docs/LOADING.md states it; this holds it.
+{
+    const evDir = path.join(tmp, "evalload");
+    fs.mkdirSync(path.join(evDir, "sub"), { recursive: true });
+    fs.writeFileSync(path.join(evDir, "sub", "target.ring"),
+        'func EvalTarget() return "reached"\n');
+    // The relative path is written against evDir, exactly as a sibling-relative
+    // fallback in a checked-in file would be.
+    fs.writeFileSync(path.join(evDir, "app.ring"),
+        'cDir = "sub"\n'
+        + "eval('load \"' + cDir + '/target.ring\"')\n"
+        + 'see EvalTarget() + nl\n');
+
+    const fromRight = spawnSync(RINGSERV, ["run", path.join(evDir, "app.ring")],
+        { cwd: evDir, encoding: "utf8" });
+    check("an eval'd load with a relative path resolves from the RIGHT cwd",
+        /reached/.test((fromRight.stdout || "") + (fromRight.stderr || "")),
+        ((fromRight.stdout || "") + (fromRight.stderr || "")).slice(0, 200));
+
+    // Same command, absolute script path, one directory up. If this ever starts
+    // passing, the anchoring rule changed and docs/LOADING.md's recommendation
+    // — variable first, then an ABSOLUTE default — is stale.
+    const fromWrong = spawnSync(RINGSERV, ["run", path.join(evDir, "app.ring")],
+        { cwd: tmp, encoding: "utf8" });
+    const wrongOut = (fromWrong.stdout || "") + (fromWrong.stderr || "");
+    check("...and FAILS from any other cwd — which is why a relative fallback hides",
+        /Can't open file/.test(wrongOut) && !/reached/.test(wrongOut),
+        wrongOut.slice(0, 200));
+
+    // The same program under native `ring` where one is installed: this is
+    // Ring's rule and not a RingServ divergence, and an oracle says so more
+    // cheaply than a paragraph.
+    const ringForEval = ringExe();
+    if (!ringForEval) {
+        skip("...and native `ring` agrees on both", "no Ring installation");
+    } else {
+        const oRight = spawnSync(ringForEval, [path.join(evDir, "app.ring")],
+            { cwd: evDir, encoding: "utf8" });
+        const oWrong = spawnSync(ringForEval, [path.join(evDir, "app.ring")],
+            { cwd: tmp, encoding: "utf8" });
+        const rOut = (oRight.stdout || "") + (oRight.stderr || "");
+        const wOut = (oWrong.stdout || "") + (oWrong.stderr || "");
+        check("...and native `ring` agrees on both — not a RingServ divergence",
+            /reached/.test(rOut) && !/reached/.test(wOut),
+            "right: " + rOut.slice(0, 80) + " | wrong: " + wOut.slice(0, 80));
+    }
+}
+
 (async () => {
     const child = spawn(RINGSERV, ["run", path.join(mwDir, "app.ring")],
         { cwd: root, stdio: "ignore" });

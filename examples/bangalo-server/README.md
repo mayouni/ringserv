@@ -109,6 +109,92 @@ reads the host), which is the rule the ask actually cares about; the
 HTTP verb carrying it is a RingServ wire-contract fact
 (`docs/services.md`), not a decision this profile made.
 
+## UPDATE, 2026-08-24 — the 08-22 conclusion was right and its middle step was wrong; two failures were being read as one
+
+*Everything below is measured on this machine today, in this order, and the
+order is the point: each measurement killed the explanation the previous one
+had left standing.*
+
+**The 08-22 passage read the warnings and the `stzenginestring` error as one
+event — "RingServ cannot load a native extension". They are two events, and
+only the second one is that.** The warnings come from `fexists` failing
+BEFORE any load is attempted (`engine/stz_string.ring:18`); `loadlib` is
+never reached. So the warnings were never evidence about RingServ's
+capability. They were evidence about a path.
+
+**1. The engine IS built here. It was not on 08-20, and the 08-20 note that
+said so was still being read four days later.** Counted rather than assumed:
+**92 built libraries against 92 bindings** in
+`stzlib/libraries/stzlib/engine/zig-out/bin/`. `tests/stzprofile-gates.js`
+now counts them on every run, so this number cannot go stale silently again.
+
+**2. So why were 80 libraries "not found"? Because stzlib looks for its
+engine relative to the WORKING DIRECTORY, and a sibling checkout is not on
+that path.** `stzlib/libraries/stzlib/core/common/stkRingLibs.ring:17`
+(`_stzDiscoverEngineDir`) walks **up from `currentdir()`**, up to ten levels,
+trying `<dir>/engine` and `<dir>/libraries/stzlib/engine` at each — then
+falls back to `exefolder() + "/../libraries/stzlib/engine"`, which is the
+*Ring installation* layout. Started in `D:/GitHub/ringserv`, the walk tries
+`D:/GitHub/libraries/stzlib/engine` and never
+`D:/GitHub/stzlib/libraries/stzlib/engine`, so it falls through to the
+exefolder form and points inside **RingServ's own `zig-out/bin`**. That is
+the path the 80 warnings print, and reading one of them closely is what
+turned this over.
+
+**3. Start the same binary from inside the stzlib checkout and the warnings
+go to zero.** Not a code change, not a rebuild — a working directory:
+
+```
+$ cd D:/GitHub/stzlib
+$ D:/GitHub/ringserv/zig-out/bin/ringserv.exe run \
+      D:/GitHub/ringserv/examples/bangalo-server/app.ring
+ringserv: line 19: Error (R3) : Calling Function without definition: loadlib
+```
+
+**80 warnings before, 0 after, and the run now stops at `loadlib`.**
+
+**So the 08-22 conclusion survives, and is now reached honestly.** `loadlib`
+IS the final boundary and it IS a property rather than a defect
+(`RING_NODLL=1` in `build.zig`, stated as a property in `docs/LOADING.md`).
+What changed is that it is no longer being credited with a failure it did
+not cause. A single binary that cannot load arbitrary native code stops
+here, at `stz_string.ring:19`, with everything found — and that is the whole
+of what stands between this profile and running.
+
+**Why this matters beyond this file, and it is the reason a gate now exists.**
+Central routed a proposal that a dependency like this should check the
+**source** is present and the **library** is built, reporting each
+separately because they are different repairs. Both of those were **GREEN
+here** while the profile failed 80 times. A two-part check would have shown
+a clean bill of health for a machine that could not run the thing. So
+`tests/stzprofile-gates.js` asks **four** questions and names which repair
+each answer calls for: source, built, **reachable from this working
+directory**, and **loadable by this binary at all**.
+
+**And `load`'s "no alternative" is retired, in both halves, by
+measurement.** This file used to say Ring's `load` takes a literal string so
+there is no environment variable to set instead. Both parts of that were
+tested in RingServ's own binary today:
+
+- **`sysget` and `eval` are BOTH present here** — `RING_EXTRAOSFUNCTIONS` is
+  gated on `RING_LIMITEDENV`, which RingServ does not set, so
+  `-DRING_LIMITEDSYS=1` never took them away. `eval('load "' + dir +
+  '/x.ring"')` works. The pattern is adopted below.
+- **But a *relative* fallback inside that `eval` is a coupling that hides.**
+  Measured: an `eval`'d `load` resolves a relative path against the
+  **process working directory**, not the script's folder — the same
+  asymmetry ringupstream confirmed in stock Ring. The identical command that
+  works from the repository root dies `Error (E9)` from any other directory,
+  *including with an absolute path to the script*. So this file takes the
+  environment variable and **refuses the sibling-relative fallback**: an
+  absolute literal that a reader is told to edit fails in one obvious way,
+  and a relative one fails differently depending on where you stood.
+- **An environment variable cannot reach the ENGINE, only the library.**
+  `stkRingLibs.ring:11` assigns `$cEngineDir = _stzDiscoverEngineDir()`
+  **unconditionally**, so a host that pre-sets that global before
+  `load "stzLib.ring"` has it overwritten. Routed to stzlib as a one-line
+  question rather than changed from here.
+
 ## UPDATE, 2026-08-22 — both of those reasons are gone; the third one stands
 
 *Measured, not assumed. Both blockers named in the 08-20 update below were
@@ -140,6 +226,12 @@ extensions**, and RingServ cannot load one: `dll_e.c` is deliberately out
 of `build.zig` (`RING_NODLL`). That is not a defect to be fixed later — a
 single static binary that cannot load arbitrary native code is the
 property, and `docs/LOADING.md` states it as one.
+
+> **Superseded in one step, 2026-08-24 — see the update above.** The
+> conclusion here is right; this paragraph's causal link is not. Those
+> warnings are a *path* failure that happens before any load is attempted,
+> not evidence of the `RING_NODLL` boundary. Clear the path and the warnings
+> vanish while the boundary stays exactly where it is.
 
 So the honest summary changed shape. It used to be *"the loader cannot
 find the files"*. It is now: **every file is found; the profile needs a
@@ -200,9 +292,15 @@ the loader.**
 throwaway build, `ringserv run examples/bangalo-server/app.ring` fails at
 `line 666: Error (R3) : Calling Function without definition:
 stzenginestring` — and **native `ring` fails at the same line with the
-same error**, because stzlib's Zig engine DLLs are not built on this
-machine. "The agent host ticks" is therefore not reachable here by either
-interpreter, and that is nothing RingServ can fix.
+same error**. "The agent host ticks" is therefore not reachable here by
+either interpreter, and that is nothing RingServ can fix.
+
+> **The reason recorded here on 08-20 was "the engine is not built on this
+> machine". True then; false from some point before 2026-08-24, when it was
+> counted at 92 built libraries.** The 08-24 update above replaces it with
+> the reachability finding, which does not go stale, and
+> `tests/stzprofile-gates.js` now counts the libraries instead of a document
+> asserting a number.
 
 ---
 

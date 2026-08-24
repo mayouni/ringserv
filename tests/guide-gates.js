@@ -154,6 +154,32 @@ const norm = s => s.split("\n").map(l => l.trim()).filter(Boolean).join("\n");
         check("readme.md states no phase count that disagrees with the roadmap",
             wrong.length === 0,
             `readme says ${wrong.join(",")} — roadmap's highest delivered is ${highest}`);
+
+        // ---- and the SUITE count is the same class of claim, found stale by
+        // the same reasoning on 2026-08-24: readme.md said "22 suites" while
+        // tests/all.js listed 23, and adding a 24th is what surfaced it. The
+        // phase count above got a gate and the suite count beside it did not,
+        // which is this repository's own lesson — a rule obeyed at the first
+        // place you look is not yet obeyed — landing on the very file that
+        // recorded it. So the count now reads from all.js, the one place that
+        // cannot be wrong about how many suites there are.
+        // Count the DEFAULT set only. all.js pushes the slow suites — soak,
+        // bench, the oracle, the sweep — onto the same array under --full, and
+        // counting those made this gate report 30 against a readme sentence
+        // that is explicitly about the ~70-second run. Cut the file at the
+        // --full block so the gate counts the thing the sentence counts.
+        const allJs = read(path.join(ROOT, "tests", "all.js"));
+        const fastPart = allJs.split(/\n\s*if\s*\(full\)/)[0];
+        const listed = [...fastPart.matchAll(/\{\s*name:\s*"[^"]+",\s*(?:node|cmd):/g)].length;
+        check("tests/all.js lists default suites this gate can count",
+            listed >= 20 && listed < 30, `counted ${listed}`);
+
+        const suiteClaims = [...readme.matchAll(/(\d+)\s+suites\b/gi)]
+            .map(m => parseInt(m[1], 10))
+            .filter(n => n !== listed);
+        check("readme.md states no suite count that disagrees with tests/all.js",
+            suiteClaims.length === 0,
+            `readme says ${suiteClaims.join(",")} — all.js lists ${listed}`);
     }
 
     // ------------------------------------------- and it serves what it says

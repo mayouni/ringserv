@@ -12,18 +12,49 @@
 #
 # STATUS, STATED PLAINLY RATHER THAN IMPLIED: this profile is designed and
 # code-complete against stzlib's real agentic API, but IT DOES NOT RUN YET.
-# `load` two lines down fails today, for a reason that lives in RingServ's
-# OWN loader, not in this file or in stzlib. README.md in this folder has
-# the full finding, the exact repro, and why the fix is out of a profile's
-# reach. Read it before assuming this file is broken Ring.
+# It stops at `loadlib`, inside stzlib's engine bindings, because RingServ
+# is built RING_NODLL=1 and cannot load a native extension -- a declared
+# property of a single static binary, not a defect (docs/LOADING.md).
+# README.md in this folder has the full finding and the exact repro.
+# Read it before assuming this file is broken Ring.
 
 # ---------------------------------------------------------------- adopt it
 #
-# EDIT THIS PATH to your own stzlib checkout before anything else here can
-# work. Ring's `load` is a compile-time directive -- it takes a literal
-# string, never a variable -- so there is no environment variable to set
-# instead; this line IS the configuration.
-load "D:/GitHub/stzlib/libraries/stzlib/stzLib.ring"
+# TWO WAYS IN, and neither of them is editing this file:
+#
+#   set RINGSERV_STZLIB to the folder holding stzLib.ring, or leave it
+#   unset and edit the literal below.
+#
+# WHAT WAS WRONG HERE UNTIL 2026-08-24, corrected by measurement rather
+# than by argument. This comment used to say Ring's `load` takes a literal
+# string so no environment variable could be used. `load` does -- but
+# `eval` does not, and BOTH `eval` and `sysget` are present in RingServ's
+# binary: RING_EXTRAOSFUNCTIONS is gated on RING_LIMITEDENV, which this
+# build does not set, so -DRING_LIMITEDSYS=1 never removed them. Verified
+# by running them, not by reading ring.h.
+#
+# AND WHAT IS DELIBERATELY *NOT* COPIED FROM THE PATTERN THAT DEMONSTRATED
+# THIS. The usual form pairs the variable with a sibling-relative fallback
+# ("../../stzlib/..."). Measured here: an `eval`'d `load` resolves a
+# relative path against the PROCESS WORKING DIRECTORY, not this file's
+# folder -- so that fallback works from the repository root and dies
+# `Error (E9)` from anywhere else, even when the script is named by
+# absolute path. An absolute literal a reader is told to edit fails in one
+# obvious way. A relative one fails differently depending on where they
+# stood, which is the worse of the two. So: variable, else absolute
+# literal, and no relative form anywhere.
+#
+# ONE THING THE VARIABLE CANNOT DO. It points at the LIBRARY. It does not
+# reach the ENGINE: stzlib's core/common/stkRingLibs.ring:11 assigns
+# $cEngineDir = _stzDiscoverEngineDir() UNCONDITIONALLY, discarding
+# anything a host set first, and that discovery walks up from the working
+# directory. See README.md, the 08-24 update, and
+# tests/stzprofile-gates.js question 3.
+$cStzLibDir = sysget("RINGSERV_STZLIB")
+if $cStzLibDir = ""
+    $cStzLibDir = "D:/GitHub/stzlib/libraries/stzlib"     # <-- EDIT THIS
+ok
+eval('load "' + $cStzLibDir + '/stzLib.ring"')
 
 # ------------------------------------------------------------- the pump
 #

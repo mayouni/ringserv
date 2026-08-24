@@ -48,6 +48,7 @@ const suites = [
     { name: "the panel         ", node: "panel-gates.js" },
     { name: "comptoir (broad)  ", node: "comptoir-gates.js" },
     { name: "family handshake  ", node: "family-gates.js" },
+    { name: "stzlib profile    ", node: "stzprofile-gates.js" },
 ];
 
 if (full) {

@@ -6,8 +6,10 @@ which load forms are held by a gate. It exists because RingServ used to
 diverge here silently, and nobody could have known: no RingServ app had
 ever loaded a multi-file library.*
 
-Held by `tests/loader-gates.js` — eleven gates, of which three run the
-native `ring` interpreter as an oracle and compare byte for byte.
+Held by `tests/loader-gates.js`, several of whose gates run the native
+`ring` interpreter as an ORACLE and compare byte for byte. *The count that
+stood here was transcribed by hand and was three behind within a week; the
+suite reports its own total, so this line no longer carries one.*
 
 ---
 
@@ -230,3 +232,52 @@ so changing it means changing a gate and saying so.
 
 Until then: run from the application's directory, or write the path
 absolutely.
+
+## `eval`'d `load` — the one form that looks configurable and is not anchored
+
+**Added 2026-08-24, measured rather than reasoned, because this form is
+being proposed across the estate as the way one repository depends on
+another.** Ring's `load` takes a literal string, so a path cannot be a
+variable. `eval` has no such restriction, and the pattern that follows is
+the obvious way out:
+
+```ring
+$cDir = sysget("SOME_DIR")
+if $cDir = ""
+    $cDir = "../../other/checkout"        # <-- the trap is HERE
+ok
+eval('load "' + $cDir + '/thing.ring"')
+```
+
+**Both halves work in RingServ.** `eval` resolves the constructed `load`,
+and `sysget` is present — `RING_EXTRAOSFUNCTIONS` is gated on
+`RING_LIMITEDENV`, which this build does not set, so `-DRING_LIMITEDSYS=1`
+never removed the environment functions. Verified by running them.
+
+**But an `eval`'d `load` is a TOP-LEVEL load, wherever the `eval` sits.**
+Its relative path resolves against the **process working directory**, not
+against the file containing the `eval`. Measured with one script and three
+working directories: identical command, absolute path to the script every
+time.
+
+| started in | result |
+|---|---|
+| the folder the relative path is written against | resolves |
+| any other folder | `Error (E9) : Can't open file …` |
+
+So **the environment variable is a genuine improvement and the relative
+fallback beside it is a regression.** An absolute path a reader is told to
+edit fails in exactly one way, visibly, on the first run. A relative
+fallback fails only for readers who start the process somewhere else, and
+it reports a missing file rather than a wrong configuration — which sends
+them looking for the file instead of for their working directory.
+
+**The recommendation this page makes:** variable first, then an **absolute**
+default. Never a relative default. `examples/bangalo-server/app.ring` is
+written that way, with the measurement in its comment.
+
+*This is not a RingServ divergence — it is the "one place this may surprise
+you" above, reached through a door that looks like it should behave
+differently. Native `ring` does the same thing, confirmed independently by
+ringupstream against stock 1.27 on 2026-08-24, including that a top-level
+miss is a hard error with no fallback to the script's own folder.*
