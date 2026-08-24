@@ -32,6 +32,7 @@ commit, so the three documents can never disagree about where we stand.
 | 13    | Comptoir, run for real        | born in real constraints; opens the phase-8 gate |
 | 14    | The phone                     | Android as a first-class target             |
 | 15    | The cloud story               | cloud scalers with real ergonomics          |
+| **18** | **Pages that react**         | the unified model, felt: pushed updates     |
 | 16    | Agent hosting, named          | agent hosting as its own gesture            |
 | 17    | TypeScript                    | "and maybe TypeScript after"                |
 
@@ -46,6 +47,15 @@ handshake is what makes that a one-liner. **real usage sits mid-arc, not last**,
 because the vision's sharpest sentence is "not a research tool, not a
 beautiful toy" — the longer real usage waits, the more toy-shaped decisions
 accumulate unchallenged.
+
+**Phase 18 was added on 2026-08-24, out of numeric order and above 16 and 17
+deliberately.** It is numbered last because the plan's numbers are birth
+order, not priority; it is *placed* after 15 because it is the phase that
+makes the RingScript pairing FELT rather than merely correct. A page that
+polls every two seconds is a page whose author has to think about polling;
+a page that is told when something changed is the promise the unified model
+has been making since VISION.md. Agent hosting and TypeScript are both worth
+building and neither changes how the pairing feels.
 
 ---
 
@@ -150,6 +160,67 @@ kill-during-load drains without a failed request in the gate's window; a
 backup taken mid-load restores and verifies INTACTE; the deploy doc's commands
 are gated like the guides.
 
+## Phase 18 — Pages that react
+
+**Vision:** the unified model made *felt* — "the same call shape on both
+sides" is already true, but today a page learns that something changed by
+asking again. Comptoir's counter polls every 2.5 s and the admin panel every
+1.5 s; both are evidence, not implementation details.
+
+**What already exists, which is why this phase is small.** The hard
+semantics are built and gated: the shape log with ordered offsets,
+`must-refetch` for a client that has been away too long, exactly-once
+mutations, and a **long poll** (`/sync/shape?live=true`) that parks on an
+HTTP thread rather than a VM worker — with the reason in the code, since
+parking a worker for 20 seconds costs a twelfth of the server's capacity per
+waiting client. `vendor/websocket/` is already compiled in via httpz. What
+is missing is a push transport and a one-line client helper.
+
+**Deliverables.**
+- **`GET /sync/stream` — Server-Sent Events**, not WebSocket, and the
+  reasons are specific to this project rather than to fashion:
+  - *The flow is one-way.* Writes already go through `POST /sync/push` with
+    exactly-once semantics. A bidirectional transport invites a second write
+    path, and a second write path is how exactly-once quietly dies.
+  - *SSE is plain HTTP.* RingServ **mandates** a reverse proxy for TLS
+    (docs/TLS.md), and every proxy passes SSE untouched while WebSocket
+    upgrade needs explicit configuration in each one. Our own deployment
+    rule argues for SSE.
+  - *`Last-Event-ID` IS our offset.* The browser reconnects by itself and
+    says where it stopped; that maps onto the shape-log offset exactly, so
+    reconnection is nearly free rather than a feature to build.
+  - *It is the shape the field application already proved* — its kitchen
+    display ran on SSE with a broadcast to a set of subscribers.
+- **OFFSETS ARE PUSHED, NEVER PAYLOADS.** The event says *shape `menu`
+  advanced to 47*; the client fetches through the `/sync/shape` path it
+  already uses. Two consequences earn the constraint: one code path for data
+  (the one with paging and `must-refetch`), and **a dropped notification
+  costs latency, never correctness** — the existing poll still converges.
+  That property is what makes this safe to ship at 0.9.
+- **`Stream()` as a declaration** and `serv.subscribe("orders")` in the
+  page, so a RingScript or JS page opts in with one line. **Placement
+  governs subscriptions exactly as it governs calls**: a page may not
+  subscribe to a stream it would be refused for calling.
+- **Comptoir and the panel stop polling**, which is the demo.
+
+**Gate.** A page receives a pushed offset within one second of a write; a
+client killed mid-stream reconnects with `Last-Event-ID` and misses nothing;
+a subscription the topology refuses is refused with the same message the
+call would give; a stream cap is enforced and the refusal names it; killing
+the stream entirely leaves the application *correct but slower*, proven by
+running the whole comptoir suite with streaming disabled.
+
+**Risks, named now.** One held-open connection per browser tab, so a cap and
+a named refusal are part of the phase rather than a follow-up. Dead peers
+need a heartbeat. And SSE over HTTP/1.1 shares the browser's six-connection
+limit per origin — worth stating in the doc, since a page with several
+streams will otherwise mystify someone.
+
+**Kept in reserve, deliberately: WebSocket.** It is already vendored, so the
+day a genuinely bidirectional case arrives — a collaborative editor, a shared
+terminal, live cursors — it costs a feature and not a dependency. Offering it
+by default now would be buying a harder transport for a one-way problem.
+
 ## Phase 16 — Agent hosting, named
 
 **Vision:** *"Ring applications, web services, and agent hosting."* Last of
@@ -200,6 +271,15 @@ reason; js-gates extended.
 ## Change log
 
 *Reorderings and scope changes land here, one line each, newest first.*
+
+- 2026-08-24 — **phase 18 added, and placed above 16 and 17**: pushed
+  reactive updates to RingScript and JS pages, on the author's proposal.
+  Numbered last because the numbers are birth order; ranked here because it
+  is what makes the unified model felt rather than merely correct. SSE
+  chosen over WebSocket for four project-specific reasons (one-way flow, the
+  proxy mandate, Last-Event-ID mapping onto our offset, and the field
+  precedent); WebSocket stays vendored and in reserve for a genuinely
+  bidirectional case.
 
 - 2026-08-23 — the author's ruling: customer applications are proprietary
   and stay out of this open repository entirely — no names, no paths, no
