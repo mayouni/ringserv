@@ -305,6 +305,26 @@ fn getSyncStream(req: *httpz.Request, res: *httpz.Response) !void {
         from = std.fmt.parseInt(i64, lei, 10) catch from;
     }
 
+    // ASK BEFORE HOLDING A CONNECTION OPEN (phase 19). Until 2026-08-25
+    // this handler asked nobody: an unknown shape got a 200, an `open`
+    // frame and offset -1, so a page with a typo was told it was
+    // connected and then waited forever -- while the poll path had been
+    // refusing the same name 404 since phase 8. The refusal now comes
+    // from the same function the poll path uses, and the placement
+    // refusal is the same sentence a CALL gets, because a caller told
+    // `no` in two different sentences learns that the rule is two rules.
+    if (streamRefusal(res.arena, shape)) |ref| {
+        res.status = ref.status;
+        res.content_type = .JSON;
+        var msg: std.ArrayList(u8) = .empty;
+        defer msg.deinit(alloc);
+        try msg.writer(alloc).writeAll("{\"code\":1,\"message\":");
+        appendJsonString(&msg, ref.message);
+        try msg.writer(alloc).writeAll(",\"data\":\"\"}");
+        res.body = try res.arena.dupe(u8, msg.items);
+        return;
+    }
+
     if (g_streams.fetchAdd(1, .monotonic) >= STREAM_CAP) {
         _ = g_streams.fetchSub(1, .monotonic);
         res.status = 503;
@@ -387,6 +407,67 @@ fn getSyncStream(req: *httpz.Request, res: *httpz.Response) !void {
     // forgotten tab from holding a thread for a week.
     res.chunk("event: bye\ndata: {}\n\n") catch {};
 }
+/// What the server owes a subscriber before it opens a stream, or null
+/// to proceed. The VM answers `status|message`; "0|" means yes.
+///
+/// A refusal is worth a VM round trip and an acceptance is too: the
+/// alternative is caching a topology that a `ringserv reload` can change
+/// under us, and a stale yes is exactly the failure this endpoint was
+/// just fixed for.
+const StreamRefusal = struct { status: u16, message: []const u8 };
+
+fn streamRefusal(arena: std.mem.Allocator, shape: []const u8) ?StreamRefusal {
+    var body: std.ArrayList(u8) = .empty;
+    defer body.deinit(alloc);
+    appendJsonString(&body, shape);
+
+    // No workers means no topology to consult. Proceeding is right: the
+    // stream will then answer offset 0 and the page falls back, which is
+    // strictly better than refusing a shape that may well exist.
+    if (g_workers_alive.load(.monotonic) == 0) return null;
+    var job = Job{ .entry = "__rs_stream_check", .body = body.items, .raw_arg = true };
+    defer job.response.deinit(alloc);
+    enqueue(&job);
+    job.done.timedWait(10 * std.time.ns_per_s) catch return null;
+
+    // The VM hands back a JSON-encoded value, so a STRING return arrives
+    // QUOTED AND ESCAPED — unlike __rs_sync_head below, which returns a
+    // number and therefore arrives bare. Measured, after this function
+    // silently returned null for every shape and let the handler fall
+    // straight through to the streaming path it exists to guard. A guard
+    // that fails open is worse than no guard, because it tests green
+    // everywhere the thing it guards already works.
+    var out = std.mem.trim(u8, job.response.items, " \t\r\n");
+    var unescaped: std.ArrayList(u8) = .empty;
+    defer unescaped.deinit(alloc);
+    if (out.len >= 2 and out[0] == '"' and out[out.len - 1] == '"') {
+        var i: usize = 1;
+        while (i < out.len - 1) : (i += 1) {
+            if (out[i] == '\\' and i + 1 < out.len - 1) {
+                i += 1;
+                unescaped.append(alloc, switch (out[i]) {
+                    'n' => '\n',
+                    't' => '\t',
+                    'r' => '\r',
+                    else => out[i],
+                }) catch return null;
+            } else {
+                unescaped.append(alloc, out[i]) catch return null;
+            }
+        }
+        out = unescaped.items;
+    }
+
+    const bar = std.mem.indexOfScalar(u8, out, '|') orelse return null;
+    const status = std.fmt.parseInt(u16, out[0..bar], 10) catch return null;
+    if (status == 0) return null;
+    // The message is duped into THIS REQUEST'S arena, never a shared
+    // buffer: several HTTP threads can be refused at the same moment, and
+    // a static buffer would hand one of them the other's sentence.
+    const text = arena.dupe(u8, out[bar + 1 ..]) catch return null;
+    return .{ .status = status, .message = text };
+}
+
 /// The shape's highest offset, asked of a worker. Cheap — one indexed
 /// max() — which is what makes polling for it affordable.
 fn headOf(shape: []const u8) !i64 {

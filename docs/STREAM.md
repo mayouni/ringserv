@@ -52,6 +52,45 @@ untouched — that is the thing it is genuinely good at.
 
 ---
 
+## Who may subscribe: `:stream`
+
+By default, anyone who can reach the server can subscribe to any shape.
+That is safe for the reason above — the stream carries `{shape, offset}`
+and never a row — but "safe" and "governed" are different words, so a
+shape can say who decides:
+
+```ring
+Topology([
+    :data = [
+        :menu    = [ :store = :local, :sync = :onreconnect, :stream = "menu" ],
+        :takings = [ :store = :local, :sync = :live,        :stream = :never ],
+        :notes   = [ :store = :local, :sync = :live ]
+    ]
+])
+```
+
+| `:stream` | What happens |
+|---|---|
+| `"<service>"` | **you may subscribe exactly when you may call that service** — and the refusal is the *same sentence*, word for word, that the call would give |
+| `:never` | refused `403`, naming the declaration, so a reader knows it is a decision and stops looking for a defect |
+| absent | streams, exactly as before this existed |
+
+**Absent means open, on purpose.** The declaration *adds* governance; it does
+not switch streaming on. A release that quietly turned working pages off to
+make a point about declarations would teach people to fear upgrades, and that
+costs more than the point is worth.
+
+**A wrong declaration is found at boot, not by a page.** `:stream` naming a
+service that does not exist, or sitting on a table with no `:sync` mode, is
+reported by `ringserv check` — that is most of the reason to declare it at all.
+
+**It governs the stream and nothing else.** `/sync/shape` is untouched by
+`:stream`: polling is a different door asking a different question, and
+widening this to cover it would change refusals that have shipped since
+phase 8. Said here so it is a decision you can read, rather than a surprise.
+
+---
+
 ## Why Server-Sent Events and not WebSocket
 
 The traffic is one-way: the server says "something moved". WebSocket is a
@@ -135,6 +174,12 @@ optimisation, never load-bearing.
 - **Declared tables only.** Shapes come from the shape log, so journal-backed
   state has nothing to subscribe to yet. Comptoir shows both halves and says
   which is which.
+- **A shape that does not exist is refused `404`** — the same status and the
+  same sentence the poll path gives, because two doors onto one concept that
+  disagree about what exists is worse than either answer alone. Until
+  2026-08-25 this endpoint answered `200` and offset `-1` for any name at
+  all, so a page with a typo was told it was connected and then waited
+  forever.
 - **Not on Windows in 0.9.** The vendored HTTP layer's response streaming
   does not work there — measured three ways, and the test suite skips by
   name on Windows rather than going red. Linux and macOS, the deployment

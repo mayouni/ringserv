@@ -187,9 +187,9 @@ func __rs_sync_shape cQuery
 		nLimit = 500
 	ok
 
-	if find(RsSyncedTables(), cShape) = 0
-		return RsRefuse(404, "no synced shape named `" + cShape + "` — " +
-			"a shape is a :store = :local table with a :sync mode")
+	cUnknown = RsShapeUnknown(cShape)
+	if cUnknown != ""
+		return RsRefuse(404, cUnknown)
 	ok
 
 	# Compaction honesty: a client below the floor has a gap it cannot
@@ -232,6 +232,77 @@ func __rs_sync_shape cQuery
 	return [ :code = 0, :message = "OK", :data = [
 		:shape = cShape, :control = "", :offset = nLast,
 		:upToDate = nUp, :ops = aOps ] ]
+
+# ------------------------------------------ one gate, two doors (phase 19)
+
+# Is this a shape at all? IN ONE PLACE, because the poll path and the
+# stream both ask it and an application whose two doors disagree about
+# what EXISTS is worse off than one with either answer alone.
+#
+# Measured 2026-08-25, which is why this function exists: the stream used
+# to ask nobody. `/sync/stream?shape=nonsense` answered 200, sent an
+# `open` frame and reported offset -1, so a page with a typo in a shape
+# name was told it was connected and then waited forever. The poll path
+# had refused the same name 404 since phase 8.
+func RsShapeUnknown cShape
+	if find(RsSyncedTables(), cShape) = 0
+		return "no synced shape named `" + cShape + "` — " +
+			"a shape is a :store = :local table with a :sync mode"
+	ok
+	return ""
+
+# Who governs a subscription to this shape: "" (nobody -- open, as phase
+# 18 shipped), "never", or the name of a service.
+func RsStreamGovernor cShape
+	aTopo = __rs_topology([])
+	if aTopo[:declared] = 0
+		return ""
+	ok
+	for aEntry in aTopo[:data]
+		if lower(aEntry[:name]) = lower(cShape)
+			return aEntry[:stream]
+		ok
+	next
+	return ""
+
+# THE STREAM'S DOOR. Answers what the server should do BEFORE holding a
+# connection open. Returns `status|message` -- a bare string rather than
+# an envelope, the same shape __rs_sync_head uses, because the HTTP layer
+# calls this on an HTTP thread and a JSON round trip here would buy
+# nothing. "0|" means proceed.
+#
+# Never parks a worker: three list walks and no query.
+func __rs_stream_check cShape
+	cShape = "" + cShape
+
+	cUnknown = RsShapeUnknown(cShape)
+	if cUnknown != ""
+		return "404|" + cUnknown
+	ok
+
+	cGov = RsStreamGovernor(cShape)
+	if cGov = ""
+		return "0|"
+	ok
+
+	if lower(cGov) = "never"
+		# A DECISION SOMEBODY MADE, said as one -- so a reader stops
+		# looking for the defect that is not there.
+		return "403|shape `" + cShape + "` declares :stream = :never, so " +
+			"this server does not hold a connection open for it — poll " +
+			"/sync/shape instead, which is unaffected"
+	ok
+
+	# GOVERNED: you may subscribe exactly when you may CALL the service.
+	# The sentence is RsTopoUnanswerable's, not a copy of it, because a
+	# caller told `no` in two different sentences learns that the rule is
+	# two rules.
+	aPlace = RsTopoPlacement(cGov)
+	if islist(aPlace) and aPlace[:answerable] = 0
+		return "501|" + RsTopoUnanswerable(aPlace, cGov)
+	ok
+
+	return "0|"
 
 # The highest offset in a shape — what a long-poll compares against so
 # the Zig side can wait without holding a VM worker.

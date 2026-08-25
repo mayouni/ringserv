@@ -92,7 +92,12 @@ QuickJS-ng with a WinterTC-shaped prelude; didactic docs with gates that fail
 when the prose rots; primitives born from field applications. **Since phase 10
 (2026-08-22):** the one-gesture function→service path (`ringserv serve`,
 [gesture.md](gesture.md)) and the yaml-like config-file form
-(`ringserv.yaml`).
+(`ringserv.yaml`). **Since phase 18–19 (2026-08-25):** a page is TOLD when
+data changes instead of asking — `serv.subscribe`, one `<script>` tag served
+out of the binary, offsets pushed and never rows, and a `:stream` declaration
+saying who may subscribe ([STREAM.md](STREAM.md)). Not load-bearing by
+construction: with streaming ignored entirely the application is still
+correct, only slower.
 
 **Partial.**
 - *JS parity with Node/Bun*: services run as ES modules with `serv.call`,

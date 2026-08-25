@@ -33,6 +33,7 @@ commit, so the three documents can never disagree about where we stand.
 | 14    | The phone                     | Android as a first-class target             |
 | 15    | The cloud story               | cloud scalers with real ergonomics          |
 | ~~18~~ | ~~Pages that react~~ *(delivered 2026-08-24)* | the unified model, felt: pushed updates |
+| ~~19~~ | ~~A subscription is a placed thing~~ *(delivered 2026-08-25)* | phase 18's exclusions, and the gap it left |
 | 16    | Agent hosting, named          | agent hosting as its own gesture            |
 | 17    | TypeScript                    | "and maybe TypeScript after"                |
 
@@ -232,6 +233,77 @@ streams will otherwise mystify someone.
 day a genuinely bidirectional case arrives — a collaborative editor, a shared
 terminal, live cursors — it costs a feature and not a dependency. Offering it
 by default now would be buying a harder transport for a one-way problem.
+
+## Phase 19 — A subscription is a placed thing
+
+> **DELIVERED 2026-08-25.** One deliverable dropped mid-phase by its own
+> logic (the `check` note on *ungoverned* shapes — see the struck bullet
+> below), and two defects of my own found inside it, both of the family
+> "a guard that fails open". The record is in [roadmap.md](roadmap.md);
+> the doc is [STREAM.md](STREAM.md).
+
+
+**Added 2026-08-25**, and it is phase 18's own exclusion list turned into a
+phase rather than left as a note. Phase 18 shipped subscriptions that name a
+shape-log shape **directly**, with nothing between the page and the log. That
+was safe only because the stream carries no data — a genuine argument, but an
+argument that covers exactly one of the two things a declaration would have
+done, and says nothing about the other.
+
+**And the defect that decided the order.** Measured 2026-08-25, before any of
+this was designed: `GET /sync/stream?shape=nonsense` **opens a stream**. The
+poll path refuses the same shape `404`; the stream answers `200`, sends an
+`open` frame, and reports offset **-1**. So a page with a typo in a shape name
+is told it is connected and then waits forever — *the silent failure phase 18
+was written to eliminate, reintroduced by phase 18's own front door.* A
+declaration is the right long answer; refusing an unknown shape is the short
+one, and the short one ships first.
+
+**Deliverables.**
+- **An unknown shape is refused, and refused the way the poll path already
+  refuses it** — same 404, same sentence, because two doors onto one concept
+  that disagree about what exists is worse than either answer alone.
+- **`:stream` on a `:data` entry**, three states and no fourth:
+  - `:stream = "<service>"` — **governed**: you may subscribe exactly when you
+    may *call* that service. The placement refusal is the same refusal, with
+    the same words, because a page that learns "no" two different ways learns
+    that the rule is two rules.
+  - `:stream = :never` — refused, naming the declaration, so the answer is a
+    decision someone made and not a defect someone should report.
+  - **absent — open, exactly as phase 18 shipped.** Deliberately: the
+    declaration ADDS governance, and does not switch the feature on. A phase
+    that quietly turns working pages off to make a point is a phase that
+    teaches people to fear upgrades.
+- ~~**`ringserv check` names ungoverned shapes** as a diagnostic.~~ **DROPPED
+  2026-08-25, during the phase, and the reason is the deliverable's own logic
+  turned against it.** An absent `:stream` is a SUPPORTED choice, not an
+  oversight — the bullet above says so deliberately. A note on every
+  undeclared shape would therefore fire hardest on applications that are
+  doing nothing wrong, and a diagnostic that is usually noise is a
+  diagnostic people learn to scroll past, which costs the ones that matter.
+  What `check` does report is a `:stream` declaration that is WRONG, which
+  is a fact and not an opinion.
+- **Comptoir declares its one shape as governed**, so the example carries a
+  decision rather than syntax. *Not* one of each: Comptoir has a single shape,
+  and inventing a broken one to demonstrate a refusal would teach the refusal
+  by making the example worse. The refusals belong to the gates, which is
+  where a deliberately wrong declaration costs nobody anything.
+
+**What this phase is NOT.** It does not govern the POLL path. `:stream` is a
+statement about holding a connection open, and widening it to `/sync/shape`
+would change refusals that shipped in phase 8 and are gated there. Two doors,
+two questions, said out loud rather than discovered later. It also does not
+add per-actor authorisation to streams: the stream still carries no data, so
+placement is the axis that means something and auth is the axis that does not.
+Named here so that a later reader knows it was weighed.
+
+**Gate.** An unknown shape is refused with the poll path's own status and
+message, asserted against each other rather than against a literal. A governed
+shape refuses a subscription with byte-identical text to the refusal a call
+gets. `:never` refuses naming the declaration. An undeclared shape still
+streams, so phase 18's pages keep working. And a `:stream` naming a service
+that does not exist is a topology problem at boot, not a surprise at subscribe
+time.
 
 ## Phase 16 — Agent hosting, named
 

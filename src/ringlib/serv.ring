@@ -115,10 +115,10 @@ func __dispatch_inner aReq
 	# with a number in it, and 421 invites HTTP/2 clients to retry.
 	aPlace = RsTopoPlacement(cService)
 	if islist(aPlace) and aPlace[:answerable] = 0
-		return RsRefuse(501, "service `" + cService + "` is placed :site = :" +
-			aPlace[:site] + ", so this server does not run it — call it " +
-			RsTopoWhere(aPlace[:site]) +
-			", or give it :authority = :server to be answered here")
+		# The sentence lives in topology.ring because a subscription to a
+		# shape this service governs must be refused in the SAME words
+		# (phase 19). Two doors, one rule, one sentence.
+		return RsRefuse(501, RsTopoUnanswerable(aPlace, cService))
 	ok
 
 	# A worker answers from state it rebuilt at boot, so it must fold in

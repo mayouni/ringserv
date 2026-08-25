@@ -104,6 +104,14 @@ func __rs_topology aIgnored
 		aSpec  = aEntry[2]
 		cStore = lower("" + RsDeclGet(aSpec, "store", "server"))
 		cSync  = lower("" + RsDeclGet(aSpec, "sync", ""))
+		# :stream — WHO GOVERNS A SUBSCRIPTION to this shape (phase 19).
+		# Three states and no fourth: a service name (you may subscribe
+		# exactly when you may CALL it), `never`, or absent. ABSENT MEANS
+		# OPEN, which is phase 18's behaviour kept deliberately: this
+		# declaration ADDS governance and does not switch streaming on.
+		# A phase that quietly turns working pages off teaches people to
+		# fear upgrades.
+		cStream = "" + RsDeclGet(aSpec, "stream", "")
 
 		if not RsTopoValidStore(cStore)
 			add(aProblems, RsTopoProblem("RS_TOPOLOGY_UNKNOWN_STORE",
@@ -126,7 +134,34 @@ func __rs_topology aIgnored
 			cSync = ""
 		ok
 
-		add(aData, [ :name = cName, :store = cStore, :sync = cSync ])
+		# A `:stream` naming a service that does not exist is a boot-time
+		# problem, not a surprise at subscribe time -- the whole point of
+		# declaring it is that the mistake is found before a page is.
+		if cStream != "" and lower(cStream) != "never"
+			lFound = 0
+			for aSvc in aServices
+				if lower(aSvc[:name]) = lower(cStream)
+					lFound = 1
+				ok
+			next
+			if lFound = 0
+				add(aProblems, RsTopoProblem("RS_TOPOLOGY_STREAM_UNKNOWN_SERVICE",
+					"data `" + cName + "` declares :stream = " + cStream +
+					" — no service by that name is declared, so nothing " +
+					"would govern a subscription to it"))
+				cStream = ""
+			ok
+		ok
+		if cStream != "" and cSync = ""
+			# Governing a shape that is not a shape governs nothing.
+			add(aProblems, RsTopoProblem("RS_TOPOLOGY_STREAM_WITHOUT_SYNC",
+				"data `" + cName + "` declares :stream on a table with no " +
+				":sync mode — there is no shape log to subscribe to"))
+			cStream = ""
+		ok
+
+		add(aData, [ :name = cName, :store = cStore, :sync = cSync,
+			     :stream = cStream ])
 	next
 
 	return [
@@ -141,6 +176,18 @@ func __rs_topology aIgnored
 		:data     = aData,
 		:problems = aProblems
 	]
+
+# THE REFUSAL SENTENCE FOR A MISPLACED SERVICE, in one place because two
+# doors now produce it: a CALL to the service (serv.ring) and a
+# SUBSCRIPTION to a shape it governs (sync.ring). A caller who is told
+# "no" in two different sentences learns that the rule is two rules, so
+# the gate for phase 19 asserts these are byte-identical -- which is only
+# assertable because there is one of them.
+func RsTopoUnanswerable aPlace, cService
+	return "service `" + cService + "` is placed :site = :" +
+		aPlace[:site] + ", so this server does not run it — call it " +
+		RsTopoWhere(aPlace[:site]) +
+		", or give it :authority = :server to be answered here"
 
 # The placement of one service, for the dispatcher. Returns "" for a
 # service the topology says nothing about — silence is not a refusal,

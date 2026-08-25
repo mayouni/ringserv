@@ -221,7 +221,13 @@ Topology([
 	:app = "comptoir",
 
 	:data = [
-		:menu = [ :store = :local, :sync = :onreconnect ]
+		# :stream names WHO GOVERNS a subscription to this shape: you may
+		# subscribe exactly when you may call `menu`. Leaving it out would
+		# also work -- an undeclared shape streams to anyone who can reach
+		# the server, which is safe because the stream carries offsets and
+		# never rows -- but a shape whose governance is written down is a
+		# shape whose governance somebody chose.
+		:menu = [ :store = :local, :sync = :onreconnect, :stream = "menu" ]
 	],
 
 	:services = [

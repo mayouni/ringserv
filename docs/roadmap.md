@@ -564,9 +564,70 @@ kilobytes against a symptom that would appear in someone else's page.
 
 **Gate — passed:** 21 gates (`tests/stream-gates.js`), 21/21 on Linux,
 21 owned and 0 run on Windows, skipped by name. Push measured at 24 ms from
-write to event. 26 suites.
+write to event. 26 suites at the time; 27 now.
 
 **Phase 18 is delivered, with the two exclusions named above.**
+
+## Phase 19 — A subscription is a placed thing
+
+Phase 18 shipped subscriptions that name a shape directly, with nothing in
+between, and named that as its own exclusion. This is that exclusion closed —
+and it opened on a defect found by measuring the endpoint rather than by
+reading the plan.
+
+**THE DEFECT, measured 2026-08-25 before any of this was designed.**
+`GET /sync/stream?shape=nonsense` answered **200**, sent an `open` frame and
+reported offset **-1**. The poll path had refused the same name `404` since
+phase 8. So a page with a typo in a shape name was told it was connected and
+then waited forever — *the silent failure phase 18 exists to eliminate,
+reintroduced by phase 18's own front door.* Both doors now refuse from **one
+function**, and the gate compares them **to each other** rather than to a
+literal, because a literal drifts and an agreement cannot.
+
+**`:stream` — three states and no fourth.** A shape can name who governs a
+subscription to it:
+
+- `:stream = "<service>"` — **you may subscribe exactly when you may call
+  that service**, and the refusal is the CALL's own sentence, byte for byte.
+  The sentence now lives in one function that both doors use, which is what
+  makes "byte-identical" assertable rather than aspirational. A caller told
+  `no` in two different sentences learns that the rule is two rules.
+- `:stream = :never` — refused `403`, naming the declaration, so a reader
+  knows it is a decision somebody made and stops hunting a defect.
+- **absent — open, exactly as phase 18 shipped**, and this is a gate rather
+  than an intention. The declaration ADDS governance; it does not switch
+  streaming on. A release that quietly turned working pages off to make a
+  point about declarations would teach people to fear upgrades.
+
+**A wrong declaration is a BOOT problem.** `:stream` naming a service that
+does not exist, or sitting on a table with no `:sync`, is reported by
+`ringserv check` and weighed exactly as every other topology problem is —
+asserted by running an ordinary bad topology beside it in the same gate, so
+the two move together if the severity policy ever changes.
+
+**One deliverable DROPPED mid-phase, by its own logic.** The plan promised
+`check` would note *ungoverned* shapes. It does not, and should not: an absent
+`:stream` is a supported choice, so that note would fire hardest on
+applications doing nothing wrong — and a diagnostic that is usually noise is
+one people learn to scroll past, which costs the ones that matter. `check`
+reports a declaration that is WRONG, which is a fact rather than an opinion.
+
+**Two defects of my own, found and fixed inside the phase, both of the same
+family — a guard that fails open.** The refusal message was first duped into a
+single global buffer, so two HTTP threads refused at the same moment could
+have been handed each other's sentence; it is now the request's arena. And the
+VM returns a JSON-encoded value, so a STRING return arrives quoted while
+`__rs_sync_head`'s number arrives bare — the parse silently returned "no
+refusal" for **every** shape and let the handler fall straight through to the
+path it was written to guard. **A guard that fails open tests green everywhere
+the thing it guards already works**, which is exactly where nobody looks.
+
+**Gate — passed:** 17 gates (`tests/streamgov-gates.js`), 17/17 on Linux;
+15 run and 2 owned-and-skipped-by-name on Windows, where only the two gates
+that need an OPEN stream cannot run — the refusals are ordinary JSON and run
+everywhere. Phase 18's 21 gates still green. 27 suites.
+
+**Phase 19 is delivered.**
 
 ## Standing risks (tracked, not hidden)
 
