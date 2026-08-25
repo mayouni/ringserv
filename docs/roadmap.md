@@ -484,6 +484,90 @@ version ignored by shape. 23 suites.
 
 **Phase 12 is delivered.**
 
+## Phase 18 — Pages that react
+
+A page used to ask "has anything changed?" every two seconds and hear "no"
+almost every time. Now the server tells it. `GET /sync/stream` pushes
+Server-Sent Events, and the browser half ships **inside the binary** at
+`/ringserv.js`, so a page opts in with one line and installs nothing:
+
+```html
+<script src="/ringserv.js"></script>
+<script> serv.subscribe("menu", refresh); </script>
+```
+
+**The event carries an offset, never a row.** One code path for data — the
+one that already has paging, `must-refetch` and placement — and therefore **a
+dropped notification costs latency, never correctness**. The client keeps a
+slow poll underneath, so a page written against `subscribe` is still correct
+behind a proxy that eats streaming entirely. That is what made this safe to
+ship at 0.9 rather than at 1.0.
+
+**Why SSE and not WebSocket**, in one line each: the flow is one-way, so a
+second direction would only invite a second write path; SSE is plain HTTP,
+which every proxy passes untouched while a WebSocket upgrade needs
+configuring in each one; and `Last-Event-ID` **is** our shape-log offset, so
+the browser's own reconnect resumes exactly rather than approximately.
+
+**The two standing complaints about SSE, answered rather than left silent**
+(docs/STREAM.md carries both in full):
+
+- *`EventSource` cannot send an `Authorization` header.* It cannot, and there
+  is no browser workaround. It does not matter here **because the stream
+  carries no data**: a frame is `{shape, offset}`, and the rows come through
+  `POST /api/v1`, which does carry the bearer. The usual fix — a token in the
+  query string, logged by every proxy it passes — is not needed. This is a
+  property of the design, so it is gated on shape: an `advanced` frame is
+  asserted to hold **exactly** those two keys, because one extra key would
+  quietly turn an unauthenticated channel into a leak.
+- *HTTP/2 and buffering proxies.* A buffered stream is indistinguishable from
+  a working one until updates arrive minutes late. Every measure the server
+  can take from its own side is taken and gated: `no-cache, no-transform`,
+  `X-Accel-Buffering: no`, a `retry:` hint, a 15-second heartbeat comment,
+  and a deliberate close at ten minutes so no connection lives long enough to
+  rot. And if all of it fails, the poll underneath still converges.
+
+**Not delivered, and named rather than implied:** the `Stream()` declaration
+and placement-governed subscriptions — a subscription today names a shape-log
+shape directly, which is safe only because the stream carries no data, and it
+is the first thing phase 19 owes. The admin panel still polls: it is a
+separate server with no shape log, so there is nothing there to subscribe to.
+Comptoir's ticket half still polls too, and **the page says which half is
+pushed and which half still asks**, because a page claiming to be reactive
+everywhere and quietly not is worse than one that polls.
+
+**Windows, decided rather than deferred.** The vendored HTTP layer cannot
+stream responses on Windows — measured three ways (`startEventStreamSync` and
+`startEventStream` both answer `error.Unexpected`; `res.chunk` writes nothing
+and the socket closes). The decision is **to ship without it**: a Windows page
+falls back to the client's own poll and keeps working, undamaged and slower,
+and the suite skips by name rather than going red. Linux and macOS, the
+deployment targets, are unaffected.
+
+**And taking that decision found the finding of the phase.** Watched from a
+real browser, the Windows failure is *silent*: the connection is not refused,
+`onerror` never fires, and the page holds a stream that is open and delivers
+nothing for as long as the tab lives. A client retreating on errors would
+have waited forever and counted zero of them. So the client retreats on a
+**deadline** — no `open` frame within six seconds is a failed attempt whether
+or not anyone reported one, three of those and it falls back to polling and
+says so once. **This is not a Windows workaround: a buffering proxy produces
+exactly the same silence**, which is the second complaint above arriving from
+the other end. Verified in a browser on Windows: the page caught up on every
+change made behind its back, and the console went quiet after three attempts
+instead of erroring forever.
+
+One thing found the same way and fixed: `/ringserv.js` was served with an
+hour of cache, which is precisely the window in which an upgraded binary
+serves a page a client it no longer ships. It now revalidates — seven
+kilobytes against a symptom that would appear in someone else's page.
+
+**Gate — passed:** 21 gates (`tests/stream-gates.js`), 21/21 on Linux,
+21 owned and 0 run on Windows, skipped by name. Push measured at 24 ms from
+write to event. 26 suites.
+
+**Phase 18 is delivered, with the two exclusions named above.**
+
 ## Standing risks (tracked, not hidden)
 
 - **VM concurrency** — the N-worker model is designed, not proven;

@@ -103,6 +103,22 @@
     than replacing them.</p>
   </div>
 
+  <div class="qa">
+    <h3>Can a page update itself when data changes?</h3>
+    <p><span class="verdict yes">Yes — one line, nothing installed</span></p>
+    <p>Add <code>&lt;script src="/ringserv.js"&gt;&lt;/script&gt;</code> — the server serves
+    that file out of its own binary — then
+    <code>serv.subscribe("orders", refresh)</code>. Your function runs when the data
+    moves, instead of every two seconds hoping.</p>
+    <p>What arrives is a signal, not the data: your page then loads it through the
+    ordinary path it already uses, so there is never a second version of the truth. And
+    a lost signal costs a delay, never a wrong screen — a slow check keeps running
+    underneath, so the page is still right even where the connection is poor or a
+    company proxy blocks live updates entirely.
+    <a href="https://github.com/mayouni/ringserv/blob/main/docs/STREAM.md">How it
+    works, and what it does not do yet</a>.</p>
+  </div>
+
   <h2 class="group">The awkward ones</h2>
 
   <div class="qa">

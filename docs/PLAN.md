@@ -32,7 +32,7 @@ commit, so the three documents can never disagree about where we stand.
 | 13    | Comptoir, run for real        | born in real constraints; opens the phase-8 gate |
 | 14    | The phone                     | Android as a first-class target             |
 | 15    | The cloud story               | cloud scalers with real ergonomics          |
-| **18** | **Pages that react**         | the unified model, felt: pushed updates     |
+| ~~18~~ | ~~Pages that react~~ *(delivered 2026-08-24)* | the unified model, felt: pushed updates |
 | 16    | Agent hosting, named          | agent hosting as its own gesture            |
 | 17    | TypeScript                    | "and maybe TypeScript after"                |
 
@@ -161,6 +161,18 @@ backup taken mid-load restores and verifies INTACTE; the deploy doc's commands
 are gated like the guides.
 
 ## Phase 18 — Pages that react
+
+> **DELIVERED 2026-08-24**, with two exclusions named rather than implied:
+> the `Stream()` declaration and placement-governed subscriptions did not
+> ship — a subscription names a shape-log shape directly, which is safe only
+> because the stream carries no data, and it is what phase 19 owes first.
+> The admin panel still polls (a separate server, no shape log). And the
+> vendored HTTP layer cannot stream on Windows, measured three ways: the
+> decision taken is to ship without it, because the client falls back to its
+> own poll and the page keeps working. The full account, including the two
+> standing SSE complaints and what answers them here, is in
+> [roadmap.md](roadmap.md) and [STREAM.md](STREAM.md).
+
 
 **Vision:** the unified model made *felt* — "the same call shape on both
 sides" is already true, but today a page learns that something changed by

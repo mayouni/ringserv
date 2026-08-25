@@ -28,6 +28,11 @@
 ** SKIPS BY NAME rather than going red, the same discipline the family
 ** suite uses for UDP on macOS runners.
 **
+** FROM A BROWSER, that same failure is SILENT — measured: the connection
+** is not refused and `onerror` never fires; the page simply holds an open
+** stream that never delivers a frame. That is why the client retreats on
+** a deadline rather than on an error, and why the retreat is gated here.
+**
 **   node tests/stream-gates.js
 */
 const { spawn } = require("child_process");
@@ -124,9 +129,9 @@ async function listen(url, ms, headers) {
             process.platform + " (httpz's response streaming, measured: " +
             "startEventStream* answer error.Unexpected and res.chunk writes " +
             "nothing). It works on linux and darwin, which CI runs. " +
-            "12 gates owned, 0 run here.");
+            "21 gates owned, 0 run here.");
         await stop();
-        console.log("\n0 passed, 0 failed (12 skipped by name)");
+        console.log("\n0 passed, 0 failed (21 skipped by name)");
         process.exit(0);
     }
 
@@ -141,6 +146,7 @@ async function listen(url, ms, headers) {
         probe.events[0].id !== undefined, JSON.stringify(probe.events[0]));
 
     // ================================================== 2. it pushes
+    let firstAdvanced = null;
     {
         const t0 = Date.now();
         const listening = listen(B + "/sync/stream?shape=menu", 4000);
@@ -157,6 +163,7 @@ async function listen(url, ms, headers) {
             !!adv && typeof adv.data.offset === "number" &&
             adv.data.row === undefined && adv.data.name === undefined,
             JSON.stringify(adv && adv.data));
+        firstAdvanced = adv;
         check("...and the offset advanced past the opening one",
             !!adv && adv.data.offset > probe.events[0].data.offset,
             JSON.stringify(adv && adv.data));
@@ -195,6 +202,70 @@ async function listen(url, ms, headers) {
         const shape = await (await fetch(B + "/sync/shape?shape=menu&offset=0&limit=50")).json();
         check("...and the poll path still carries every change",
             shape.data.ops.length >= after, JSON.stringify(shape.data.ops.length));
+    }
+
+    // ============================ 6. the browser half ships in the binary
+    // The promise is one <script> tag and nothing installed. If the binary
+    // stops serving it, every page written against subscribe() breaks with
+    // a 404 that looks like the page's own fault.
+    {
+        const r = await fetch(B + "/ringserv.js");
+        const body = await r.text();
+        check("the binary serves its own browser client at /ringserv.js",
+            r.status === 200, String(r.status));
+        check("...as JavaScript, not as a download",
+            /javascript/i.test(r.headers.get("content-type") || ""),
+            r.headers.get("content-type"));
+        check("...carrying both halves of the model, call and subscribe",
+            /serv\.call\s*=/.test(body) && /serv\.subscribe\s*=/.test(body));
+        // Measured in a browser: a server that cannot stream does not
+        // REFUSE the connection, it holds it open and silent, and onerror
+        // never fires. So the client's retreat must be driven by a
+        // deadline; an error handler alone would wait forever. Losing this
+        // would be invisible until a page hung in the field.
+        check("...and it retreats on a DEADLINE, not only on an error — " +
+            "a stream that hangs silently reports nothing",
+            /OPEN_DEADLINE_MS/.test(body) && /setTimeout\(failed/.test(body));
+        check("...giving up after 3 attempts and saying so, rather than " +
+            "retrying forever where the server cannot stream",
+            /attempts\s*<\s*3/.test(body) && /falling back to polling/.test(body));
+        check("...and it opens the stream by shape, resuming on its own",
+            /EventSource\(/.test(body) && /sync\/stream\?shape=/.test(body));
+    }
+
+    // ======================= 7. why the stream needs no Authorization header
+    // EventSource CANNOT send one — that is the standing complaint about
+    // SSE. The answer here is that there is nothing on the stream to
+    // protect: a frame is {shape, offset}, and the rows come through
+    // POST /api/v1, which does carry the bearer token. That is a claim
+    // about SHAPE, so it is gated on shape — one extra key appearing here
+    // would quietly turn an unauthenticated channel into a data leak.
+    //
+    // Asserted on the event section 2 ALREADY CAPTURED, deliberately.
+    // Opening a second stream to re-observe a property we hold is a race
+    // for nothing, and it was one: this gate failed intermittently until
+    // it stopped provoking its own evidence.
+    {
+        const keys = firstAdvanced ? Object.keys(firstAdvanced.data).sort() : [];
+        check("an event carries EXACTLY {offset, shape} — never application data",
+            keys.length === 2 && keys[0] === "offset" && keys[1] === "shape",
+            JSON.stringify(keys));
+    }
+
+    // ============================ 8. the measures against a buffering proxy
+    // A buffered stream looks identical to a working one until updates
+    // arrive minutes late. These headers are the only defence the server
+    // has from its own side, so losing one must fail loudly here.
+    {
+        const ac = new AbortController();
+        const r = await fetch(B + "/sync/stream?shape=menu", { signal: ac.signal });
+        const cc = r.headers.get("cache-control") || "";
+        check("the stream tells caches not to store AND not to transform it",
+            /no-cache/.test(cc) && /no-transform/.test(cc), cc);
+        check("...and tells nginx explicitly not to buffer it",
+            (r.headers.get("x-accel-buffering") || "") === "no",
+            r.headers.get("x-accel-buffering"));
+        ac.abort();
     }
 
     await stop();

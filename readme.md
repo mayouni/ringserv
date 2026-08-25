@@ -240,6 +240,7 @@ from a bare function to a hash-chained fiscal record, each one runnable.
 - [docs/DATA.md](docs/DATA.md) · [docs/WRITES.md](docs/WRITES.md) — the data layer and the single writer
 - [docs/COMMONS.md](docs/COMMONS.md) — the journaled store, and why it is a second store
 - [docs/topology.md](docs/topology.md) — declarative placement and local-first sync
+- [docs/STREAM.md](docs/STREAM.md) — pages that react: one line, and the page is told instead of asking
 - [docs/JS.md](docs/JS.md) — the JavaScript guest, and its honest limits
 - [docs/CHECK.md](docs/CHECK.md) · [docs/cli.md](docs/cli.md) — governance and every command
 - [docs/TLS.md](docs/TLS.md) · [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — the deployment decisions, and the numbers

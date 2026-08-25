@@ -106,6 +106,22 @@ Page(<span class="a">:settext</span>, [ <span class="a">:id</span> = <span class
 </section>
 
 <section class="wrap">
+  <h2>4 — The page is told, instead of asking</h2>
+  <p class="lead">Most pages ask the server every couple of seconds whether anything
+  changed, and hear "no" almost every time. Here the page says once what it cares about,
+  and the server speaks up when that changes:</p>
+  <pre class="code">&lt;script src=<span class="s">"/ringserv.js"</span>&gt;&lt;/script&gt;
+
+serv.subscribe(<span class="s">"orders"</span>, refresh)   <span class="c">// refresh() runs when orders move</span></pre>
+  <p class="lead">That script comes out of the server's own file — nothing to install and
+  no build step. What arrives is a <b>signal, not the data</b>: your page then loads it
+  through the same call it already uses, so there is never a second version of the truth.
+  And a signal that goes missing costs a delay, never a wrong screen — a slow check keeps
+  running underneath, so the page stays right even on a bad connection or behind a
+  company proxy that blocks live updates.</p>
+</section>
+
+<section class="wrap">
   <h2>Why this pairing is different</h2>
   <div class="grid">
     <div class="card">

@@ -228,6 +228,26 @@ fn getSyncShape(req: *httpz.Request, res: *httpz.Response) !void {
     return runInVm(res, "__rs_sync_shape", body.items, "");
 }
 
+/// The browser half of the unified model, served from the binary so a
+/// page needs no build step and no package: one <script> tag brings
+/// serv.call() and serv.subscribe(). Embedded rather than read from
+/// disk, because an application that moved its public/ directory should
+/// not lose the client library with it.
+const CLIENT_JS = @embedFile("client.js");
+
+fn getClientJs(req: *httpz.Request, res: *httpz.Response) !void {
+    _ = req;
+    res.content_type = .JS;
+    // REVALIDATE, do not cache. The file changes only when the binary
+    // does — but that is exactly the moment a stale copy hurts: a browser
+    // holding an hour-old client after an upgrade runs code the server no
+    // longer ships, and the symptom appears in the page rather than here.
+    // Observed while testing this very change. It is 7 KB; correctness
+    // after an upgrade is worth more than the request.
+    res.header("Cache-Control", "no-cache");
+    res.body = CLIENT_JS;
+}
+
 /// How many streams this server will hold open at once.
 ///
 /// A held-open connection is a real resource and a browser tab is free to
@@ -534,6 +554,7 @@ pub fn start(config: Config) !void {
     router.get("/topology", getTopology, .{});
     router.get("/sync/shape", getSyncShape, .{});
     router.get("/sync/stream", getSyncStream, .{});
+    router.get("/ringserv.js", getClientJs, .{});
     router.post("/sync/push", postSyncPush, .{});
     router.post("/sync/state", postSyncState, .{});
     if (g_statics.len > 0) {
