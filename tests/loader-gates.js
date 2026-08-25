@@ -207,15 +207,27 @@ fs.writeFileSync(path.join(mwDir, "app.ring"),
     "\t]\n" +
     "])\n");
 
-// ------------------------------------------- an `eval`'d load is a TOP-LEVEL
-// load, wherever the `eval` sits
+// ------------------------- a relative `load` anchors on the WORKING DIRECTORY
 //
-// Added 2026-08-24. `load` takes a literal string, so a configurable path has
-// to go through `eval` — and that form is now being proposed across the estate
-// as how one repository depends on another, usually with a RELATIVE fallback
-// beside the environment variable. These gates are why that fallback should be
-// absolute: the constructed load anchors on the PROCESS WORKING DIRECTORY, so
-// the identical command resolves from one folder and fails from the next.
+// Added 2026-08-24. CORRECTED 2026-08-25, and the correction is the reason to
+// read this block: it used to be headed "an eval'd load is a TOP-LEVEL load,
+// wherever the eval sits", which named the `eval` as the cause. THE `eval` IS
+// NOT THE CAUSE. ringine measured that in their tree and routed it; re-measured
+// here before accepting it, because a claim about another repository's files is
+// a hypothesis until somebody runs it there — and the same is true in reverse.
+// A PLAIN `load "sub/target.ring"` FAILS IDENTICALLY, same E9. The `eval` was
+// only the door we walked through, since a configurable path is the one reason
+// anyone reaches for it.
+//
+// The gates below were never wrong about BEHAVIOUR — they assert what happens,
+// and the native oracle agrees. They were wrong about SCOPE, which is worse in
+// the direction that matters: a hazard filed under an exotic form reads as
+// somebody else's problem. The plain-form gate now stands first, so the rule
+// is stated at its true width, and the eval gates follow as the case that
+// prompted it.
+//
+// This is why the estate's recommendation — variable first, then an ABSOLUTE
+// default, never a relative one — is STRONGER after the correction than before.
 // docs/LOADING.md states it; this holds it.
 {
     const evDir = path.join(tmp, "evalload");
@@ -229,9 +241,25 @@ fs.writeFileSync(path.join(mwDir, "app.ring"),
         + "eval('load \"' + cDir + '/target.ring\"')\n"
         + 'see EvalTarget() + nl\n');
 
+    // FIRST, the plain form — the rule at its real width. If this ever starts
+    // passing, `load` stopped anchoring on the working directory and every
+    // sibling-relative fallback in the estate changed meaning.
+    fs.writeFileSync(path.join(evDir, "plain.ring"),
+        'load "sub/target.ring"\n' + "see EvalTarget() + nl\n");
+    const plainRight = spawnSync(RINGSERV, ["run", path.join(evDir, "plain.ring")],
+        { cwd: evDir, encoding: "utf8" });
+    const plainWrong = spawnSync(RINGSERV, ["run", path.join(evDir, "plain.ring")],
+        { cwd: tmp, encoding: "utf8" });
+    const pR = (plainRight.stdout || "") + (plainRight.stderr || "");
+    const pW = (plainWrong.stdout || "") + (plainWrong.stderr || "");
+    check("a PLAIN relative load resolves from the right cwd and FAILS from " +
+        "any other — the eval was never the cause",
+        /reached/.test(pR) && /Can't open file/.test(pW) && !/reached/.test(pW),
+        "right: " + pR.slice(0, 60) + " | wrong: " + pW.slice(0, 60));
+
     const fromRight = spawnSync(RINGSERV, ["run", path.join(evDir, "app.ring")],
         { cwd: evDir, encoding: "utf8" });
-    check("an eval'd load with a relative path resolves from the RIGHT cwd",
+    check("...and the eval'd form behaves the same, no better and no worse",
         /reached/.test((fromRight.stdout || "") + (fromRight.stderr || "")),
         ((fromRight.stdout || "") + (fromRight.stderr || "")).slice(0, 200));
 

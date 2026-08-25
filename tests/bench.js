@@ -121,6 +121,7 @@ async function measure(name, n, fn) {
     server.on("exit", () => { died = true; });
 
     const results = [];
+    let buildMode = "UNKNOWN";
     try {
         const t0 = Date.now();
         let up = false;
@@ -133,7 +134,26 @@ async function measure(name, n, fn) {
 
         log(`\nRingServ benchmark — ${OPS} operations each, ${WARMUP} discarded as warmup`);
         log(`  ${os.cpus().length} CPUs · ${os.platform()} · node ${process.versions.node}`);
-        log(`  server answered /health after ${bootMs} ms\n`);
+        log(`  server answered /health after ${bootMs} ms`);
+
+        // MICRORING-DEBUGBENCH-01, taken here and not only in the binary.
+        // The binary already prints its build mode, which lets a careful
+        // reader check. This makes the check unnecessary: a number measured
+        // on a non-release build is NAMED unpublishable at the moment it is
+        // produced. The failure mode is never a reader who looks and
+        // misreads — it is a number copied into a document by someone who
+        // never looked.
+        const ver = spawnSync(RINGSERV, ["version"], { encoding: "utf8" });
+        const verOut = (ver.stdout || "") + (ver.stderr || "");
+        const mode = (verOut.match(/(Debug|ReleaseSafe|ReleaseFast|ReleaseSmall)/) || [])[1]
+            || "UNKNOWN";
+        buildMode = mode;
+        log(`  build mode: ${mode}` + (
+            mode === "ReleaseFast" || mode === "ReleaseSmall" ? "" :
+            mode === "UNKNOWN"
+                ? "  — COULD NOT BE READ; treat these numbers as unpublishable"
+                : "  — NOT A RELEASE BUILD; diagnostic only, do not publish"));
+        log("");
         log("  operation                             p50      p90      p99       max   (ms)");
         log("  " + "─".repeat(76));
 
@@ -228,6 +248,11 @@ async function measure(name, n, fn) {
         if (asJson) {
             console.log(JSON.stringify({
                 cpus: os.cpus().length, platform: os.platform(),
+                // The build mode travels WITH the numbers, so a consumer of
+                // this JSON cannot strip it by accident the way a reader of
+                // the header can (MICRORING-DEBUGBENCH-01).
+                buildMode,
+                publishable: buildMode === "ReleaseFast" || buildMode === "ReleaseSmall",
                 ops: OPS, warmup: WARMUP, bootMs, results,
             }, null, 2));
         }

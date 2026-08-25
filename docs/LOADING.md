@@ -233,7 +233,7 @@ so changing it means changing a gate and saying so.
 Until then: run from the application's directory, or write the path
 absolutely.
 
-## `eval`'d `load` — the one form that looks configurable and is not anchored
+## A relative `load` anchors on the WORKING DIRECTORY, not on the file
 
 **Added 2026-08-24, measured rather than reasoned, because this form is
 being proposed across the estate as the way one repository depends on
@@ -254,11 +254,24 @@ and `sysget` is present — `RING_EXTRAOSFUNCTIONS` is gated on
 `RING_LIMITEDENV`, which this build does not set, so `-DRING_LIMITEDSYS=1`
 never removed the environment functions. Verified by running them.
 
-**But an `eval`'d `load` is a TOP-LEVEL load, wherever the `eval` sits.**
-Its relative path resolves against the **process working directory**, not
-against the file containing the `eval`. Measured with one script and three
-working directories: identical command, absolute path to the script every
-time.
+**But the relative path resolves against the process working directory,
+not against the file that contains the `load`.** Measured with one script
+and three working directories: identical command, absolute path to the
+script every time.
+
+**CORRECTED 2026-08-25, and the correction matters more than the original.**
+This page used to say the cause was the `eval` — that "an eval'd load is a
+top-level load, wherever the eval sits". **It is not the `eval`.** ringine
+measured it in their tree and said so; re-measured here to be sure, and a
+plain `load "sub/target.ring"` fails from the wrong working directory in
+exactly the same way, with the same E9. The `eval` was simply the door we
+happened to walk through, because a configurable path is the only reason
+anyone reaches for it.
+
+Naming the `eval` as the cause made the hazard sound like an exotic form's
+problem. **It is every relative `load`'s problem**, which is a larger rule
+and a plainer one — and it makes the recommendation below stronger rather
+than weaker.
 
 | started in | result |
 |---|---|
