@@ -34,7 +34,7 @@ commit, so the three documents can never disagree about where we stand.
 | 15    | The cloud story               | cloud scalers with real ergonomics          |
 | ~~18~~ | ~~Pages that react~~ *(delivered 2026-08-24)* | the unified model, felt: pushed updates |
 | ~~19~~ | ~~A subscription is a placed thing~~ *(delivered 2026-08-25)* | phase 18's exclusions, and the gap it left |
-| **20** | **Deploy, redeploy, reload -- without ceremony** | the deployment experience, and the panel as its face |
+| ~~20~~ | ~~Deploy, redeploy, reload -- without ceremony~~ *(delivered 2026-08-25)* | the deployment experience, and the panel as its face |
 | 16    | Agent hosting, named          | agent hosting as its own gesture            |
 | 17    | TypeScript                    | "and maybe TypeScript after"                |
 
@@ -315,30 +315,30 @@ time.
 
 ## Phase 20 — Deploy, redeploy, reload — without ceremony
 
-> **RELOAD IS DELIVERED, 2026-08-25** — `ringserv reload`, `POST
-> /admin/reload`, and a **Reload** button in the panel; 17 gates
-> (`tests/reload-gates.js`), 62 ms for three workers, the process and the
-> open connections both proven untouched. The doc is
-> [DEPLOY.md](DEPLOY.md).
+> **DELIVERED 2026-08-25.** All three verbs:
 >
-> **`deploy` and `redeploy` are NOT delivered and are the next slice.**
-> Named rather than implied: today a deployment is still assembled by hand
-> (copy, point the database elsewhere, `--port`), and DEPLOY.md documents
-> that honestly instead of pretending a verb exists. The reload half was
-> taken first because it is the one a developer reaches for many times a
-> day, and because it is the part with no workaround — copying files can be
-> scripted; changing a live server's code cannot.
+> - **`ringserv deploy <folder>`** — a named deployment: code at the top,
+>   and `.ringserv/` beside it holding the data, the logs and the manifest.
+> - **`ringserv redeploy <name>`** — replaces the code, keeps the data, and
+>   **reloads the running server live** if it is up. One command.
+> - **`ringserv reload`** / **`POST /admin/reload`** / a **Reload** button —
+>   62 ms for three workers, the process and the open connections both
+>   proven untouched.
+> - **`ringserv ls`**, and the panel reads a deployment's manifest, so it
+>   starts one on ITS port with ITS data directory.
 >
-> Also delivered here, from the same hour: the panel row now WRAPS instead
-> of overflowing (measured at 620px, where the application's name read as
-> "ir" — the one thing the row exists to tell you).
-
-
-**Added 2026-08-25, by the Principal, immediately after phase 13 closed** —
-and it exists *because* phase 13 closed. Standing up one real deployment took
-an hour and produced four defects and five hand-written PowerShell scripts.
-The scripts are the evidence: **every one of them is a thing this server
-should have done itself.**
+> 47 gates across two suites (`deploy-gates.js` 30, `reload-gates.js` 17).
+> The doc is [DEPLOY.md](DEPLOY.md).
+>
+> **The safety property is arithmetic, not care.** Redeploy deletes
+> everything except `.ringserv/`, so the record is not somewhere the code
+> change is careful to avoid — it is somewhere the code change cannot
+> reach. No flag to forget, no order to get right at 2 a.m.
+>
+> Also delivered from the same hour: the panel row WRAPS instead of
+> overflowing (measured at 620px, where the application's name read as
+> "ir"), and `--data` on `run`, which is what puts a relative `:database`
+> in the deployment's private corner.
 
 **Vision:** *"deployed anywhere in minutes"*, and the vision's own test —
 "not a research tool, not a beautiful toy". A server whose deployment story

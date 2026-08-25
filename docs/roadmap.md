@@ -650,6 +650,66 @@ everywhere. Phase 18's 21 gates still green. 27 suites.
 
 **Phase 19 is delivered.**
 
+## Phase 20 — Deploy, redeploy, reload — without ceremony
+
+The phase phase 13 asked for. Standing up one real deployment took an hour
+and five hand-written PowerShell scripts, and **every one of them was a
+thing the server should have done itself.**
+
+```bash
+ringserv deploy ./myapp --port 8210     # code here, data safely apart
+ringserv redeploy myapp                 # new code, same data, live
+ringserv reload --port 8210             # or just: change it, now
+ringserv ls                             # what is up, asked not assumed
+```
+
+**THE SAFETY PROPERTY IS ARITHMETIC, NOT CARE.** A deployment keeps its
+record in `.ringserv/`, and redeploy deletes everything *except* that. The
+data is not somewhere the code change is careful to avoid — it is somewhere
+the code change cannot reach. There is no flag to forget and no order to get
+right at 2 a.m. Gated by writing a row, redeploying different code, and
+reading the row back.
+
+**Hot reload is a generation counter and nothing else**, which is why it can
+be simple here: each worker owns its own resident VM, so no worker has to
+agree with any other about when to change. Bump the counter; each worker
+re-evaluates **between two jobs**, on its own thread, already alone with its
+own state. A request in flight keeps the code it began under, and the HTTP
+threads never learn anything happened — which is why the listener is
+untouched. 62 ms for three workers, the pid unchanged, and a keep-alive
+socket opened BEFORE the reload used again AFTER it.
+
+**A worker that cannot take the new code goes back to the old one and is
+COUNTED**, and the three outcomes read differently on purpose:
+
+| | |
+|---|---|
+| `200` | every worker took it |
+| `422` | **none** did — nothing changed, the server is untouched |
+| `500` | **some** did — the server is answering with two versions |
+
+An operator who cannot tell *nothing happened* from *half of it happened*
+will treat them the same, and only one is an emergency. My first draft
+called the safe case PARTIAL too; catching that by reading my own output is
+the reason this table exists.
+
+**The panel is the face of it, and the bridge had a real defect.** It used
+to guess a deployment's port from its source — showing 8110 for something
+deployed on 8250 — so starting from the panel would have bound the wrong
+port and written the database beside the code, **where the next redeploy
+deletes it**. The panel now reads the manifest and starts a deployment with
+its own `--port` and `--data`. A panel that can quietly lose the record is
+worse than no panel, so it is gated.
+
+**Refused by name:** no process supervisor, no clustering, no
+service-manager integration, no remote deploy. Each is a different product,
+and a server that grows a supervisor grows a supervisor's failure modes.
+
+**Gate — passed:** 47 gates across two suites — `deploy-gates.js` (30,
+including the panel bridge) and `reload-gates.js` (17). 29 suites.
+
+**Phase 20 is delivered.**
+
 ## Standing risks (tracked, not hidden)
 
 - **VM concurrency** — the N-worker model is designed, not proven;

@@ -196,7 +196,7 @@ each one's record, with its gate results, is in
 | **Governance** | `check` (tree-sitter + the VM's own catalog), `docs`, C2 diagnostics, an actor seam with 401/403 kept distinct |
 | **Operations** | a browser admin panel, `journal verify` for cron, static files, `ringserv.yaml` |
 
-**over 620 gates across 28 suites** run in about 70 seconds
+**over 645 gates across 29 suites** run in about 70 seconds
 (`node tests/all.js`); `--full` adds soak, a benchmark, a **differential
 oracle against native `ring.exe`**, and a wide sweep over Ring's own
 ~470 samples plus ~500 documentation snippets compared byte-for-byte.

@@ -11,6 +11,7 @@ const check = @import("check.zig");
 const topology_cmd = @import("topology.zig");
 const journal_cmd = @import("journal.zig");
 const panel = @import("panel.zig");
+const deploy_cmd = @import("deploy.zig");
 const js = bridge.js;
 
 extern fn fflush(stream: ?*anyopaque) c_int;
@@ -125,6 +126,9 @@ const usage =
     \\  ringserv journal <verb>      list / verify / export the fiscal record
     \\  ringserv serve <file.ring>   serve a file of plain functions, as-is
     \\  ringserv panel [dir]         the admin panel: apps, start/stop, logs
+    \\  ringserv deploy <folder>     put an app up: code here, data safely apart
+    \\  ringserv redeploy <name>     replace the code, keep the data, reload it live
+    \\  ringserv ls                  the deployments on this machine
     \\  ringserv reload [--port N]   change a RUNNING server's code, live
     \\  ringserv run <app.ring>      run for real (or run a plain program)
     \\  ringserv eval "<code>"       evaluate Ring code
@@ -258,6 +262,12 @@ pub fn main() !u8 {
         return if (r.status == 200) 0 else 1;
     }
 
+    // deploy / redeploy / ls — a deployment is a named directory whose
+    // data lives where a code change cannot reach it (src/deploy.zig).
+    if (std.mem.eql(u8, cmd, "deploy")) return deploy_cmd.deploy(arena, args[2..]);
+    if (std.mem.eql(u8, cmd, "redeploy")) return deploy_cmd.redeploy(arena, args[2..]);
+    if (std.mem.eql(u8, cmd, "ls")) return deploy_cmd.list(arena, args[2..]);
+
     if (std.mem.eql(u8, cmd, "topology")) {
         var app: []const u8 = "app.ring";
         var do_emit = false;
@@ -329,9 +339,19 @@ pub fn main() !u8 {
         var serve_code: ?[:0]const u8 = null;
         // Parsed for every form here; only `run` and `serve` act on it.
         var cli_port: ?u16 = null;
+        var cli_data: []const u8 = "";
         {
             var i: usize = 3;
             while (i < args.len) : (i += 1) {
+                if (std.mem.eql(u8, args[i], "--data")) {
+                    i += 1;
+                    if (i >= args.len) {
+                        std.debug.print("ringserv: --data needs a directory\n", .{});
+                        return 2;
+                    }
+                    cli_data = args[i];
+                    continue;
+                }
                 if (!std.mem.eql(u8, args[i], "--port")) continue;
                 i += 1;
                 if (i >= args.len) {
@@ -517,7 +537,24 @@ pub fn main() !u8 {
         // Configure the database BEFORE any worker starts: each worker
         // opens its own connection to this path, which is read-only from
         // then on (no lock needed, per db.zig).
-        const db_path = try arena.dupe(u8, cfg.database);
+        // `--data <dir>` puts the database — and therefore the journal —
+        // OUTSIDE the application folder, which is what makes a redeploy
+        // safe: it replaces the code wholesale and cannot reach a record
+        // that does not live there (src/deploy.zig).
+        //
+        // Only a RELATIVE path is moved. An application that names an
+        // absolute database meant it, and `:memory:` is not a path at all.
+        // The move is PRINTED, like every other override at boot.
+        var db_path = try arena.dupe(u8, cfg.database);
+        if (cli_data.len != 0 and db_path.len != 0 and
+            !std.mem.eql(u8, db_path, ":memory:") and
+            !std.fs.path.isAbsolute(db_path))
+        {
+            const moved = try std.fs.path.join(arena, &.{ cli_data, db_path });
+            std.debug.print("ringserv: --data puts the database at {s}\n", .{moved});
+            std.fs.cwd().makePath(cli_data) catch {};
+            db_path = moved;
+        }
         bridge.db.setDisplayPath(db_path);
         try bridge.db.configure(db_path);
 

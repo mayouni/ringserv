@@ -59,46 +59,124 @@ is counted.** That count is what the three messages above are made of.
 
 ## Putting an application up
 
-Copy the binary and the application folder, and run it. That really is all,
-and these are the four things worth doing on top — each learned from
-standing one up for real (see [FRICTIONS.md](FRICTIONS.md)).
-
-**1. Keep the data out of the application folder.** An upgrade replaces the
-code; it must not be able to reach the record. Point the database somewhere
-else and never think about it again.
-
-**2. Choose the port from the command line, not by editing the app.**
-
 ```bash
-ringserv run app.ring --port 8210
+ringserv deploy ./myapp --port 8210
 ```
 
+That is the whole thing. It makes a **named deployment**: your code, and a
+private corner beside it for everything the application will ever write.
+
+```
+deployments/myapp/
+    app.ring, public/, services/…     your code
+    .ringserv/
+        deployment.yaml               name, port, where it came from, when
+        data/                         the database, and the journal inside it
+        logs/
+```
+
+Then run it, with the command `deploy` prints for you, ready to paste:
+
+```bash
+ringserv run deployments/myapp/app.ring --port 8210 --data deployments/myapp/.ringserv/data
+```
+
+`--data` is what puts the database in that private corner. A relative
+`:database` is resolved against it; an absolute one is left alone, because
+an application that named an absolute path meant it.
+
+**A `.db` sitting beside your source is not deployed.** That file is your
+scratch copy, and installing test data as production data is a mistake
+nobody recovers from quickly. `.git`, `node_modules` and build directories
+are skipped too, by name.
+
+---
+
+## Changing what is deployed
+
+```bash
+ringserv redeploy myapp
+```
+
+**Replaces the code, keeps the data, and — if it is running — reloads it
+live.** One command, no downtime, no second thing to remember.
+
+```
+redeployed `myapp` — 12 file(s) replaced, data untouched
+  and reloaded it live on port 8210 — no restart, no dropped connection
+```
+
+**Why the data is safe is worth one sentence, because it is not care — it
+is arithmetic.** Redeploy deletes everything in the deployment directory
+*except* `.ringserv/`, then copies the new code in. The record is not
+somewhere the code change is careful to avoid; it is somewhere the code
+change cannot reach. There is no flag to forget and no order to get right.
+
+If the running server refuses the new code, you are told both halves: the
+files are deployed, and the server is unchanged. Fix and `ringserv reload`.
+
+Redeploy takes its source from the manifest, so it repeats itself. Point it
+somewhere new with `--from <folder>`, or skip the live reload with
+`--no-reload`.
+
+---
+
+## Seeing what is deployed
+
+```bash
+ringserv ls
+```
+
+```
+deployments in deployments
+
+  myapp              port 8210   running   2026-08-25 21:12 UTC
+  comptoir           port 8250   stopped   2026-08-25 19:40 UTC
+```
+
+`running` is **asked**, not assumed from a pid file — a live process is not
+a serving port. The timestamp says UTC because it is UTC.
+
+Deployments live in `./deployments` unless you say otherwise with `--root`
+or the `RINGSERV_DEPLOYMENTS` environment variable.
+
+---
+
+## Four things worth doing, learned by standing one up
+
+**1. Let `deploy` keep the data out of the application folder.** That is
+what `.ringserv/data` and `--data` are for. An upgrade replaces the code and
+must not be able to reach the record.
+
+**2. Choose the port from the command line, not by editing the app.**
 `--port` beats both the declaration and `ringserv.yaml`, and the override is
 printed at boot. A deployment that edits its own application has to re-edit
 it after every upgrade, and one day will forget. *(Comptoir declares 8110 —
-which is also the port its own test suite binds. A counter and a test run on
-one machine would have killed each other.)*
+which is also the port its own test suite binds.)*
 
-**3. Do not trust a pid.** A live process is not a serving port: a start
-that failed to bind can leave a pid file behind pointing at a process happily
-serving something else. Ask `/health`.
+**3. Do not trust a pid.** A start that failed to bind can leave a pid file
+pointing at a process happily serving something else. Ask `/health`.
 
 **4. Rehearse the restore, and count.** An untested backup is a belief. Copy
 the database (with its `-wal` and `-shm` companions), restore it *somewhere
-else*, and check the **event count**, not just the verdict — an empty journal
-verifies `INTACTE` perfectly well, and a restore that restored nothing will
-happily tell you so.
+else*, and check the **event count**, not just the verdict — an empty
+journal verifies `INTACTE` perfectly well, and a restore that restored
+nothing will happily tell you so.
 
 ---
 
 ## The panel
 
 ```bash
-ringserv panel <folder>
+ringserv panel deployments
 ```
 
-Every application in that folder, with Start, Stop, **Reload**, a log tail,
-and a box to call any service. Loopback only, for the same reason as above.
+Point it at your deployments root and every deployment is there, with Start,
+Stop, **Reload**, a log tail, and a box to call any service. Nothing had to
+be taught to the panel: a deployment is laid out as `<name>/app.ring`, which
+is exactly what the panel already looks for.
+
+Loopback only, for the same reason as the reload endpoint.
 
 ---
 

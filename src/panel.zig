@@ -22,6 +22,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const httpz = @import("httpz");
 const bridge = @import("bridge");
+const deploy = @import("deploy.zig");
 
 /// Not in std's kernel32 bindings; the one Win32 call the panel needs.
 extern "kernel32" fn GetProcessId(h: std.os.windows.HANDLE) callconv(.winapi) u32;
@@ -37,8 +38,19 @@ const App = struct {
     /// The file handed to `ringserv run` / `ringserv serve`.
     path: []const u8,
     mode: Mode,
-    /// From ringserv.yaml or a `:port =` scan; 0 = unknown, and shown so.
+    /// From the deployment manifest if there is one, else ringserv.yaml,
+    /// else a `:port =` scan; 0 = unknown, and shown so.
     port: u16,
+    /// A DEPLOYMENT's private data directory (`.ringserv/data`), or "".
+    ///
+    /// This is the whole bridge between `ringserv deploy` and this panel,
+    /// and it is not cosmetic: a deployment started WITHOUT it writes its
+    /// database beside the code, where the next redeploy deletes it. The
+    /// panel must start a deployment the way the deployment says, or the
+    /// panel is a second, quieter way to lose the record.
+    data_dir: []const u8 = "",
+    /// True when this app carries `.ringserv/deployment.yaml`.
+    deployed: bool = false,
     status: Status = .stopped,
     child: ?std.process.Child = null,
     pid: i64 = 0,
@@ -104,15 +116,30 @@ fn scan(arena: std.mem.Allocator, root: []const u8) !void {
     while (try it.next()) |entry| {
         if (g_napps >= MAX_APPS) break;
         if (entry.kind == .directory) {
-            const app_path = try std.fs.path.join(arena, &.{ root, entry.name, "app.ring" });
+            const sub = try std.fs.path.join(arena, &.{ root, entry.name });
+            // A DEPLOYMENT KNOWS ITS OWN PORT. Read the manifest first and
+            // guess only when there is none: a guess that disagrees with a
+            // deployment is worse than no guess, because starting on the
+            // wrong port also puts the database in the wrong place.
+            const man = deploy.readManifest(arena, sub);
+            const entry_name = if (man) |m| m.entry else "app.ring";
+            const app_path = try std.fs.path.join(arena, &.{ sub, entry_name });
             std.fs.cwd().access(app_path, .{}) catch continue;
-            var port = guessPortFromYaml(arena, try std.fs.path.join(arena, &.{ root, entry.name }));
+
+            var port: u16 = if (man) |m| m.port else 0;
+            if (port == 0) port = guessPortFromYaml(arena, sub);
             if (port == 0) port = guessPortFromRing(arena, app_path);
+
             g_apps[g_napps] = .{
                 .name = try arena.dupe(u8, entry.name),
                 .path = app_path,
                 .mode = .run,
                 .port = port,
+                .deployed = man != null,
+                .data_dir = if (man != null)
+                    try std.fs.path.join(arena, &.{ sub, deploy.PRIVATE, "data" })
+                else
+                    "",
             };
             g_napps += 1;
         } else if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".ring")) {
@@ -184,7 +211,25 @@ fn startApp(app: *App) ![]const u8 {
     g_mu.unlock();
 
     const verb: []const u8 = if (app.mode == .run) "run" else "serve";
-    var child = std.process.Child.init(&.{ g_exe, verb, app.path }, g_alloc);
+
+    // A DEPLOYMENT IS STARTED THE WAY IT SAYS: its own port, and its own
+    // data directory. Starting it any other way would bind a port nobody
+    // expects and write the database beside the code, where the next
+    // redeploy deletes it — the panel would become a quieter way to lose
+    // the record. A plain folder that is not a deployment starts as before.
+    var argv: std.ArrayList([]const u8) = .empty;
+    defer argv.deinit(g_alloc);
+    argv.appendSlice(g_alloc, &.{ g_exe, verb, app.path }) catch {};
+    var port_buf: [8]u8 = undefined;
+    if (app.deployed and app.port != 0) {
+        const p = std.fmt.bufPrint(&port_buf, "{d}", .{app.port}) catch "";
+        if (p.len != 0) argv.appendSlice(g_alloc, &.{ "--port", p }) catch {};
+    }
+    if (app.data_dir.len != 0) {
+        argv.appendSlice(g_alloc, &.{ "--data", app.data_dir }) catch {};
+    }
+
+    var child = std.process.Child.init(argv.items, g_alloc);
     child.stdin_behavior = .Ignore;
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
