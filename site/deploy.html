@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy — RingServ</title>
+<meta name="description" content="Put an application up with one command, change it with one more, and see the change without stopping the server. Your data lives where a code change cannot reach it.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+<style>
+  .three { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin: 2rem 0; }
+  .three .card b { display: block; font-size: var(--read); margin-bottom: .35rem; }
+  .three .card code { font-size: .92em; }
+  .tree {
+    font: 13px/1.7 var(--mono); background: var(--bg-soft, #f6f7f9);
+    border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+    overflow-x: auto; white-space: pre; margin: 1.2rem 0;
+  }
+  .tree .dim { color: var(--ink-soft); }
+  .shot { width: 100%; max-width: 700px; border: 1px solid var(--border);
+          border-radius: 12px; display: block; margin: 1.4rem auto 0; }
+  .cap { text-align: center; color: var(--ink-soft); font-size: var(--floor); margin-top: .7rem; }
+  .verdicts { width: 100%; border-collapse: collapse; margin: 1.2rem 0 1.6rem; }
+  .verdicts td { padding: .85rem 0; border-top: 1px solid var(--border);
+                 color: var(--ink-soft); vertical-align: baseline; }
+  .verdicts tr:first-child td { border-top: 0; }
+  .verdicts td:first-child {
+      white-space: nowrap; font-weight: 650; color: var(--ink);
+      width: 8.5rem; padding-right: 1.2rem;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a class="active" href="deploy.html">Deploy</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a href="blog.html">Blog</a>
+    <a class="gh" href="https://github.com/mayouni/ringserv" target="_blank" rel="noopener" aria-label="RingServ on GitHub"><svg viewBox="0 0 16 16" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>Put it up. Change it.<br>Never <em>stop</em> it.</h1>
+  <p class="sub">You do three things to an application for as long as it lives: put it
+  up, change it, and make the change real. Each one is a single command here — and the
+  third one costs no downtime at all.</p>
+</header>
+
+<section class="wrap">
+  <div class="three">
+    <div class="card">
+      <span class="icon">&#9673;</span>
+      <b>Put it up</b>
+      <pre class="code"><span class="c">$</span> ringserv deploy ./myapp</pre>
+      <p>Your code is copied into a named place, and your data gets a private corner
+      beside it.</p>
+    </div>
+    <div class="card">
+      <span class="icon">&#8635;</span>
+      <b>Change it</b>
+      <pre class="code"><span class="c">$</span> ringserv redeploy myapp</pre>
+      <p>New code replaces old code. Your data stays. If it is running, the change goes
+      live immediately.</p>
+    </div>
+    <div class="card">
+      <span class="icon">&#9889;</span>
+      <b>Or just reload</b>
+      <pre class="code"><span class="c">$</span> ringserv reload</pre>
+      <p>The running server picks up your edited file. No restart, and nobody using it
+      notices.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Your data cannot be reached by a code change</h2>
+  <p class="lead">This is the part worth understanding, because it is the mistake that
+  hurts most and it is impossible here. A deployment keeps your database and your
+  records in a separate folder — and a redeploy replaces <em>everything except that
+  folder</em>.</p>
+
+  <div class="tree">deployments/myapp/
+    app.ring          <span class="dim">your code — replaced on every redeploy</span>
+    public/
+    services/
+    .ringserv/        <span class="dim">never touched by a redeploy</span>
+        data/         <span class="dim">your database, and the records inside it</span>
+        logs/</div>
+
+  <p class="lead">So your data is not somewhere a redeploy is <em>careful</em> to avoid.
+  It is somewhere a redeploy <em>cannot go</em>. There is no setting to get wrong and no
+  order to remember — which matters most at the exact moment you are least careful.</p>
+</section>
+
+<section class="wrap">
+  <h2>Changing a live server, without stopping it</h2>
+  <p class="lead">Edit your file, run <code>ringserv reload</code>, and the server that
+  is already running is now running your new code. It does not restart. It does not let
+  go of its address. People using it right then keep using it.</p>
+  <p class="lead">On our machine that takes <b>62 milliseconds</b> — and we check that
+  a connection opened <em>before</em> the change is still working <em>after</em> it,
+  because "it reloaded" and "it quietly restarted" look the same from outside.</p>
+
+  <h3>And it tells you which of three things happened</h3>
+  <table class="verdicts">
+    <tr><td>All good</td><td>every part of the server took your new code.</td></tr>
+    <tr><td>Refused</td><td>your code has an error, so <b>nothing changed</b>. The
+      server is untouched and still serving. Fix it and try again.</td></tr>
+    <tr><td>Half done</td><td>rare, and the one worth restarting for — some of the
+      server changed and some did not.</td></tr>
+  </table>
+  <p class="lead">Those three are worded differently on purpose. Someone who cannot tell
+  <em>nothing happened</em> from <em>half of it happened</em> will react to both the same
+  way, and only one of them is an emergency.</p>
+</section>
+
+<section class="wrap">
+  <h2>Or press a button</h2>
+  <p class="lead">The admin panel lists everything you have deployed, with Start, Stop
+  and <b>Reload</b> beside each one — plus its log and a box to try any of its services.
+  Point it at your deployments and it finds them; nothing to configure.</p>
+  <img class="shot" src="ringserv-admin-panel.png" alt="The RingServ admin panel, listing deployed applications with Start, Stop and Reload buttons">
+  <p class="cap">One command: <code>ringserv panel deployments</code></p>
+</section>
+
+<section class="wrap">
+  <h2>What it will not do, said plainly</h2>
+  <p class="lead">RingServ puts an application up <b>on the machine you are on</b>. It
+  is not a supervisor, it does not run a cluster, and it will not deploy from another
+  machine across the network. Each of those is a real need and a different product, and
+  a server that grows one grows its problems too.</p>
+  <p class="lead">To keep an application running after a reboot, use what your system
+  already has: a scheduled task on Windows, a service file on Linux. To reach it from
+  the internet, put a proxy in front — which is also how it gets HTTPS
+  (<a href="faq.html">the Q&amp;A explains why</a>).</p>
+  <p class="lead"><a href="https://github.com/mayouni/ringserv/blob/main/docs/DEPLOY.md">The
+  full guide</a> has every command, every option, and four things worth doing that we
+  learned by running a real one.</p>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>
