@@ -31,6 +31,16 @@ function ringHome() {
     return guesses.find(d => fs.existsSync(path.join(d, "bin", exeName))) || guesses[0];
 }
 
+// Returns a path that EXISTS, or null. It used to return a conventional
+// install location as a last resort whether or not anything was there,
+// and that cost a red CI for two days: on a runner with no Ring, callers
+// spawned a path that does not exist, got empty output, and reported a
+// COMPATIBILITY FAILURE -- "native ring disagrees" -- when the truth was
+// "there is no native ring here". A missing oracle must read as missing,
+// never as a disagreement.
+//
+// $RING_EXE is honoured even if it does not exist: someone who names a
+// path explicitly is owed the error, not a silent skip.
 function ringExe() {
     if (process.env.RING_EXE) return process.env.RING_EXE;
     const home = process.env.RING_HOME;
@@ -38,7 +48,10 @@ function ringExe() {
         const p = path.join(home, "bin", exeName);
         if (fs.existsSync(p)) return p;
     }
-    return fromPath() || path.join(ringHome(), "bin", exeName);
+    const found = fromPath();
+    if (found) return found;
+    const guess = path.join(ringHome(), "bin", exeName);
+    return fs.existsSync(guess) ? guess : null;
 }
 
 module.exports = { ringExe, ringHome, exeName, isWin };

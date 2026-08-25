@@ -19,6 +19,16 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 
 const RING_EXE = require(path.join(__dirname, "ring-exe.js")).ringExe();
+// This whole suite IS the oracle, so with no interpreter there is nothing
+// to be an oracle against. Saying so and exiting 0 is the honest answer;
+// comparing against a path that does not exist would report every example
+// as a compatibility failure.
+if (!RING_EXE) {
+    console.log("SKIP  native oracle — no ring interpreter on this machine " +
+        "(set RING_EXE or RING_HOME). Every gate in this suite is owned and " +
+        "none was run.");
+    process.exit(0);
+}
 const RINGSERV = path.join(__dirname, "..", "zig-out", "bin",
     process.platform === "win32" ? "ringserv.exe" : "ringserv");
 

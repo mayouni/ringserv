@@ -31,6 +31,14 @@ const { execFileSync } = require("child_process");
 const ringWhere = require(path.join(__dirname, "ring-exe.js"));
 const RING_HOME = ringWhere.ringHome();
 const RING_EXE = ringWhere.ringExe();
+// The sweep compares RingServ against native Ring program by program, so
+// with no interpreter it has nothing to compare to. Named and skipped,
+// never a red that means "no oracle here".
+if (!RING_EXE) {
+    console.log("SKIP  wide sweep — no ring interpreter on this machine " +
+        "(set RING_EXE or RING_HOME). All gates owned, none run.");
+    process.exit(0);
+}
 const RINGSERV = path.join(__dirname, "..", "zig-out", "bin",
     process.platform === "win32" ? "ringserv.exe" : "ringserv");
 

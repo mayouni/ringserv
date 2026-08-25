@@ -163,8 +163,11 @@ check("chdir() moves the virtual directory",
 // same bytes out — including the FAILING case, where both must refuse the
 // same top-level form for the same reason. Agreeing on a refusal is the half
 // of compatibility that is easy to leave untested.
+// `!RING` — the same test the eval oracle below uses. These two sites
+// used to ask the same question two different ways, and only one of them
+// was right.
 const RING = ringExe();
-if (!fs.existsSync(RING)) {
+if (!RING) {
     skip("native-ring oracle: nested load", "no ring interpreter (set RING_EXE or RING_HOME)");
     skip("native-ring oracle: load package / load again", "no ring interpreter");
     skip("native-ring oracle: the top-level form", "no ring interpreter");
@@ -286,9 +289,20 @@ fs.writeFileSync(path.join(mwDir, "app.ring"),
             { cwd: tmp, encoding: "utf8" });
         const rOut = (oRight.stdout || "") + (oRight.stderr || "");
         const wOut = (oWrong.stdout || "") + (oWrong.stderr || "");
-        check("...and native `ring` agrees on both — not a RingServ divergence",
-            /reached/.test(rOut) && !/reached/.test(wOut),
-            "right: " + rOut.slice(0, 80) + " | wrong: " + wOut.slice(0, 80));
+        // A ring that EXISTS but produces nothing is not an oracle either,
+        // and this is the second half of the same CI failure: the runner
+        // resolved a path, ran it, got empty output both times, and the
+        // gate read that as "native ring disagrees". An oracle that says
+        // nothing has not disagreed -- it has not spoken.
+        if (norm(rOut) === "") {
+            skip("...and native `ring` agrees on both",
+                "the interpreter at " + ringForEval + " produced no output; " +
+                "an oracle that says nothing has not disagreed");
+        } else {
+            check("...and native `ring` agrees on both — not a RingServ divergence",
+                /reached/.test(rOut) && !/reached/.test(wOut),
+                "right: " + rOut.slice(0, 80) + " | wrong: " + wOut.slice(0, 80));
+        }
     }
 }
 
