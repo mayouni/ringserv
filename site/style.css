@@ -88,33 +88,54 @@ nav {
     border-bottom: 1px solid var(--border);
 }
 nav .wrap { display: flex; align-items: center; gap: 1.4rem; padding-top: .7rem; padding-bottom: .7rem; }
-/* FIVE stops and one call to action. Rule 27 caps a horizontal menu at
-   eight; this sits well under it, because the menu is a claim about how
-   the site is built and the site has five branches, not seven:
+/* SEVEN stops and one call to action, in the order you actually use them.
+   Rule 27 caps a horizontal menu at eight, so this sits at the edge on
+   purpose rather than by drift:
 
-       Start here        · and the tutorial inside it
-       Local-first apps  · and "Working with data" inside it
-       Why Ring?         · and "The story" inside it
+       Start here   · nothing installed, to a running service
+       One model    · the same VM in the page and on the server
+       Build        · writing it: five service shapes, rules, storage
+       Deploy       · putting it up, and changing it without stopping it
+       Monitor      · the panel: is it up, what did it say, is the record whole
        Q&A
-       Blog              · the posts, and "What's new" inside it
+       Blog         · the posts
 
-   Four pages left the bar without leaving the site. Two of them were one
-   subject told twice (Why Ring? / The story), one was a demo that now has
-   a parent naming the whole idea, and one is release notes, which belong
-   with the reading. A menu does not grow by promotion (rule 116): where a
-   page matters but sits inside a branch, the branch names it.
+   THE MIDDLE FIVE ARE A LIFECYCLE, not a list of topics: understand it,
+   write it, put it up, watch it. That is the order someone evaluates a
+   server in, and a menu that names JOBS is readable by someone who has
+   not read anything else on the site -- which a menu naming CONCEPTS is
+   not. Adopted 2026-08-25 on the author's reading of the ring++ site,
+   whose menu names what its tool does at every stop.
 
-   The active stop is the BRANCH, not the page — so a child marks its
-   parent and the highlight never claims a structure that is not there.
+   This comment previously described a menu with "Local-first apps" and
+   "Why Ring?" in it -- pages this site has never had. It was inherited
+   whole when the design was copied from RingScript and never re-read. A
+   comment that survives the thing it describes is worse than no comment,
+   because it is believed.
+
+   The active stop is the BRANCH, not the page -- so a blog article marks
+   Blog, and the highlight never claims a structure that is not there.
 
    There is no breadcrumb trail, deliberately: the branches are one level
    deep and each parent names its children in its own text, so a trail
-   would repeat the menu one line lower. Reported back to the constitution
-   as evidence, and it is why rules 108 and 115 now say "interfaces that
-   have depth". */
+   would repeat the menu one line lower. */
 nav a { color: var(--ink-soft); text-decoration: none; font-size: var(--floor); }
 nav a:hover { color: var(--ink); }
 nav a.active { color: var(--accent); font-weight: 600; }
+
+/* SEVEN stops fit one row on a laptop and three on a phone. Measured at
+   375px: 154px of menu, on a 812px screen, PERMANENTLY -- because the bar
+   is sticky. That is 19% of a phone given to navigation the reader is not
+   using, and it is the real cost of the seventh stop.
+   
+   So below 720px the bar stops being sticky and scrolls away like any
+   other content, and the gaps tighten. The menu is still there, one flick
+   up; the screen is the reader's again. */
+@media (max-width: 720px) {
+    nav { position: static; }
+    nav .wrap { gap: .55rem 1rem; padding-top: .6rem; padding-bottom: .6rem; }
+    nav .brand { flex-basis: 100%; }
+}
 /* The RS mark sits with the wordmark, not above it: inline-flex so the two
    share a baseline-ish centre and the rounded square never stretches. */
 nav .brand {

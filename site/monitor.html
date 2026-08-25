@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor — RingServ</title>
+<meta name="description" content="One page that shows every application you are running: whether it answers, what it logged, and whether its records are still whole. It never guesses, and it says so when it does not know.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+<style>
+  .shot { width: 100%; max-width: 760px; border: 1px solid var(--border);
+          border-radius: 12px; display: block; margin: 1.6rem auto .8rem; }
+  .cap { text-align: center; color: var(--ink-soft); font-size: var(--floor); }
+  .facts { width: 100%; border-collapse: collapse; margin: 1.4rem 0; }
+  .facts td { padding: .85rem 0; border-top: 1px solid var(--border);
+              color: var(--ink-soft); vertical-align: baseline; }
+  .facts tr:first-child td { border-top: 0; }
+  .facts td:first-child { font-weight: 650; color: var(--ink);
+                          width: 11rem; padding-right: 1.2rem; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a href="build.html">Build</a>
+    <a href="deploy.html">Deploy</a>
+    <a class="active" href="monitor.html">Monitor</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a href="blog.html">Blog</a>
+    <a class="gh" href="https://github.com/mayouni/ringserv" target="_blank" rel="noopener" aria-label="RingServ on GitHub"><svg viewBox="0 0 16 16" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>See everything you<br>are running, in <em>one</em> page.</h1>
+  <p class="sub">Which applications are up, whether they actually answer, what they last
+  said, and whether their records are still whole. One command opens it, and it needs no
+  setting up.</p>
+</header>
+
+<section class="wrap">
+<pre class="code"><span class="c">$</span> ringserv panel deployments</pre>
+  <img class="shot" src="ringserv-admin-panel.png" alt="The RingServ admin panel: each application on its own row with Start, Stop and Reload buttons, its port, its process and how long it has been up">
+  <p class="cap">Every application on its own row, with the buttons that matter beside it.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>What you can do from here</h2>
+  <table class="facts">
+    <tr><td>Start &amp; Stop</td><td>run an application, or stop it — this one only, never
+      everything on the machine by accident.</td></tr>
+    <tr><td>Reload</td><td>make your edited code live without stopping the server, and it
+      tells you whether every part of the server took it.
+      <a href="deploy.html">How that works</a>.</td></tr>
+    <tr><td>Its log</td><td>the last thing it printed, updating as it runs — enough to see
+      what just went wrong.</td></tr>
+    <tr><td>Try a service</td><td>call any action with any payload and read the answer,
+      right there. No separate tool, and no browser security dance.</td></tr>
+  </table>
+</section>
+
+<section class="wrap narrow">
+  <h2>It never guesses</h2>
+  <p class="lead">This is the part we care most about, because a monitoring page that
+  quietly makes things up is worse than no page at all.</p>
+  <p class="lead"><b>Running does not mean working.</b> A program can be alive and
+  answering nothing — a start that failed halfway leaves exactly that. So the panel asks
+  the application whether it is really serving, rather than assuming it from the fact
+  that a process exists.</p>
+  <p class="lead"><b>What it cannot know, it says it cannot know.</b> If it cannot work
+  out which address an application uses, it shows that as unknown instead of inventing a
+  plausible number. An invented number is the kind of thing someone acts on at three in
+  the morning.</p>
+  <p class="lead"><b>It is a window, not an archive.</b> The log you see is the recent
+  tail, not everything since the beginning. Keeping history is a job for your system's
+  own tools, and pretending otherwise would just lose it slowly.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>Checking the record is whole</h2>
+  <p class="lead">If your application keeps the kind of record that must never change —
+  sales, payments, decisions — you can ask it at any time whether that record is still
+  intact:</p>
+<pre class="code"><span class="c">$</span> ringserv journal verify
+<span class="n">7 event(s), chain INTACTE</span></pre>
+  <p class="lead">Each entry is sealed against the one before it, so if a single one were
+  altered the seal would not match and you would be told <b>which entry</b> broke it.
+  This is a check you can run every night, and the answer is a fact rather than a
+  reassurance.</p>
+  <p class="lead">One honest word about backups: an untested backup is a belief, not a
+  backup. When you rehearse restoring one, count the entries that came back — an empty
+  record passes an "is it whole?" check perfectly well, because nothing empty is broken.
+  <a href="https://github.com/mayouni/ringserv/blob/main/docs/DEPLOY.md">The deployment
+  guide</a> has the routine we use.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>From the command line, too</h2>
+<pre class="code"><span class="c">$</span> ringserv ls
+<span class="n">  myapp        port 8210   running   2026-08-25 21:12 UTC
+  comptoir     port 8250   stopped   2026-08-25 19:40 UTC</span></pre>
+  <p class="lead">The same truths, without a browser — useful over a remote connection or
+  from a script that checks things while you sleep. Here too, <em>running</em> means the
+  application was asked and answered.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>Only from this machine</h2>
+  <p class="lead">The panel can start and stop programs, so it refuses to listen to
+  anything except the computer it runs on. That is not a setting you can change, and it
+  is deliberate: a page that controls your applications should not be one firewall
+  mistake away from the internet.</p>
+  <p class="lead">To reach it from elsewhere, do it the way you would reach anything
+  else — through a proxy you control, with your own login in front.
+  <a href="https://github.com/mayouni/ringserv/blob/main/docs/panel.md">The full
+  guide</a>.</p>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>

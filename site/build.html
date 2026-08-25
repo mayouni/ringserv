@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build — RingServ</title>
+<meta name="description" content="Write your application: a service can be a plain function, a hash of functions, a class, a table, or a JavaScript file. Add rules about what a request must contain, and a record that cannot be rewritten.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+<style>
+  .forms { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin: 2rem 0; }
+  .forms .card h3 { margin: .1rem 0 .5rem; font-size: var(--read); }
+  .forms .card p { margin: .7rem 0 0; }
+  .when { color: var(--ink-soft); font-size: var(--floor); display: block; margin-bottom: .8rem; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a href="unified.html">One model</a>
+    <a class="active" href="build.html">Build</a>
+    <a href="deploy.html">Deploy</a>
+    <a href="monitor.html">Monitor</a>
+    <a href="faq.html">Q&amp;A</a>
+    <a href="blog.html">Blog</a>
+    <a class="gh" href="https://github.com/mayouni/ringserv" target="_blank" rel="noopener" aria-label="RingServ on GitHub"><svg viewBox="0 0 16 16" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>Write it the way<br>it <em>wants</em> to be written.</h1>
+  <p class="sub">A service here is not a class you must inherit from or a folder you must
+  arrange. It is whichever of five shapes fits what you are actually doing — and you can
+  mix all five in one application, because they all answer the same way.</p>
+</header>
+
+<section class="wrap">
+  <h2>Five shapes, one answer</h2>
+  <p class="lead">Every one of these is reachable at the same address, called the same
+  way, and gives back the same kind of answer. You are choosing how to <em>write</em>
+  it, never how it behaves.</p>
+
+  <div class="forms">
+    <div class="card">
+      <h3>1 — Plain functions</h3>
+      <span class="when">when you just want something callable</span>
+<pre class="code"><span class="k">func</span> add a, b
+    <span class="k">return</span> a + b</pre>
+      <p><code>ringserv serve calc.ring</code> — and every function in the file is
+      callable, its arguments matched to your request <em>by name</em>. Nothing else in
+      the file.</p>
+    </div>
+
+    <div class="card">
+      <h3>2 — A group of actions</h3>
+      <span class="when">the everyday shape</span>
+<pre class="code"><span class="a">:orders</span> = [
+    <span class="a">:place</span> = <span class="k">func</span> aReq {
+        <span class="k">return</span> Reply(<span class="a">:ok</span>, [ <span class="a">:id</span> = <span class="n">7</span> ])
+    }
+]</pre>
+      <p>Named actions under a named service. The shortest form that still takes a
+      request and decides what to do with it.</p>
+    </div>
+
+    <div class="card">
+      <h3>3 — A class</h3>
+      <span class="when">when it has state and private helpers</span>
+<pre class="code"><span class="k">class</span> OrdersService
+    <span class="k">func</span> placeAction aReq
+        <span class="k">return</span> Reply(<span class="a">:ok</span>, ...)
+    <span class="k">func</span> helper          <span class="c"># private</span></pre>
+      <p>Only methods ending in <code>Action</code> can be reached from outside.
+      Everything else stays yours — privacy by naming, not by configuration.</p>
+    </div>
+
+    <div class="card">
+      <h3>4 — A table</h3>
+      <span class="when">when it is ordinary storage</span>
+<pre class="code"><span class="a">:menu</span> = [ <span class="a">:table</span> = <span class="s">"menu"</span> ]</pre>
+      <p>One line, and you have list, get, create, update and delete — with paging and
+      filters. Write any one of them yourself and yours wins; the rest keep working.</p>
+    </div>
+
+    <div class="card">
+      <h3>5 — JavaScript</h3>
+      <span class="when">when the library you need is JS</span>
+<pre class="code"><span class="a">:receipt</span> = [ <span class="a">:js</span> = <span class="s">"receipt.js"</span> ]</pre>
+      <p>A <code>.js</code> file, running inside the same one file, under the same rules
+      — and it can call your Ring services by name, and they can call it.
+      <a href="https://github.com/mayouni/ringserv/blob/main/docs/JS.md">What the
+      JavaScript side can and cannot do</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap narrow">
+  <h2>Say what a request must contain</h2>
+  <p class="lead">Write the rule once and it is checked before your code ever runs, so
+  your function never receives something it did not ask for:</p>
+<pre class="code"><span class="f">Contract</span>([ <span class="a">:orders</span> = [
+    <span class="a">:place</span> = [
+        <span class="a">:client</span> = [ <span class="a">:type</span> = <span class="a">:text</span>, <span class="a">:required</span> = <span class="n">1</span> ],
+        <span class="a">:qty</span>    = [ <span class="a">:type</span> = <span class="a">:number</span>, <span class="a">:min</span> = <span class="n">1</span> ]
+    ]
+] ])</pre>
+  <p class="lead">A request that breaks the rules is refused with <b>every</b> problem
+  listed at once — not the first one, then the next one after you fix it. Anyone who has
+  filled in a form three times to find three separate mistakes knows why that matters.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>Store it, and keep what must not change</h2>
+  <p class="lead">Declare your tables in the same place you declare your services, and
+  the database is created for you the first time it runs. It is a real SQL database
+  inside the same file — nothing to install and nothing to connect to.</p>
+  <p class="lead">Some things must never be quietly edited: a sale, a payment, a
+  decision. For those there is a second kind of store — <b>a record that only ever grows</b>.
+  Nothing in it can be changed or removed, each entry is sealed against the one before
+  it, and the server can tell you at any moment whether the chain is still whole. A
+  cancellation is a new entry saying "cancelled, and why", never an erasure. That is
+  what makes the record worth keeping.</p>
+  <p class="lead"><a href="https://github.com/mayouni/ringserv/blob/main/docs/DATA.md">Tables
+  and queries</a> ·
+  <a href="https://github.com/mayouni/ringserv/blob/main/docs/COMMONS.md">The
+  unchangeable record</a></p>
+</section>
+
+<section class="wrap narrow">
+  <h2>Check it before you run it</h2>
+<pre class="code"><span class="c">$</span> ringserv check app.ring</pre>
+  <p class="lead">Reads your application without running it and tells you what will not
+  work: a mistake in the code, a rule that names an action you never wrote, an action
+  nothing can ever reach. Cheaper than finding out from a user.</p>
+  <p class="lead">And <code>ringserv test</code> runs your own tests against a scratch
+  database that is thrown away afterwards, so testing can never touch real data.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>Then decide where it runs</h2>
+  <p class="lead">Nothing above says whether a service runs on the server or inside the
+  browser. That is a separate decision, written separately — and changing it is one
+  word, with no change to the code that does the work.
+  <a href="unified.html">One model, two players</a> shows how.</p>
+  <p class="lead">When it is ready: <a href="deploy.html">put it up</a>.</p>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>
