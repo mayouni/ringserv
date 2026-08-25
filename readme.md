@@ -196,7 +196,7 @@ each one's record, with its gate results, is in
 | **Governance** | `check` (tree-sitter + the VM's own catalog), `docs`, C2 diagnostics, an actor seam with 401/403 kept distinct |
 | **Operations** | a browser admin panel, `journal verify` for cron, static files, `ringserv.yaml` |
 
-**over 600 gates across 27 suites** run in about 70 seconds
+**over 620 gates across 28 suites** run in about 70 seconds
 (`node tests/all.js`); `--full` adds soak, a benchmark, a **differential
 oracle against native `ring.exe`**, and a wide sweep over Ring's own
 ~470 samples plus ~500 documentation snippets compared byte-for-byte.
@@ -241,6 +241,7 @@ from a bare function to a hash-chained fiscal record, each one runnable.
 - [docs/COMMONS.md](docs/COMMONS.md) — the journaled store, and why it is a second store
 - [docs/topology.md](docs/topology.md) — declarative placement and local-first sync
 - [docs/STREAM.md](docs/STREAM.md) — pages that react: one line, and the page is told instead of asking
+- [docs/DEPLOY.md](docs/DEPLOY.md) — putting it up, and changing a running server without stopping it
 - [docs/JS.md](docs/JS.md) — the JavaScript guest, and its honest limits
 - [docs/CHECK.md](docs/CHECK.md) · [docs/cli.md](docs/cli.md) — governance and every command
 - [docs/TLS.md](docs/TLS.md) · [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — the deployment decisions, and the numbers

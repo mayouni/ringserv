@@ -274,10 +274,20 @@ application, its links, and the commands it promises: documentation rots
 because nothing fails when it stops being true, so now something does.
 
 **Phase 8 is delivered.**
-**Gate — the Principal's to open:** RingServ carries one real application
-of the author's — the same bar RingScript's 0.9 met before its API froze.
-No session can open that gate for him, and the worked example is a guide,
-not a substitute.
+**Gate — OPENED by the Principal 2026-08-25.** RingServ carries real work:
+a deployment of Comptoir standing at `D:\RingServ-Local`, taking orders,
+with its record verified and its restore rehearsed. The bar RingScript's
+0.9 met before its API froze is met here. No session could open this gate,
+and none did.
+
+**And the deployment earned its keep in its first hour**, which is the
+argument for the bar rather than a footnote to it: four defects that
+twenty-seven green suites on three platforms had never seen. The sharpest
+was one syscall — `posix.write` is `WriteFile` on Windows and does not work
+on an overlapped socket — behind two symptoms a day apart: no .NET client
+could POST to this server on Windows at all, and SSE streaming wrote
+nothing, which had been accepted as a platform gap twenty-four hours
+earlier. See [FRICTIONS.md](FRICTIONS.md) 4–7.
 
 ## Phase 9 — The journaled store ✅ (delivered 2026-08-22)
 

@@ -55,6 +55,38 @@ var g_cond: std.Thread.Condition = .{};
 var g_app_source: [:0]const u8 = "";
 var g_workers_alive = std.atomic.Value(u32).init(0);
 
+// --------------------------------------------------------- HOT RELOAD
+//
+// A reload is a GENERATION COUNTER and nothing else, which is the whole
+// reason it can be simple here: every worker owns its own resident VM,
+// so no worker has to agree with any other about when to change. Bump
+// the counter, and each worker re-evaluates the application before its
+// NEXT job — on its own thread, between two requests, where it is
+// already alone with its own state.
+//
+// The listener is never touched. HTTP threads do not learn that a reload
+// happened; open connections stay open; the port is never rebound. That
+// is the whole difference between reloading and restarting.
+var g_app_generation = std.atomic.Value(u32).init(0);
+var g_reload_mutex: std.Thread.Mutex = .{};
+/// How many workers are serving the current generation — read by the
+/// reload endpoint so a PARTIAL reload is reported as partial. N workers
+/// disagreeing about which code they run is the failure this exists to
+/// make visible, and a 200 would hide it perfectly.
+var g_gen_workers = std.atomic.Value(u32).init(0);
+var g_reload_failures = std.atomic.Value(u32).init(0);
+/// The last source known to evaluate, so a worker that chokes on a new
+/// one has something to go back to.
+var g_prev_app_source: [:0]const u8 = "";
+/// Where the application was read from. Empty when the source did not
+/// come from a file (`ringserv eval`), and a reload then refuses BY NAME
+/// rather than quietly reloading nothing.
+var g_app_path: []const u8 = "";
+
+pub fn setAppPath(p: []const u8) void {
+    g_app_path = p;
+}
+
 fn enqueue(job: *Job) void {
     g_mutex.lock();
     defer g_mutex.unlock();
@@ -157,11 +189,61 @@ fn workerMain(id: u32) void {
         std.debug.print("ringserv: worker {d}: app eval failed: {s}\n", .{ id, bridge.rs_last_error() });
     }
     _ = g_workers_alive.fetchAdd(1, .monotonic);
+    _ = g_gen_workers.fetchAdd(1, .monotonic);
+    var my_generation: u32 = g_app_generation.load(.monotonic);
     while (true) {
         const job = dequeue();
+
+        // BETWEEN TWO JOBS is the only safe moment to change the code a
+        // worker runs, and it is exactly here. Checked before serving and
+        // never during: a request that has already begun keeps the
+        // application it began under.
+        const gen = g_app_generation.load(.acquire);
+        if (gen != my_generation) reloadThisWorker(id, gen, &my_generation);
+
         serveJob(job);
         job.done.set();
     }
+}
+
+/// Re-evaluate the application in THIS worker, falling back to the code
+/// it was already running if the new source will not evaluate.
+///
+/// A reload that half-succeeds is worse than one that refuses: some
+/// requests would answer with the new behaviour and some with the old,
+/// and nothing in either response would say which. So a worker that
+/// cannot take the new code goes back to the old and is COUNTED.
+fn reloadThisWorker(id: u32, gen: u32, my_generation: *u32) void {
+    g_reload_mutex.lock();
+    const src = g_app_source;
+    const prev = g_prev_app_source;
+    g_reload_mutex.unlock();
+
+    _ = bridge.rs_reset();
+    if (bridge.rs_eval(src) == 0) {
+        _ = bridge.rs_call("__rs_data_apply", "0");
+        my_generation.* = gen;
+        _ = g_gen_workers.fetchAdd(1, .monotonic);
+        return;
+    }
+
+    // It may have evaluated in the validation pass and still fail HERE —
+    // a worker holds its own state — so this is reported, never assumed
+    // impossible.
+    std.debug.print("ringserv: worker {d}: reload refused, keeping the running application: {s}\n", .{ id, bridge.rs_last_error() });
+    _ = g_reload_failures.fetchAdd(1, .monotonic);
+    _ = bridge.rs_reset();
+    if (bridge.rs_eval(prev) != 0) {
+        // Both failed in this worker. Serving still beats dying: dispatch
+        // answers clean 500 envelopes, and the count above already told
+        // the operator not to trust this run.
+        std.debug.print("ringserv: worker {d}: the PREVIOUS application no longer evaluates either: {s}\n", .{ id, bridge.rs_last_error() });
+    } else {
+        _ = bridge.rs_call("__rs_data_apply", "0");
+    }
+    // Take the generation regardless, or this worker retries the broken
+    // source before every job it will ever serve.
+    my_generation.* = gen;
 }
 
 // ------------------------------------------------------------- handlers
@@ -246,6 +328,121 @@ fn getClientJs(req: *httpz.Request, res: *httpz.Response) !void {
     // after an upgrade is worth more than the request.
     res.header("Cache-Control", "no-cache");
     res.body = CLIENT_JS;
+}
+
+/// POST /admin/reload — re-read the application and change it under the
+/// running server, without dropping the port or a single connection.
+///
+/// LOOPBACK ONLY, and not negotiable. This is the one route in the binary
+/// where "who may ask" cannot be the application's decision, because the
+/// application is the thing being replaced. A remote reload is a
+/// different product with a different threat model, refused by name in
+/// docs/PLAN.md phase 20.
+fn postAdminReload(req: *httpz.Request, res: *httpz.Response) !void {
+    res.content_type = .JSON;
+
+    if (!isLoopback(req)) {
+        res.status = 403;
+        res.body =
+            \\{"code":1,"message":"reload is loopback-only - run it on the machine the server runs on","data":""}
+        ;
+        return;
+    }
+    if (g_app_path.len == 0) {
+        res.status = 409;
+        res.body =
+            \\{"code":1,"message":"this server was not started from a file, so there is nothing to re-read","data":""}
+        ;
+        return;
+    }
+
+    const raw = std.fs.cwd().readFileAlloc(alloc, g_app_path, 64 * 1024 * 1024) catch |e| {
+        res.status = 404;
+        var m: std.ArrayList(u8) = .empty;
+        defer m.deinit(alloc);
+        try m.writer(alloc).writeAll("{\"code\":1,\"message\":");
+        var detail: std.ArrayList(u8) = .empty;
+        defer detail.deinit(alloc);
+        try detail.writer(alloc).print("cannot re-read {s}: {s}", .{ g_app_path, @errorName(e) });
+        appendJsonString(&m, detail.items);
+        try m.writer(alloc).writeAll(",\"data\":\"\"}");
+        res.body = try res.arena.dupe(u8, m.items);
+        return;
+    };
+    defer alloc.free(raw);
+
+    // Native ring normalises CRLF as it reads, and so does `run` at boot.
+    // A reload that handed the VM different bytes than a restart would
+    // be a reload that behaves differently from a restart.
+    var norm: std.ArrayList(u8) = .empty;
+    errdefer norm.deinit(alloc);
+    for (raw) |c| {
+        if (c != '\r') try norm.append(alloc, c);
+    }
+    const src = try norm.toOwnedSliceSentinel(alloc, 0);
+
+    const workers = g_workers_alive.load(.monotonic);
+
+    g_reload_mutex.lock();
+    g_prev_app_source = g_app_source;
+    g_app_source = src;
+    g_reload_mutex.unlock();
+
+    g_gen_workers.store(0, .monotonic);
+    g_reload_failures.store(0, .monotonic);
+    _ = g_app_generation.fetchAdd(1, .release);
+
+    // Wake every worker so the reload happens NOW rather than whenever
+    // the next real request happens to arrive. One no-op dispatch each,
+    // on a path measured at 0.75 ms.
+    var i: u32 = 0;
+    while (i < workers) : (i += 1) {
+        var job = Job{ .entry = "__rs_noop", .body = "0", .raw_arg = true };
+        defer job.response.deinit(alloc);
+        enqueue(&job);
+        job.done.timedWait(20 * std.time.ns_per_s) catch {};
+    }
+
+    const took = g_gen_workers.load(.monotonic);
+    const failed = g_reload_failures.load(.monotonic);
+
+    var m: std.ArrayList(u8) = .empty;
+    defer m.deinit(alloc);
+    if (failed == 0 and took >= workers) {
+        res.status = 200;
+        try m.writer(alloc).print("{{\"code\":0,\"message\":\"OK\",\"data\":{{\"reloaded\":{d},\"workers\":{d},\"failed\":0,\"generation\":{d}}}}}", .{ took, workers, g_app_generation.load(.monotonic) });
+    } else if (took == 0) {
+        // NOTHING CHANGED, and that is the SAFE failure — every worker is
+        // still serving the application that was already working. It must
+        // not read like the dangerous one below: an operator who cannot
+        // tell "nothing happened" from "half of it happened" will treat
+        // them the same, and only one of them is an emergency.
+        res.status = 422;
+        try m.writer(alloc).print("{{\"code\":1,\"message\":\"RELOAD REFUSED - the new application would not evaluate, so all {d} workers kept the one they were running. Nothing changed and the server is unaffected; fix the application and reload again.\",\"data\":{{\"reloaded\":0,\"workers\":{d},\"failed\":{d}}}}}", .{ workers, workers, failed });
+    } else {
+        // PARTIAL IS THE DANGEROUS ONE, and it is why the count exists:
+        // some requests now answer with the new code and some with the
+        // old, and nothing in either response says which.
+        res.status = 500;
+        try m.writer(alloc).print("{{\"code\":1,\"message\":\"PARTIAL RELOAD - {d} of {d} workers took the new application and {d} kept the old one. THIS SERVER IS NOW ANSWERING WITH TWO VERSIONS. Fix the application and reload again, or restart to be certain.\",\"data\":{{\"reloaded\":{d},\"workers\":{d},\"failed\":{d}}}}}", .{ took, workers, failed, took, workers, failed });
+    }
+    res.body = try res.arena.dupe(u8, m.items);
+}
+
+/// Is this request from this machine? Judged on the ADDRESS, never on a
+/// header — `X-Forwarded-For` is whatever the last hop chose to write.
+fn isLoopback(req: *httpz.Request) bool {
+    return switch (req.address.any.family) {
+        std.posix.AF.INET => req.address.in.sa.addr == 0x0100007f,
+        std.posix.AF.INET6 => blk: {
+            const a = req.address.in6.sa.addr;
+            if (std.mem.eql(u8, &a, &[_]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 })) break :blk true;
+            // ::ffff:127.x.x.x — an IPv4 loopback arriving on a dual stack
+            if (std.mem.eql(u8, a[0..12], &[_]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff }) and a[12] == 127) break :blk true;
+            break :blk false;
+        },
+        else => false,
+    };
 }
 
 /// How many streams this server will hold open at once.
@@ -636,6 +833,7 @@ pub fn start(config: Config) !void {
     router.get("/sync/shape", getSyncShape, .{});
     router.get("/sync/stream", getSyncStream, .{});
     router.get("/ringserv.js", getClientJs, .{});
+    router.post("/admin/reload", postAdminReload, .{});
     router.post("/sync/push", postSyncPush, .{});
     router.post("/sync/state", postSyncState, .{});
     if (g_statics.len > 0) {

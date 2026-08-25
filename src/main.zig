@@ -125,6 +125,7 @@ const usage =
     \\  ringserv journal <verb>      list / verify / export the fiscal record
     \\  ringserv serve <file.ring>   serve a file of plain functions, as-is
     \\  ringserv panel [dir]         the admin panel: apps, start/stop, logs
+    \\  ringserv reload [--port N]   change a RUNNING server's code, live
     \\  ringserv run <app.ring>      run for real (or run a plain program)
     \\  ringserv eval "<code>"       evaluate Ring code
     \\  ringserv where               versions and paths
@@ -220,6 +221,41 @@ pub fn main() !u8 {
             if (std.mem.eql(u8, a, "--json")) as_json = true else app = a;
         }
         return check.checkMode(arena, app, as_json);
+    }
+
+    // `ringserv reload [--port N]` — change a RUNNING server's code
+    // without stopping it. A thin client for POST /admin/reload, which
+    // does the real work; it lives here because "reload" is a verb an
+    // operator reaches for, and making them remember a URL and a method
+    // to do the most ordinary thing in an application's life is the
+    // ceremony phase 20 exists to remove.
+    if (std.mem.eql(u8, cmd, "reload")) {
+        var port: u16 = 8080;
+        var i: usize = 2;
+        while (i < args.len) : (i += 1) {
+            if (std.mem.eql(u8, args[i], "--port")) {
+                i += 1;
+                if (i >= args.len) {
+                    std.debug.print("ringserv reload: --port needs a number\n", .{});
+                    return 2;
+                }
+                port = std.fmt.parseInt(u16, args[i], 10) catch {
+                    std.debug.print("ringserv reload: --port needs a number, got {s}\n", .{args[i]});
+                    return 2;
+                };
+            } else {
+                port = std.fmt.parseInt(u16, args[i], 10) catch port;
+            }
+        }
+        const r = panel.proxyPost(arena, port, "/admin/reload", "{}") catch |e| {
+            std.debug.print("ringserv reload: no server answering on 127.0.0.1:{d} ({s})\n", .{ port, @errorName(e) });
+            return 1;
+        };
+        // The three outcomes read differently on purpose: an operator who
+        // cannot tell "nothing changed" from "half of it changed" will
+        // treat them the same, and only one of them is an emergency.
+        std.debug.print("{s}\n", .{r.body});
+        return if (r.status == 200) 0 else 1;
     }
 
     if (std.mem.eql(u8, cmd, "topology")) {
@@ -419,6 +455,11 @@ pub fn main() !u8 {
             // A `:js` path is resolved against the application, so the
             // application's own directory has to be known before it runs.
             bridge.setAppDir(std.fs.path.dirname(args[2]) orelse ".");
+            // Remembered so POST /admin/reload can re-read the very same
+            // file (phase 20). A server that cannot name where its code
+            // came from cannot reload it, and says so rather than
+            // reloading something else.
+            serve.setAppPath(args[2]);
             // Native ring normalizes CRLF as it reads; so must we.
             break :blk try cli.normalizeZ(arena, src);
         } else try arena.dupeZ(u8, args[2]);

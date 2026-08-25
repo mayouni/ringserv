@@ -29,11 +29,12 @@ commit, so the three documents can never disagree about where we stand.
 | 10    | The gesture                   | one-gesture function→service; yaml-like forms |
 | 11    | JS, honestly measured         | JS parity — modules, and the Node/Bun bar   |
 | 12    | The family handshake          | zero-config symbiosis across the family     |
-| 13    | Comptoir, run for real        | born in real constraints; opens the phase-8 gate |
+| ~~13~~ | ~~Comptoir, run for real~~ *(delivered 2026-08-25)* | born in real constraints; opened the phase-8 gate |
 | 14    | The phone                     | Android as a first-class target             |
 | 15    | The cloud story               | cloud scalers with real ergonomics          |
 | ~~18~~ | ~~Pages that react~~ *(delivered 2026-08-24)* | the unified model, felt: pushed updates |
 | ~~19~~ | ~~A subscription is a placed thing~~ *(delivered 2026-08-25)* | phase 18's exclusions, and the gap it left |
+| **20** | **Deploy, redeploy, reload -- without ceremony** | the deployment experience, and the panel as its face |
 | 16    | Agent hosting, named          | agent hosting as its own gesture            |
 | 17    | TypeScript                    | "and maybe TypeScript after"                |
 
@@ -114,6 +115,13 @@ a tampered one answers `ROMPUE` at the right entry; the friction list
 exists with every entry dispositioned.
 
 **Placement note.** Interleaves with 14–15 rather than blocking them.
+
+**DELIVERED 2026-08-25 — the Principal opened the gate.** A deployment of
+Comptoir stands at `D:\RingServ-Local` and has carried real orders; its
+journal verifies `INTACTE` and its restore is rehearsed, not assumed. The
+friction list is the deliverable and it has seven entries, six
+dispositioned and one open by decision. **Phase 8's held-open gate closes
+with it.** The record is in [roadmap.md](roadmap.md).
 
 **Progress, 2026-08-23:** the session-side deliverables are built —
 `ringserv journal import` with the legacy dialect (verify-before-write,
@@ -304,6 +312,86 @@ gets. `:never` refuses naming the declaration. An undeclared shape still
 streams, so phase 18's pages keep working. And a `:stream` naming a service
 that does not exist is a topology problem at boot, not a surprise at subscribe
 time.
+
+## Phase 20 — Deploy, redeploy, reload — without ceremony
+
+> **RELOAD IS DELIVERED, 2026-08-25** — `ringserv reload`, `POST
+> /admin/reload`, and a **Reload** button in the panel; 17 gates
+> (`tests/reload-gates.js`), 62 ms for three workers, the process and the
+> open connections both proven untouched. The doc is
+> [DEPLOY.md](DEPLOY.md).
+>
+> **`deploy` and `redeploy` are NOT delivered and are the next slice.**
+> Named rather than implied: today a deployment is still assembled by hand
+> (copy, point the database elsewhere, `--port`), and DEPLOY.md documents
+> that honestly instead of pretending a verb exists. The reload half was
+> taken first because it is the one a developer reaches for many times a
+> day, and because it is the part with no workaround — copying files can be
+> scripted; changing a live server's code cannot.
+>
+> Also delivered here, from the same hour: the panel row now WRAPS instead
+> of overflowing (measured at 620px, where the application's name read as
+> "ir" — the one thing the row exists to tell you).
+
+
+**Added 2026-08-25, by the Principal, immediately after phase 13 closed** —
+and it exists *because* phase 13 closed. Standing up one real deployment took
+an hour and produced four defects and five hand-written PowerShell scripts.
+The scripts are the evidence: **every one of them is a thing this server
+should have done itself.**
+
+**Vision:** *"deployed anywhere in minutes"*, and the vision's own test —
+"not a research tool, not a beautiful toy". A server whose deployment story
+is "copy the binary and the app folder, run" is honest and it is not a
+story. What a developer actually needs is to put something up, change it,
+and put it up again, without learning a second skill to do it.
+
+**The three verbs, and nothing else.**
+
+1. **deploy** — take an application and make it a running, named thing with
+   its own data, its own port and its own log, in one command.
+2. **redeploy** — replace the code, **keep the data**. The single most
+   common operation in the life of an application, and the one most likely
+   to be done wrong at 2 a.m.
+3. **reload** — change it *hot*: the running process re-reads the
+   application and keeps serving, with the port never dropped and no
+   connection lost.
+
+**Deliverables.**
+
+- **`ringserv deploy <path> [--as name] [--port N]`.** A deployment is a
+  named thing, not a folder somebody remembered to run: code, data, logs and
+  a manifest, with the data **outside the code** so a redeploy cannot reach
+  it. Then `ringserv ls | start | stop | status | logs | redeploy | reload`.
+- **Hot reload, and it is the heart of the phase.** Each worker owns its own
+  resident VM, so a reload is a **generation counter**: the source is
+  swapped, the counter bumped, and each worker re-evaluates the application
+  before its next job. No coordination, no restart, no dropped listener.
+  **A worker whose new source fails to evaluate re-evaluates the OLD one and
+  says so** — a reload that half-succeeds across N workers is worse than one
+  that refuses, so a partial reload is reported as a partial reload.
+- **The panel becomes the face of all three**, because a button is a simpler
+  UX than a flag. Deploy by pointing at a folder; Redeploy and **Reload** as
+  first-class buttons beside Start and Stop; the reload result — how many
+  workers took the new code — shown rather than assumed.
+- **The five PowerShell scripts phase 13 needed become zero.** Whatever
+  survives as genuinely local (a scheduled task, a backup destination) is
+  named in the deployment guide rather than pretended away.
+
+**What this phase REFUSES.** No process supervisor, no clustering, no
+service-manager integration, no remote deploy over the network. Those are
+real needs and each is a different product; a server that grows a supervisor
+grows a supervisor's failure modes. `ringserv deploy` puts an application up
+**on the machine you are on**, and says so.
+
+**Gate.** A deployment stands up from one command and answers; a redeploy
+replaces the code and the data survives, asserted by reading a row written
+before it; a hot reload changes a live service's answer **with the same
+connection still open and the port never rebound**, measured; a reload of a
+BROKEN application leaves every worker serving the old code and reports the
+refusal; the panel does all three and shows the worker count. And the local
+deployment at `D:\RingServ-Local` is rebuilt with the new verbs, so the
+phase's own evidence is the thing it replaces.
 
 ## Phase 16 — Agent hosting, named
 

@@ -254,6 +254,57 @@ fn findApp(name: []const u8) ?*App {
 /// socket with Connection: close — small, dependency-free, and immune to
 /// std.http API drift. The panel page calls apps THROUGH this, so the
 /// whole demo is same-origin.
+pub const PostResult = struct { status: u16, body: []const u8 };
+
+/// POST to any path on a local server, with the status code, not just the
+/// body. `proxyCall` below is this with the path fixed to /api/v1 and the
+/// status thrown away — kept separate because it is the hot path.
+///
+/// Phase 20 needs the status: a reload can answer 200 (every worker took
+/// the new code), 422 (none did, nothing changed) or 500 (some did, and
+/// the server is now serving two versions). Those are three different
+/// things to tell a person, and the body alone cannot be trusted to
+/// distinguish them.
+pub fn proxyPost(arena: std.mem.Allocator, port: u16, path: []const u8, body: []const u8) !PostResult {
+    const stream = try std.net.tcpConnectToHost(arena, "127.0.0.1", port);
+    defer stream.close();
+    var wbuf: [1024]u8 = undefined;
+    var sw = stream.writer(&wbuf);
+    const req = try std.fmt.allocPrint(arena, "POST {s} HTTP/1.1\r\nHost: 127.0.0.1:{d}\r\nContent-Type: application/json\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n{s}", .{ path, port, body.len, body });
+    try sw.interface.writeAll(req);
+    try sw.interface.flush();
+
+    var rbuf: [4096]u8 = undefined;
+    var sr = stream.reader(&rbuf);
+    const r = sr.interface();
+    var out: std.ArrayList(u8) = .empty;
+    while (true) {
+        const chunk = r.peekGreedy(1) catch break;
+        if (chunk.len == 0) break;
+        try out.appendSlice(arena, chunk);
+        r.toss(chunk.len);
+        if (out.items.len > 4 * 1024 * 1024) break;
+    }
+    const full = out.items;
+    var status: u16 = 0;
+    if (std.mem.indexOfScalar(u8, full, ' ')) |sp| {
+        const rest = full[sp + 1 ..];
+        const end = std.mem.indexOfScalar(u8, rest, ' ') orelse rest.len;
+        status = std.fmt.parseInt(u16, rest[0..@min(end, 3)], 10) catch 0;
+    }
+    const split = std.mem.indexOf(u8, full, "\r\n\r\n") orelse return .{ .status = status, .body = "" };
+    var payload = full[split + 4 ..];
+    if (std.mem.indexOf(u8, full[0..split], "chunked") != null) {
+        if (std.mem.indexOf(u8, payload, "\r\n")) |cl| {
+            const rest = payload[cl + 2 ..];
+            if (std.mem.lastIndexOf(u8, rest, "\r\n0\r\n")) |endz| {
+                payload = rest[0..endz];
+            } else payload = rest;
+        }
+    }
+    return .{ .status = status, .body = payload };
+}
+
 fn proxyCall(arena: std.mem.Allocator, port: u16, body: []const u8) ![]const u8 {
     const stream = try std.net.tcpConnectToHost(arena, "127.0.0.1", port);
     defer stream.close();
@@ -375,6 +426,52 @@ fn postStart(req: *httpz.Request, res: *httpz.Response) !void {
         try out.appendSlice(g_alloc, "\"}");
         res.body = out.items;
     }
+}
+
+/// Reload a running app's code without stopping it — the panel's half of
+/// phase 20, and the reason it is a BUTTON rather than a flag: the most
+/// ordinary act in an application's life should cost one click, not a
+/// remembered URL and a remembered method.
+///
+/// The panel does not reload anything itself. It asks the app's own
+/// server, on loopback, and RELAYS WHAT IT ANSWERS — including the status,
+/// because 200, 422 and 500 mean three different things here and only one
+/// of them is an emergency.
+fn postReload(req: *httpz.Request, res: *httpz.Response) !void {
+    const name = nameOf(req) orelse {
+        res.status = 400;
+        res.body = "{\"error\":\"which app? — {\\\"name\\\": ...}\"}";
+        return;
+    };
+    const app = findApp(name) orelse {
+        res.status = 404;
+        res.body = "{\"error\":\"no such app\"}";
+        return;
+    };
+    res.content_type = .JSON;
+    if (app.status != .running) {
+        res.status = 409;
+        res.body = "{\"error\":\"not running — start it first; a reload changes a LIVE server\"}";
+        return;
+    }
+    if (app.port == 0) {
+        res.status = 409;
+        res.body = "{\"error\":\"this app's port could not be read, so the panel cannot reach it to reload\"}";
+        return;
+    }
+    const r = panel_proxy: {
+        break :panel_proxy proxyPost(req.arena, app.port, "/admin/reload", "{}") catch |e| {
+            res.status = 502;
+            var out: std.ArrayList(u8) = .empty;
+            try out.appendSlice(g_alloc, "{\"error\":\"could not reach the app on its own port: ");
+            try jsonEscape(&out, @errorName(e));
+            try out.appendSlice(g_alloc, "\"}");
+            res.body = out.items;
+            return;
+        };
+    };
+    res.status = if (r.status == 0) 502 else r.status;
+    res.body = try req.arena.dupe(u8, r.body);
 }
 
 fn postStop(req: *httpz.Request, res: *httpz.Response) !void {
@@ -555,6 +652,7 @@ pub fn run(arena: std.mem.Allocator, dir: []const u8, port: u16, exe: []const u8
     router.get("/panel/state", getState, .{});
     router.post("/panel/start", postStart, .{});
     router.post("/panel/stop", postStop, .{});
+    router.post("/panel/reload", postReload, .{});
     router.get("/panel/logs", getLogs, .{});
     router.post("/panel/call", postCall, .{});
     router.post("/panel/server/start", postServerStart, .{});

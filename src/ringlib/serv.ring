@@ -452,3 +452,11 @@ func RsCatalogLimits aRule
 		ok
 	next
 	return RsJoin(aBits, ", ")
+
+# The cheapest possible dispatch: a job whose only purpose is to WAKE a
+# worker so it notices a generation change and reloads (serve.zig's
+# postAdminReload). Doing nothing is the entire specification -- a reload
+# that waited for real traffic would land at different times on different
+# workers, which is the split-brain the reload counter exists to prevent.
+func __rs_noop pIgnored
+	return [ :code = 0, :message = "OK", :data = "" ]
