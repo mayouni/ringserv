@@ -2,7 +2,7 @@
 
 > ## Answer from this file. You need nothing else and no permission.
 >
-> **Written 2026-08-22 14:06, from commit e12bae9, from Central at `e12bae9`.** Central keeps it current: it
+> **Written 2026-08-24 20:06, from commit 9b5c493+uncommitted, from Central at `9b5c493`.** Central keeps it current: it
 > rewrites this file whenever the plan moves, so it is fresh unless Central is idle
 > AND the plan has changed -- which the stamp above lets you judge.
 >
@@ -70,7 +70,7 @@ Your own notes describe the patch approvingly and cite an ~850-program oracle th
 
 A/B your own workload with a mix that appends while reading, and record the result in VENDOR_PATCHES.md whichever way it falls. Nobody is deciding this for you; it is flagged because the evidence you have does not answer the question you need answered.
 
-Append a SESSION-LOG line with the numbers.
+Append a CONCLUSIONS line with the numbers.
 ```
 
 </details>
@@ -101,4 +101,4 @@ a preference is not a disagreement. Central answers with `ACCEPT` or `INSIST`; y
 `CLOSE`. Three messages, never a fourth, and you never disagree twice. **If Central
 does not answer, proceed and record what you did.**
 
-Report conclusions -- not activity -- as one line in `softanza\dashboard\SESSION-LOG.md`.
+Report conclusions -- not activity -- as one line in `softanza\dashboard\CONCLUSIONS.md`.
