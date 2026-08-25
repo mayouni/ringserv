@@ -444,3 +444,36 @@ scheduling as **one** swap rather than six errands:
 | operator overloading with a list element | [`05dc3f49`](https://github.com/ring-lang/ring/commit/05dc3f49) | `o1 + a[1]` reads a type-confused pointer and the process dies silently |
 
 **Done — all three were dropped by the 2026-08-17 swap above.**
+
+## httpz — `posix.write` on a Windows socket (2026-08-25)
+
+`vendor/httpz/src/worker.zig`, `HTTPConn.writeAll`.
+
+**What it did.** Every DIRECT write to a connection — the ones that bypass
+the buffered response path — failed on Windows and dropped the connection.
+`posix.write` is `WriteFile` there, and `WriteFile` does not work on an
+overlapped socket. Ordinary responses take another path, so everything
+looked healthy.
+
+**Two symptoms, one call, and they were investigated three weeks apart as
+if they were unrelated:**
+
+- **No .NET client could POST to RingServ on Windows.** PowerShell and
+  every .NET Framework application send `Expect: 100-continue` by default;
+  httpz answers it by writing `HTTP/1.1 100 Continue` straight to the
+  socket. That write failed, and the request died with no reply.
+- **SSE response streaming wrote nothing** — recorded in phase 18 as a
+  Windows platform gap, with the suite skipping by name, on the reading
+  that httpz's streaming did not survive being disowned. That reading was
+  wrong about the cause and right about the fact.
+
+**The patch.** `send()` on Windows, `write()` elsewhere. One expression.
+
+**Found by deploying** (phase 13), not by testing: the first PowerShell
+`Invoke-WebRequest` POST against a real deployment failed, and curl with
+`-H "Expect: 100-continue"` reproduced it in one command. Neither the test
+suite nor CI sends that header, and CI's Windows job passes because
+`node`'s fetch does not send it either.
+
+**What it bought.** `tests/stream-gates.js` runs 21/21 on Windows instead
+of skipping 21, and `tests/streamgov-gates.js` 17/17 instead of 15.

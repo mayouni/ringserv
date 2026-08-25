@@ -411,6 +411,20 @@ func JournalImport cName, cText
 		      nHave + " record(s) — import fills an empty journal only")
 	ok
 
+	# A UTF-8 BOM is not a syntax error, it is a Windows text file.
+	#
+	# Found by deploying (phase 13, 2026-08-25): PowerShell's
+	# `Set-Content -Encoding utf8` writes EF BB BF at the head of the
+	# file, so the most ordinary way to produce a JSONL export on Windows
+	# produced one this importer refused -- with "line 1 is not JSON",
+	# which sends the reader to inspect JSON that is perfectly correct.
+	# Stripped once, here, rather than tolerated per line: a BOM belongs
+	# to the FILE, and a second one further in really would be corruption.
+	if len(cText) >= 3 and ascii(cText[1]) = 239 and
+	   ascii(cText[2]) = 187 and ascii(cText[3]) = 191
+		cText = substr(cText, 4)
+	ok
+
 	# pass 1: verify the whole chain as written, before touching the table
 	aLines = []
 	cPrev = "GENESE"

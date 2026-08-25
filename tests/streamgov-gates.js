@@ -28,11 +28,12 @@
 **   does not exist, or sitting on a table with no `:sync`, is a topology
 **   problem before a page is — that is the entire reason to declare it.
 **
-** PLATFORM: the REFUSAL gates need no streaming, so they run everywhere,
-** Windows included — a refusal is an ordinary JSON response. Only the gate
-** that asserts an allowed subscription actually opens must skip where this
-** build cannot stream, and it says so by name. That split is deliberate:
-** phase 18's suite skipped whole, and most of phase 19 need not.
+** PLATFORM: the REFUSAL gates need no streaming, so they run everywhere —
+** a refusal is an ordinary JSON response. Only the two gates that assert a
+** subscription actually OPENS need streaming, and they skip by name where
+** it is unavailable. That split was deliberate and it paid: when Windows
+** streaming was fixed on 2026-08-25 this suite went from 15 run to 17 with
+** no edit, and the 15 had been real all along.
 **
 **   node tests/streamgov-gates.js
 */

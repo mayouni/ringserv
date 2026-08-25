@@ -41,8 +41,9 @@ attempt. Three of those and the client stops trying, says so once in the
 console at info level, and speeds its poll up to every three seconds.
 
 **The deadline is the point, and it was measured rather than guessed.** When
-this server cannot stream — Windows today, a buffering proxy anywhere — the
-browser is *not* told. The connection is not refused, `onerror` never fires,
+a server cannot stream to a page — a buffering proxy, a dead intermediary,
+or this server on Windows before the fix noted below — the browser is *not*
+told. The connection is not refused, `onerror` never fires,
 and the page simply holds a stream that is open and silent for as long as the
 tab lives. A client that waited for an error would wait forever. A client
 that only counted errors would count zero.
@@ -180,11 +181,13 @@ optimisation, never load-bearing.
   2026-08-25 this endpoint answered `200` and offset `-1` for any name at
   all, so a page with a typo was told it was connected and then waited
   forever.
-- **Not on Windows in 0.9.** The vendored HTTP layer's response streaming
-  does not work there — measured three ways, and the test suite skips by
-  name on Windows rather than going red. Linux and macOS, the deployment
-  targets, are unaffected. A Windows page falls back to its poll after the
-  deadline above and keeps working, undamaged and slower.
+- ~~**Not on Windows in 0.9.**~~ **Windows works, since 2026-08-25.** It
+  was never SSE: `HTTPConn.writeAll` used `posix.write`, which is
+  `WriteFile` on Windows and does not work on an overlapped socket. One
+  expression — `send()` there, `write()` elsewhere — and the suite runs
+  21/21 on Windows instead of skipping. The same call is why no .NET
+  client could POST to this server on Windows at all. Found by deploying,
+  not by testing; see [VENDOR_PATCHES.md](VENDOR_PATCHES.md).
 
 ---
 

@@ -1718,7 +1718,19 @@ pub const HTTPConn = struct {
         var blocking = false;
 
         while (i < data.len) {
-            const n = posix.write(socket, data[i..]) catch |err| switch (err) {
+            // RINGSERV PATCH (2026-08-25, docs/VENDOR_PATCHES.md):
+            // posix.write() is WriteFile() on Windows, and WriteFile does
+            // not work on an overlapped socket -- so every DIRECT write to
+            // the connection failed there while ordinary buffered
+            // responses, which take another path, worked fine. Two
+            // symptoms, one cause: `Expect: 100-continue` dropped the
+            // connection (so no .NET client could POST at all), and SSE
+            // response streaming wrote nothing (phase 18's named platform
+            // gap). send() is the socket call on both families.
+            const n = (if (@import("builtin").os.tag == .windows)
+                posix.send(socket, data[i..], 0)
+            else
+                posix.write(socket, data[i..])) catch |err| switch (err) {
                 error.WouldBlock => {
                     try self.blockingMode();
                     blocking = true;

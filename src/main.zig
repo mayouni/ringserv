@@ -291,6 +291,23 @@ pub fn main() !u8 {
             return 2;
         }
         var serve_code: ?[:0]const u8 = null;
+        // Parsed for every form here; only `run` and `serve` act on it.
+        var cli_port: ?u16 = null;
+        {
+            var i: usize = 3;
+            while (i < args.len) : (i += 1) {
+                if (!std.mem.eql(u8, args[i], "--port")) continue;
+                i += 1;
+                if (i >= args.len) {
+                    std.debug.print("ringserv: --port needs a number\n", .{});
+                    return 2;
+                }
+                cli_port = std.fmt.parseInt(u16, args[i], 10) catch {
+                    std.debug.print("ringserv: --port needs a number, got {s}\n", .{args[i]});
+                    return 2;
+                };
+            }
+        }
         // THE GESTURE (docs/PLAN.md phase 10): `serve file.ring` turns a
         // file of plain functions into a service. The Zig side only
         // composes — a trailer calling RsGestureBoot is prepended to the
@@ -431,7 +448,31 @@ pub fn main() !u8 {
         }
 
         // If the program declared Serv(), the run continues as a server.
-        const cfg = servConfig(arena) orelse return 0;
+        var cfg = servConfig(arena) orelse return 0;
+
+        // `--port` on `run` too, not only on `serve` and `panel`.
+        //
+        // Found by DEPLOYING (phase 13, 2026-08-25): a deployment must be
+        // able to move a port without editing the application it deployed.
+        // The yaml cannot do it -- the declaration beats the file, by
+        // design -- so before this the only way was to edit the deployed
+        // copy of app.ring, which means re-editing it on every upgrade and
+        // one day forgetting. The concrete bite: Comptoir declares 8110,
+        // which is also the port its own test suite binds, so a counter and
+        // a test run on one machine would have killed each other.
+        //
+        // The collision is PRINTED, per the same rule the config file
+        // follows: an override nobody can see is how two people end up
+        // reading the same number differently.
+        if (cli_port) |p| {
+            if (p != cfg.port) {
+                std.debug.print(
+                    "ringserv: --port {d} overrides the application's :port = {d}\n",
+                    .{ p, cfg.port },
+                );
+            }
+            cfg.port = p;
+        }
         // Configure the database BEFORE any worker starts: each worker
         // opens its own connection to this path, which is read-only from
         // then on (no lock needed, per db.zig).

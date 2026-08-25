@@ -20,18 +20,26 @@
 **   application is still correct, just slower. That property is what
 **   makes this safe at 0.9, so it is asserted rather than assumed.
 **
-** PLATFORM: httpz's response streaming does not work on Windows in this
-** vendored version — measured, three ways (startEventStreamSync and
-** startEventStream both answer error.Unexpected; res.chunk writes
-** nothing and the socket closes). It works on Linux and macOS, which are
-** the deployment targets, and CI runs there. On Windows this suite
-** SKIPS BY NAME rather than going red, the same discipline the family
-** suite uses for UDP on macOS runners.
+** PLATFORM, and the entry is kept because the CORRECTION is the lesson.
+** This suite skipped on Windows from 2026-08-24 to 2026-08-25 on the
+** reading that "httpz's response streaming does not work on Windows".
+** The FACT was right and the CAUSE was wrong: HTTPConn.writeAll used
+** posix.write, which is WriteFile on Windows and does not work on an
+** overlapped socket. One expression — send() there — and this suite runs
+** everywhere. The same call is why no .NET client could POST to this
+** server on Windows at all, which is how it was finally found: by
+** DEPLOYING, not by testing. See docs/VENDOR_PATCHES.md.
 **
-** FROM A BROWSER, that same failure is SILENT — measured: the connection
-** is not refused and `onerror` never fires; the page simply holds an open
-** stream that never delivers a frame. That is why the client retreats on
-** a deadline rather than on an error, and why the retreat is gated here.
+** THE PLATFORM PROBE BELOW STAYS. A suite that cannot tell "the feature
+** is broken" from "this machine cannot run it" is a suite that reports
+** the wrong one, and the probe is what keeps that honest — on a platform
+** nobody has tried yet as much as on one already fixed.
+**
+** FROM A BROWSER, a streaming failure is SILENT — measured: the
+** connection is not refused and `onerror` never fires; the page simply
+** holds an open stream that never delivers a frame. That is why the
+** client retreats on a deadline rather than on an error, and why the
+** retreat is gated here.
 **
 **   node tests/stream-gates.js
 */
@@ -125,10 +133,11 @@ async function listen(url, ms, headers) {
     // code that works everywhere it is deployed.
     const probe = await listen(B + "/sync/stream?shape=menu", 3000);
     if (probe.events.length === 0) {
-        console.log("SKIP  pages that react — this build cannot stream responses on " +
-            process.platform + " (httpz's response streaming, measured: " +
-            "startEventStream* answer error.Unexpected and res.chunk writes " +
-            "nothing). It works on linux and darwin, which CI runs. " +
+        console.log("SKIP  pages that react — no frame arrived on " +
+            process.platform + ", so this build cannot stream responses here. " +
+            "Windows once looked like this and the cause was HTTPConn.writeAll " +
+            "using posix.write on a socket (docs/VENDOR_PATCHES.md); if you are " +
+            "reading this on a platform that should work, start there. " +
             "21 gates owned, 0 run here.");
         await stop();
         console.log("\n0 passed, 0 failed (21 skipped by name)");

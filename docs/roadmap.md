@@ -536,7 +536,18 @@ Comptoir's ticket half still polls too, and **the page says which half is
 pushed and which half still asks**, because a page claiming to be reactive
 everywhere and quietly not is worse than one that polls.
 
-**Windows, decided rather than deferred.** The vendored HTTP layer cannot
+**Windows, decided rather than deferred — AND THE DECISION WAS OVERTAKEN
+ON 2026-08-25, one day later, by deploying.** The gap was never SSE:
+`HTTPConn.writeAll` used `posix.write`, which is `WriteFile` on Windows and
+does not work on an overlapped socket. One expression fixed it and this
+suite now runs 21/21 there. The same call is why no .NET client could POST
+to this server on Windows at all. **The reading below was right about the
+FACT and wrong about the CAUSE, and it is left standing rather than
+rewritten, because the lesson is that a platform gap accepted on a
+plausible cause stops anyone looking for the real one.** See
+[VENDOR_PATCHES.md](VENDOR_PATCHES.md) and friction 5.
+
+The reading as it stood: the vendored HTTP layer cannot
 stream responses on Windows — measured three ways (`startEventStreamSync` and
 `startEventStream` both answer `error.Unexpected`; `res.chunk` writes nothing
 and the socket closes). The decision is **to ship without it**: a Windows page
