@@ -88,33 +88,36 @@ nav {
     border-bottom: 1px solid var(--border);
 }
 nav .wrap { display: flex; align-items: center; gap: 1.4rem; padding-top: .7rem; padding-bottom: .7rem; }
-/* SEVEN stops and one call to action, in the order you actually use them.
-   Rule 27 caps a horizontal menu at eight, so this sits at the edge on
-   purpose rather than by drift:
+/* FIVE stops and one call to action: the LIFECYCLE, and the reading.
 
        Start here   · nothing installed, to a running service
-       One model    · the same VM in the page and on the server
        Build        · writing it: five service shapes, rules, storage
        Deploy       · putting it up, and changing it without stopping it
        Monitor      · the panel: is it up, what did it say, is the record whole
-       Q&A
-       Blog         · the posts
+       Blog         · the posts -- and inside it, "One model" and the Q&A
 
-   THE MIDDLE FIVE ARE A LIFECYCLE, not a list of topics: understand it,
-   write it, put it up, watch it. That is the order someone evaluates a
-   server in, and a menu that names JOBS is readable by someone who has
-   not read anything else on the site -- which a menu naming CONCEPTS is
-   not. Adopted 2026-08-25 on the author's reading of the ring++ site,
-   whose menu names what its tool does at every stop.
+   THE FIRST FOUR ARE A LIFECYCLE, not a list of topics: start it, write
+   it, put it up, watch it. That is the order someone evaluates a server
+   in, and a menu that names JOBS is readable by someone who has read
+   nothing else on the site -- which a menu naming CONCEPTS is not.
+   Adopted 2026-08-25 on the author's reading of the ring++ site, whose
+   menu names what its tool does at every stop.
 
-   This comment previously described a menu with "Local-first apps" and
-   "Why Ring?" in it -- pages this site has never had. It was inherited
-   whole when the design was copied from RingScript and never re-read. A
-   comment that survives the thing it describes is worse than no comment,
-   because it is believed.
+   ONE MODEL AND THE Q&A LEFT THE BAR WITHOUT LEAVING THE SITE (rule 116:
+   a menu does not grow by promotion). Both are things you READ rather
+   than things you DO, so the reading branch names them, at the top of
+   its own page where they are the first two entries. Their URLs are
+   unchanged -- the Ring website and the announcement posts point at them.
 
-   The active stop is the BRANCH, not the page -- so a blog article marks
-   Blog, and the highlight never claims a structure that is not there.
+   This comment once described a menu with "Local-first apps" and "Why
+   Ring?" in it -- pages this site has never had. It was inherited whole
+   when the design was copied from RingScript and never re-read. A comment
+   that survives the thing it describes is worse than no comment, because
+   it is believed.
+
+   The active stop is the BRANCH, not the page -- so a blog article, the
+   Q&A and One model all mark Blog, and the highlight never claims a
+   structure that is not there.
 
    There is no breadcrumb trail, deliberately: the branches are one level
    deep and each parent names its children in its own text, so a trail
@@ -123,14 +126,19 @@ nav a { color: var(--ink-soft); text-decoration: none; font-size: var(--floor); 
 nav a:hover { color: var(--ink); }
 nav a.active { color: var(--accent); font-weight: 600; }
 
-/* SEVEN stops fit one row on a laptop and three on a phone. Measured at
-   375px: 154px of menu, on a 812px screen, PERMANENTLY -- because the bar
-   is sticky. That is 19% of a phone given to navigation the reader is not
-   using, and it is the real cost of the seventh stop.
+/* The bar fits one row on a laptop. On a phone it does not, and that is
+   not a stop-count problem: measured at 375px with SEVEN stops it was
+   154px, and with FIVE it is 150px -- the wordmark takes its own line
+   either way, so cutting the menu barely moved it.
    
-   So below 720px the bar stops being sticky and scrolls away like any
-   other content, and the gaps tighten. The menu is still there, one flick
-   up; the screen is the reader's again. */
+   150px on an 812px screen is 18% of a phone given to navigation the
+   reader is not using, and it would be given PERMANENTLY, because the bar
+   is sticky. So below 720px it stops being sticky and scrolls away like
+   any other content, and the gaps tighten. The menu is one flick up; the
+   screen is the reader's again.
+   
+   Kept after the menu was cut to five, because the measurement said to:
+   the fix was earned by the phone, not by the seventh stop. */
 @media (max-width: 720px) {
     nav { position: static; }
     nav .wrap { gap: .55rem 1rem; padding-top: .6rem; padding-bottom: .6rem; }
