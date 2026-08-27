@@ -76,6 +76,23 @@ try { sqlite = require("node:sqlite"); } catch {}
 let db = null;
 if (sqlite) {
     db = new sqlite.DatabaseSync(process.env.BENCH_DB_NODE);
+    // SAME DURABILITY ON BOTH SIDES, or this row measures fsync policy
+    // rather than engines.
+    //
+    // RingServ compiles SQLite with WAL and synchronous=NORMAL
+    // (-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1). node:sqlite opens with
+    // SQLite's own defaults -- a rollback journal at synchronous=FULL,
+    // which fsyncs on every commit. Left alone, this row reported
+    // RingServ 0.82 ms against Node 9.97 ms on Windows: a 12x "win" that
+    // was entirely the flush, and entirely in our favour. Found 2026-08-26
+    // by running the same harness on Linux, where Node answered 0.63 ms
+    // and the story fell apart.
+    //
+    // A benchmark that flatters its author by accident is worse than one
+    // that loses honestly, so both sides now say the same thing about
+    // durability, and the row is a comparison again.
+    db.exec("pragma journal_mode = wal");
+    db.exec("pragma synchronous = normal");
     db.exec("create table if not exists sales (id integer primary key autoincrement, item text, amount integer)");
 }
 function total(items) { let t = 0; for (const it of items) t += it.price; return t; }

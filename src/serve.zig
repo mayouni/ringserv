@@ -87,17 +87,60 @@ pub fn setAppPath(p: []const u8) void {
     g_app_path = p;
 }
 
-fn enqueue(job: *Job) void {
+/// Enqueue, and report how many jobs were ALREADY waiting.
+///
+/// The caller uses that number to decide whether to spin: a queue that was
+/// empty means a worker is probably idle and about to pick this up in
+/// microseconds; a queue with work in it means parking is the honest
+/// choice, because nobody is coming soon.
+fn enqueueDepth(job: *Job) usize {
     g_mutex.lock();
     defer g_mutex.unlock();
+    const depth = g_queue.items.len;
     g_queue.append(alloc, job) catch {
         job.status = 503;
         job.response.appendSlice(alloc, "{\"code\":1,\"message\":\"queue full\",\"data\":\"\"}") catch {};
         job.done.set();
-        return;
+        return depth;
     };
     g_cond.signal();
+    return depth;
 }
+
+fn enqueue(job: *Job) void {
+    _ = enqueueDepth(job);
+}
+
+// A SPIN-BEFORE-PARK WAS TRIED HERE AND REMOVED, 2026-08-26, because it
+// bought nothing: 0.72 ms before, 0.77 ms after, which is noise pointing
+// the wrong way. The reasoning had been that parking a thread around an
+// 80-microsecond job costs two context switches -- true, and not where
+// the time goes. Recorded so the next person with the same good idea
+// spends five minutes reading this instead of an hour measuring it.
+
+// TWO SPIN EXPERIMENTS WERE RUN HERE AND BOTH REMOVED, 2026-08-26.
+// Recorded because the reasoning is the useful part, and because the idea
+// is good enough that somebody will have it again.
+//
+// The measurement that prompted them: a dispatch costs 0.08 ms INSIDE the
+// VM and ~0.73 ms over HTTP, so Ring is not the cost -- the transport and
+// the handoff are. Parking and waking a thread around an 80-microsecond
+// job is two context switches, and they are on the critical path.
+//
+//   Spinning on the HTTP THREAD before parking on the completion event:
+//   0.72 ms before, 0.77 ms after. Nothing, pointing the wrong way.
+//
+//   Spinning HERE, on the worker, before parking on the condition
+//   variable -- the wake that is genuinely on the critical path: 0.73 ms
+//   before, 0.69-0.70 ms after. Real, about 4-5%, and INSIDE the
+//   run-to-run spread already seen across three runs (0.73 / 0.73 / 0.76).
+//
+// The 4% was dropped anyway, and not because it was small: A SPINNING
+// WORKER BURNS A CORE TO SAVE A CONTEXT SWITCH, and this server is meant
+// to run on a Raspberry Pi, a phone, and a laptop under a shop counter.
+// On a one-core machine the spin takes the core away from the very HTTP
+// thread that is waiting for it. A win measured on a 12-core desktop that
+// becomes a loss on the target hardware is not a win.
 
 fn dequeue() *Job {
     g_mutex.lock();

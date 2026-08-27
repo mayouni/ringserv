@@ -75,6 +75,27 @@ server.on("exit", () => { died = true; });
             js.json.data.greeting === "Hello, world!", JSON.stringify(js.json));
     }
 
+    // ==================== 1b. the wire fast path (2026-08-26, BENCHMARKS.md)
+    //
+    // A wire reply now goes out on the guest's OWN TEXT without a Ring
+    // decode, checked only by its first and last character. These gates
+    // exist because a check that cheap could plausibly be wrong in either
+    // direction: too loose (something that is not an object slips
+    // through) or the fallback broken (a bare value stops being refused).
+    {
+        const lossless = await call("greeter", "lossless", {});
+        check("an object reply still carries a false and a null LOSSLESSLY",
+            lossless.json.data.ok === false && lossless.json.data.note === null &&
+            lossless.json.data.n === 0,
+            JSON.stringify(lossless.json));
+
+        const bare = await call("greeter", "bareNumber", {});
+        check("a reply that is NOT an object is still refused, not sent raw",
+            bare.status === 500 && bare.json && bare.json.code === 1 &&
+            /must answer an object, not a bare value/.test(bare.json.message || ""),
+            JSON.stringify(bare.status) + " " + JSON.stringify(bare.json));
+    }
+
     // ============================================= 2. the service form itself
     let r = await call("greeter", "slow", { n: 21 });
     check("an async action answers with its value", r.json.data.n === 42,

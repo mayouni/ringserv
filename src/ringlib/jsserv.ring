@@ -269,6 +269,37 @@ func RsJsAbsolute cPath
 # Dispatch one call into the guest. The reply crosses as JSON and is
 # decoded here, so what the dispatcher hands back is an ordinary Ring
 # envelope that the rest of servlib cannot distinguish from a Ring one.
+# Does this text begin and end as a JSON object? A first-and-last-character
+# question, deliberately -- it is asked on every JS reply that goes to the
+# wire, so it may not walk the payload.
+#
+# INDEXED, NEVER substr(): `substr(s, i, 1)` COPIES on Ring 1.27 (316 us
+# per call on a 1.8 MB buffer, measured by Central 2026-08-20), and a
+# "cheap check" that copies the string is not a cheap check.
+func RsJsIsObjectText cText
+	nLen = len(cText)
+	if nLen < 2
+		return 0
+	ok
+	i = 1
+	while i <= nLen and RsJsIsSpace(cText[i])
+		i++
+	end
+	if i > nLen or cText[i] != "{"
+		return 0
+	ok
+	j = nLen
+	while j >= 1 and RsJsIsSpace(cText[j])
+		j--
+	end
+	if j < 1 or cText[j] != "}"
+		return 0
+	ok
+	return 1
+
+func RsJsIsSpace c
+	return c = " " or c = char(9) or c = char(10) or c = char(13)
+
 func RsJsDispatch cService, cFile, aReq
 	# Nesting, not rounds. A service that calls ITSELF does not loop inside
 	# one trampoline — it opens a new one each time, so the round counter
@@ -289,18 +320,43 @@ func RsJsDispatch cService, cFile, aReq
 	cOut = __js_call(cService, cAction, JsonEncode(RsDeclGet(aReq, "payload", [])))
 	cOut = RsJsTrampoline(cService, cAction, cOut)
 
+	# THE WIRE PATH DOES NOT DECODE AT ALL (2026-08-26).
+	#
+	# When this reply is the whole response, the guest's own text goes out
+	# verbatim -- so decoding it first, only to throw the result away, was
+	# a full JSON parse per request whose entire product was discarded.
+	# MEASURED, which is why this exists: a 100-item reply is 5.6 KB, and
+	# QuickJS builds AND encodes the whole thing in 0.145 ms while the
+	# request cost 0.62 ms more than an empty one. The parse was most of
+	# the difference.
+	#
+	# It is safe to skip because the text came from JS_JSONStringify
+	# (src/js.zig, encodeValue) and that function's output is valid JSON
+	# or an exception -- there is no third outcome. What the decode was
+	# ALSO doing is the `islist` check below, "an object, not a bare
+	# value", and that is answered by looking at the first and last
+	# characters rather than at everything between them.
+	#
+	# ANYTHING THAT DOES NOT LOOK LIKE AN OBJECT FALLS THROUGH to the
+	# original path, so every error message below is produced exactly as
+	# before -- a guest that answers `42`, or nothing at all, gets the
+	# same sentence it always got.
+	if lRsOnWire = 1 and nRsDispatchDepth = 1 and RsJsIsObjectText(cOut)
+		return [ "__rs_raw_json__", cOut ]
+	ok
+
 	# Validate by decoding, then RETURN THE GUEST'S OWN TEXT.
 	#
-	# The decode still happens, because a service that answered something
-	# that is not JSON must fail here rather than at the socket. But its
-	# result is thrown away: Ring has no boolean and no null, so a reply
-	# of { ok: false, error: null } decoded into Ring and re-encoded came
-	# back out as { ok: 0, error: "" }. The reference application found it
-	# the first time a receipt called an unpaid ticket `paid: 0`.
+	# The decode happens for a RING caller -- another service, or
+	# `ringserv test` -- because it wants a list. Its result is thrown
+	# away only on the wire path above: Ring has no boolean and no null,
+	# so a reply of { ok: false, error: null } decoded into Ring and
+	# re-encoded came back out as { ok: 0, error: "" }. The reference
+	# application found it the first time a receipt called an unpaid
+	# ticket `paid: 0`.
 	#
 	# So the text the guest produced is carried through verbatim (the
 	# __rs_raw_json__ sentinel, honoured by the encoder in src/rs_json.c).
-	# Lossless by construction, and one encode cheaper than before.
 	try
 		pReply = JsonDecode(cOut)
 	catch

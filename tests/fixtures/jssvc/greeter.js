@@ -33,4 +33,19 @@ const service = {
     boom() {
         throw new Error("deliberate JS failure");
     },
+
+    // A reply that is not a JSON object -- the case the wire-path fast
+    // check must still refuse, exactly as the old decode-and-inspect path
+    // did (docs/BENCHMARKS.md, 2026-08-26).
+    bareNumber() {
+        return 42;
+    },
+
+    // Booleans and null survive the wire only because the guest's own
+    // text goes out untouched. Decoding into Ring and re-encoding would
+    // turn `false` into `0` and `null` into `""` -- this is what the
+    // whole raw-JSON path exists to prevent.
+    lossless() {
+        return { code: 0, message: "OK", data: { ok: false, note: null, n: 0 } };
+    },
 };
