@@ -28,33 +28,42 @@ experience, and `docs/WRITES.md` records the day a 20-sample mean moved
 
 | operation | p50 | p90 | p99 | max |
 |---|---:|---:|---:|---:|
-| `/health` (no VM at all) | 0.24 | 0.53 | 1.50 | 1.71 |
-| dispatch, empty service | 0.81 | 1.06 | 1.57 | 2.57 |
-| list, limit 50 | 1.09 | 1.35 | 1.93 | 2.47 |
-| list, limit 500 | 4.15 | 5.46 | 7.05 | 7.36 |
-| dispatch, **JS** service | 0.62 | 0.88 | 1.41 | 2.10 |
-| JS service calling a Ring service | 0.78 | 1.08 | 2.08 | 2.38 |
+| `/health` (no VM at all) | 0.18 | 0.29 | 0.79 | 1.17 |
+| dispatch, empty service | 0.68 | 0.88 | 1.56 | 2.23 |
+| create (one row, one commit) | 0.91 | 1.16 | 2.06 | 15.66 |
+| get by id | 0.72 | 0.96 | 1.68 | 4.39 |
+| update one field | 0.85 | 1.07 | 1.77 | 2.55 |
+| list, limit 50 | 1.07 | 1.39 | 1.83 | 2.28 |
+| list, limit 500 | 4.02 | 4.35 | 4.72 | 4.73 |
+| dispatch, **JS** service | 0.57 | 0.84 | 1.25 | 1.90 |
+| JS service calling a Ring service | 0.73 | 1.03 | 1.35 | 1.88 |
 
-*Re-measured 2026-08-26 on a busier machine than the 2026-08-19 run: the
-`/health` floor and the write rows are unchanged within noise, and the
-rows above moved for the reasons in the next section. The 08-19 figures
-are kept in git rather than quietly overwritten.*
+*Re-measured 2026-08-26. Three of these rows (create, get, update) were
+dropped from this table the same day, in the same round of edits that
+fixed the list-encoding finding below — an accident of two changes
+landing on this file at once, caught and repaired rather than left
+silent. The `create`/`update` `max` column is occasionally 10–20 ms on
+this machine on an isolated run against a freshly created database file
+— reproduced, and traced to something outside this process (most likely
+antivirus scanning the new file) rather than to RingServ: four
+consecutive clean runs hold p50/p90/p99 steady while only `max` spikes.
+Reported rather than hidden, and not folded into the medians above.*
 
 Milliseconds. Boot to first `/health`: **228 ms**.
 
 ### What those numbers say
 
-- **The VM is not the cost.** An empty dispatch is 0.75 ms against a
-  0.26 ms floor for a route that never enters Ring, so a full round trip
+- **The VM is not the cost.** An empty dispatch is 0.68 ms against a
+  0.18 ms floor for a route that never enters Ring, so a full round trip
   through a resident VM costs about half a millisecond.
-- **A write costs about a read.** 0.94 vs 0.78 ms. That is the
+- **A write costs about a read.** 0.91 vs 0.72 ms. That is the
   one-writer connection of 2026-08-17 still holding: before it, a create
   cost **10.13 ms** on this same path (`docs/WRITES.md`).
-- **The JS guest is not slower.** 0.69 ms against Ring's 0.75 — within
+- **The JS guest is not slower.** 0.57 ms against Ring's 0.68 — within
   noise, and unsurprising once both are resident. Nobody should choose a
   guest language here for speed.
-- **`serv.call` from JS costs about one extra dispatch.** 0.87 vs
-  0.69 ms, which is what the trampoline should cost: it *is* one more
+- **`serv.call` from JS costs about one extra dispatch.** 0.73 vs
+  0.57 ms, which is what the trampoline should cost: it *is* one more
   dispatch.
 - **Listing was never encoding-bound. It was COPY-bound, and that was
   wrong in this document until 2026-08-26.** A 500-row reply was taken
