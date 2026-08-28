@@ -150,6 +150,20 @@ approximate.
   that cannot reach its database refuses and names the reason;
   `start()` refuses to serve at all if no worker ever came up. Gated by
   `tests/db-boot-gates.js` (8 gates on every platform, 2 more Linux-only).
+- **Checked, not thin: whether malformed bytes on the wire can panic the
+  listener.** Raised 2026-08-26 via Central's mailbox — zing's own dev
+  server panicked on an empty request-line target inside a
+  `catch {}` that could not see the panic (a panic exits the whole
+  process; Zig has no per-thread unwind to stop it at), and their
+  message asked only whether anything runs on RingServ's own accept
+  path the same way. It does not: parsing goes through the vendored
+  `httpz` library, whose request-line/header parser guards every
+  fixed-size index with an explicit length check rather than leaning
+  on Zig's compiled-in bounds checking — which matters because
+  RingServ ships `ReleaseFast`, where that safety net does not exist.
+  Measured, not just read: `tests/listener-hardening-gates.js` fires
+  15 malformed shapes (the exact zing case among them) at a live
+  process and confirms `/health` still answers after every one.
 - ~~Only the Windows binary has been run.~~ **False since 2026-08-22**
   (`.github/workflows/gates.yml`): macOS, Linux and Windows all build and
   run every gate on every push. Left here corrected rather than deleted,

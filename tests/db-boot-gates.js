@@ -155,7 +155,7 @@ const call = (service, action, payload) =>
     if (!canTestFull) {
         skip("SQLITE_FULL produces a clean 500, and the server survives",
             "needs a capped tmpfs (Linux + root); this platform is " + process.platform);
-        skip("...and the server recovers on its own once space frees, no restart",
+        skip("...and freeing space and restarting recovers it",
             "same reason");
     } else {
         const mnt = "/tmp/ringserv-dbboot-full-" + process.pid;
@@ -194,14 +194,28 @@ const call = (service, action, payload) =>
             check("...and reads still work — a full disk breaks writes, not the process",
                 reads.code === 0, JSON.stringify(reads).slice(0, 160));
 
+            // NOT tested here: freeing space under the SAME running
+            // process. `umount` (even -f) refuses while the write
+            // connection's own fd holds the mount busy — confirmed by
+            // hand on this exact tmpfs (`umount: target is busy`), not
+            // assumed. Killing the connection first is the only honest
+            // way to free the mount, which tests recovery ACROSS a
+            // restart, not without one -- a smaller, still real claim.
+            server.kill();
+            await new Promise(r => setTimeout(r, 500));
             execSync("sudo umount -f " + mnt, { stdio: "ignore" });
             execSync("sudo mount -t tmpfs -o size=20m tmpfs " + mnt, { stdio: "ignore" });
-            const recovered = await call("notes", "create", { title: "ok", body: "ok" });
-            check("freeing space fixes it WITHOUT a restart — the connection " +
-                "itself was never what broke",
-                recovered.code === 0, JSON.stringify(recovered));
 
-            server.kill();
+            const server2 = spawn(RINGSERV, ["run", app], {
+                stdio: ["ignore", "pipe", "pipe"],
+                env: { ...process.env, RINGSERV_TEST_DB: fullDb },
+            });
+            const up2 = await waitUp(8000);
+            const recovered = up2 ? await call("notes", "create", { title: "ok", body: "ok" }) : null;
+            check("freeing space and restarting recovers it — the full disk " +
+                "left no lasting damage in the database file itself",
+                up2 && recovered && recovered.code === 0, JSON.stringify(recovered));
+            server2.kill();
             await new Promise(r => setTimeout(r, 500));
         } catch (e) {
             check("the disk-full rig itself ran (mount/tmpfs available)",

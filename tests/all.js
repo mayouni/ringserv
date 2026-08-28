@@ -32,6 +32,7 @@ const suites = [
     { name: "data fuzz         ", node: "fuzz-data.js" },
     { name: "CLI gates         ", node: "cli-gates.js" },
     { name: "db boot refusal   ", node: "db-boot-gates.js" },
+    { name: "listener hardening", node: "listener-hardening-gates.js" },
     { name: "load anchor       ", node: "loader-gates.js" },
     { name: "library root      ", node: "loadroot-gates.js" },
     { name: "check + docs      ", node: "check-gates.js" },
