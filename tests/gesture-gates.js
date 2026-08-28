@@ -91,28 +91,28 @@ function evalRing(code) {
     // ================================================= 2. the gesture serves
     start(["serve", CALC]);
     check("a file of plain functions comes up (port from ringserv.yaml)",
-        await waitUp(8095));
+        await waitUp(8211));
 
-    let r = JSON.parse(await post(8095, { service: "calc", action: "hello", payload: { name: "ada" } }));
+    let r = JSON.parse(await post(8211, { service: "calc", action: "hello", payload: { name: "ada" } }));
     check("a string in, a string out, enveloped",
         r.code === 0 && r.data === "Hello, ada!", JSON.stringify(r));
 
-    r = JSON.parse(await post(8095, { service: "calc", action: "add", payload: { a: 19, b: 23 } }));
+    r = JSON.parse(await post(8211, { service: "calc", action: "add", payload: { a: 19, b: 23 } }));
     check("numbers map by name", r.code === 0 && r.data === 42, JSON.stringify(r));
 
-    r = JSON.parse(await post(8095, { service: "calc", action: "add", payload: { B: 2, A: 1 } }));
+    r = JSON.parse(await post(8211, { service: "calc", action: "add", payload: { B: 2, A: 1 } }));
     check("...case-insensitively, order-independently",
         r.code === 0 && r.data === 3, JSON.stringify(r));
 
-    r = JSON.parse(await post(8095, { service: "calc", action: "stats", payload: { xs: [3, 4, 5] } }));
+    r = JSON.parse(await post(8211, { service: "calc", action: "stats", payload: { xs: [3, 4, 5] } }));
     check("a list in, a mapping out",
         r.code === 0 && r.data.count === 3 && r.data.sum === 12, JSON.stringify(r));
 
-    r = JSON.parse(await post(8095, { service: "calc", action: "add", payload: { a: 1, b: 2, extra: 9 } }));
+    r = JSON.parse(await post(8211, { service: "calc", action: "add", payload: { a: 1, b: 2, extra: 9 } }));
     check("extra payload keys are ignored, documented as such",
         r.code === 0 && r.data === 3, JSON.stringify(r));
 
-    let res = await fetch("http://127.0.0.1:8095/api/v1", {
+    let res = await fetch("http://127.0.0.1:8211/api/v1", {
         method: "POST",
         body: JSON.stringify({ service: "calc", action: "add", payload: { a: 1 } }) });
     r = JSON.parse(await res.text());
@@ -120,7 +120,7 @@ function evalRing(code) {
         res.status === 422 && r.code === 1 && /missing parameter/.test(r.message) &&
         /b/.test(r.message), res.status + " " + JSON.stringify(r));
 
-    r = JSON.parse(await post(8095, { service: "calc", action: "_secret", payload: {} }));
+    r = JSON.parse(await post(8211, { service: "calc", action: "_secret", payload: {} }));
     check("a leading underscore is private over the wire",
         r.code === 1 && /unknown action/.test(r.message), JSON.stringify(r));
     await stop();

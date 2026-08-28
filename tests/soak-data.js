@@ -23,7 +23,8 @@ const path = require("path");
 const RINGSERV = path.join(__dirname, "..", "zig-out", "bin",
     process.platform === "win32" ? "ringserv.exe" : "ringserv");
 const FIXTURE = path.join(__dirname, "fixtures", "crud-app.ring");
-const BASE = "http://127.0.0.1:8095";
+const PORT = 8215;
+const BASE = "http://127.0.0.1:" + PORT;
 const OPS = parseInt(process.argv[2] || "5000", 10);
 const SEED = 2000;
 
@@ -65,7 +66,7 @@ async function call(service, action, payload) {
     const dbFile = path.join(tmp, "soak.db").replace(/\\/g, "/");
     const server = spawn(RINGSERV, ["run", FIXTURE], {
         stdio: ["ignore", "ignore", "pipe"],
-        env: { ...process.env, RINGSERV_TEST_DB: dbFile },
+        env: { ...process.env, RINGSERV_TEST_DB: dbFile, RINGSERV_TEST_PORT: String(PORT) },
     });
     let died = false;
     server.on("exit", () => { died = true; });
@@ -164,7 +165,7 @@ async function call(service, action, payload) {
         await new Promise(res => setTimeout(res, 1200));
         const again = spawn(RINGSERV, ["run", FIXTURE], {
             stdio: ["ignore", "ignore", "pipe"],
-            env: { ...process.env, RINGSERV_TEST_DB: dbFile },
+            env: { ...process.env, RINGSERV_TEST_DB: dbFile, RINGSERV_TEST_PORT: String(PORT) },
         });
         try {
             const t1 = Date.now();

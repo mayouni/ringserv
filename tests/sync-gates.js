@@ -26,7 +26,7 @@ const ROOT = path.join(__dirname, "..");
 const RINGSERV = path.join(ROOT, "zig-out", "bin",
     process.platform === "win32" ? "ringserv.exe" : "ringserv");
 const FIXTURE = path.join(ROOT, "tests", "fixtures", "sync-app.ring");
-const B = "http://127.0.0.1:8093";
+const B = "http://127.0.0.1:8212";
 const CLIENTS = parseInt(process.argv[2] || "6", 10);
 const PER_CLIENT = parseInt(process.argv[3] || "12", 10);
 

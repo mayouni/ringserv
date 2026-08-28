@@ -22,7 +22,7 @@ else
 ok
 
 RingServ([
-	:port     = 8093,
+	:port     = 8212,
 	:workers  = 3,
 	:database = sysget("RINGSERV_TEST_DB"),
 

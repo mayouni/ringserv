@@ -3,8 +3,14 @@
 cDb = sysget("RINGSERV_TEST_DB")
 if cDb = "" cDb = ":memory:" ok
 
+# Three suites share this fixture (crud-gates.js, soak-data.js,
+# fuzz-data.js) -- each sets its own port so they can run without
+# colliding, rather than forcing one number on all three.
+cPort = sysget("RINGSERV_TEST_PORT")
+if cPort = "" cPort = "8095" ok
+
 RingServ([
-	:port     = 8095,
+	:port     = number(cPort),
 	:workers  = 3,
 	:database = cDb,
 

@@ -130,8 +130,25 @@ approximate.
   average: the same work measured between 0.8 ms and 12.9 ms across
   runs before the conditions were controlled. WRITES.md records that
   mistake too, because the numbers it corrects were mine.
-- **Ports are hardcoded** (8080/8093/8094/8095), so a leftover
-  process breaks a run, and suites cannot run in parallel.
+- ~~Ports are hardcoded (8080/8093/8094/8095), so a leftover process
+  breaks a run, and suites cannot run in parallel.~~ **Fixed 2026-08-28.**
+  Four numbers were each doing double or triple duty: 8093 alone was
+  `soak-lite.js`, `sync-gates.js` and `serv-gates.js`; 8095 was
+  `crud-gates.js`, `gesture-gates.js`, `soak-data.js` and
+  `fuzz-data.js`. Every collision is now a distinct port, and a
+  fixture shared by more than one suite (`hello-app.ring`,
+  `crud-app.ring`) reads its port from `RINGSERV_TEST_PORT` — same
+  pattern as `RINGSERV_TEST_DB` — defaulting to its old number so a
+  suite that does not care still works unchanged. One collision was
+  left alone on purpose: `cli-gates.js` and `gesture-gates.js` both
+  serve on 8080 because both are asserting the CLI's real, documented
+  default port against `docs/gesture.md`'s own curl example — sharing
+  it is the point, not an oversight, so those two still cannot run
+  concurrently *with each other*. Proven, not just asserted: 8 suites
+  that used to collide pairwise (`soak-lite`, `serv-gates`,
+  `sync-gates`, `crud-gates`, `soak-data`, `fuzz-data`, `data-gates`,
+  `topology-gates`) were launched at once from one shell and all eight
+  passed.
 - **`dev`'s child can outlive its parent** when the parent is killed
   abruptly (the CLI gates kill the tree explicitly to compensate).
 - ~~Untested error paths in `db.zig`: a read-only file, a nonexistent

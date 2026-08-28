@@ -165,32 +165,32 @@ function variant(name, fixture, subs) {
     const results = {};
     for (const site of ["server", "local"]) {
         const db = path.join(tmp, `move-${site}.db`).replace(/\\/g, "/");
-        const s = startServer("move-app.ring", 8094, {
+        const s = startServer("move-app.ring", 8214, {
             RINGSERV_TEST_DB: db,
             RINGSERV_TEST_SITE: site,
         });
         try {
-            if (!(await waitUp(8094))) { check(`move fixture (:${site}) comes up`, false); continue; }
+            if (!(await waitUp(8214))) { check(`move fixture (:${site}) comes up`, false); continue; }
             check(`move fixture (:${site}) comes up`, true);
 
             const seen = [];
-            let c = await call(8094, "notes", "create", { title: "a", body: "b", weight: 7 });
+            let c = await call(8214, "notes", "create", { title: "a", body: "b", weight: 7 });
             seen.push([c.status, c.json.code]);
             const id = c.json.data.id;
-            let g = await call(8094, "notes", "get", { id });
+            let g = await call(8214, "notes", "get", { id });
             seen.push([g.status, g.json.code, g.json.data.title, g.json.data.weight]);
-            let u = await call(8094, "notes", "update", { id, title: "a2" });
+            let u = await call(8214, "notes", "update", { id, title: "a2" });
             seen.push([u.status, u.json.code]);
-            let l = await call(8094, "notes", "list", {});
+            let l = await call(8214, "notes", "list", {});
             seen.push([l.status, l.json.code, l.json.data.count]);
-            let t = await call(8094, "sum", "total", {});
+            let t = await call(8214, "sum", "total", {});
             seen.push([t.status, t.json.code, t.json.data.n]);
-            let del = await call(8094, "notes", "delete", { id });
+            let del = await call(8214, "notes", "delete", { id });
             seen.push([del.status, del.json.code]);
             // A contract violation must fail the same way on both sides —
             // this is where a "local" service that quietly skipped
             // validation would show up.
-            let bad = await call(8094, "notes", "create", { title: 42 });
+            let bad = await call(8214, "notes", "create", { title: 42 });
             seen.push([bad.status, bad.json.code]);
 
             results[site] = seen;
