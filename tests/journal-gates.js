@@ -290,6 +290,79 @@ async function stop() {
     check("...naming the record where the chain broke",
         c.stdout.includes("seq " + target), c.stdout);
 
+    // =============== friction 7, the simple case: a purely native journal
+    //
+    // A journal that was never touched by import — just appended to,
+    // exported, and read back. This is the case every RingServ deployment
+    // hits first, and the one the bug reached furthest: `JournalExport`
+    // re-emitted a native row's bare body, which carries no `prev` and no
+    // `hash` at all (those live in separate columns), so the file this
+    // binary wrote answered "carries no hash — not the interchange
+    // format" to this binary's own importer. Not a legacy-dialect edge
+    // case; the ordinary path.
+    {
+        const natDb = path.join(tmp, "native.db").replace(/\\/g, "/");
+        server = spawn(RINGSERV, ["run", FIXTURE], {
+            stdio: ["ignore", "ignore", "pipe"],
+            env: { ...process.env, RINGSERV_TEST_DB: natDb },
+        });
+        check("a fresh native journal comes up", await waitUp());
+        for (const who of ["ada", "grace", "joan"]) {
+            await call("orders", "place", { who, total: 100 });
+        }
+        const before = (await call("journal", "verify", {})).data;
+        check("3 native events verify INTACTE before export",
+            before.chain === "INTACTE" && before.events === 3, JSON.stringify(before));
+        await stop();
+
+        const runNat = (args) => spawnSync(RINGSERV, ["journal", ...args, FIXTURE], {
+            encoding: "utf8", env: { ...process.env, RINGSERV_TEST_DB: natDb },
+        });
+        const natOut = path.join(tmp, "native.jsonl");
+        let rn = runNat(["export", "--out", natOut]);
+        check("exporting a purely native journal succeeds",
+            rn.status === 0, (rn.stdout + rn.stderr).slice(0, 160));
+
+        const natLine = fs.readFileSync(natOut, "utf8").trim().split("\n")[0];
+        check("the FIRST exported line carries a hash — this is the exact " +
+            "line that used to have none",
+            /"hash":"[0-9a-f]{64}"/.test(natLine), natLine);
+        check("...and its prev is GENESE, written out rather than implied",
+            /"prev":"GENESE"/.test(natLine), natLine);
+
+        const nat2Db = path.join(tmp, "native2.db").replace(/\\/g, "/");
+        rn = spawnSync(RINGSERV, ["journal", "import", "--in", natOut, FIXTURE], {
+            encoding: "utf8", env: { ...process.env, RINGSERV_TEST_DB: nat2Db },
+        });
+        check("A PURELY NATIVE EXPORT IMPORTS BACK — the ordinary case, " +
+            "and friction 7's sharpest form",
+            rn.status === 0 && /INTACTE/.test(rn.stdout + rn.stderr) &&
+            /3 event/.test(rn.stdout + rn.stderr),
+            (rn.stdout + rn.stderr).slice(0, 200));
+
+        const nat2Out = path.join(tmp, "native2.jsonl");
+        spawnSync(RINGSERV, ["journal", "export", "--out", nat2Out, FIXTURE], {
+            encoding: "utf8", env: { ...process.env, RINGSERV_TEST_DB: nat2Db },
+        });
+        check("re-exported, it is byte-identical to the original — the " +
+            "round trip has a fixed point",
+            fs.readFileSync(natOut, "utf8") === fs.readFileSync(nat2Out, "utf8"));
+
+        // The DB row itself must stay bare after import, or a THIRD export
+        // would inject a second prev/hash on top of the first.
+        const env3 = { ...process.env, RINGSERV_TEST_DB: nat2Db };
+        server = spawn(RINGSERV, ["run", FIXTURE],
+            { stdio: ["ignore", "ignore", "pipe"], env: env3 });
+        check("the re-imported journal boots and answers", await waitUp());
+        const more = (await call("orders", "place", { who: "extra", total: 1 })).data;
+        check("...and a further native append continues the chain cleanly",
+            more.seq === 4, JSON.stringify(more));
+        const after = (await call("journal", "verify", {})).data;
+        check("...4 events, still INTACTE after import + append + verify",
+            after.chain === "INTACTE" && after.events === 4, JSON.stringify(after));
+        await stop();
+    }
+
     // ================================ the deversement (phase 13)
     // A journal written elsewhere, in the legacy interchange dialect
     // (16-hex chains), imports into an empty Journal() and verifies
@@ -371,6 +444,75 @@ async function stop() {
         check("...and the mixed chain verifies INTACTE across the seam",
             v7.chain === "INTACTE" && v7.events === 4, JSON.stringify(v7));
         await stop();
+
+        // ================================ friction 7: the missing half
+        //
+        // Everything above proves a LEGACY journal deversing in and being
+        // continued natively. It never asked the other question: can a
+        // NATIVE record leave this binary and come back? Before this fix
+        // it could not -- `JournalExport` re-emitted a native row's bare
+        // body, which carries no `prev` and no `hash` (those are separate
+        // columns), so the file it wrote answered "carries no hash — not
+        // the interchange format" to this binary's own importer.
+        //
+        // This is the export→import round trip the friction named as the
+        // gap ("nothing caught it because no gate does" one) — run here,
+        // on the MIXED chain above (three 16-hex rows, one 64-hex row),
+        // because that is the harder case: export must choose the right
+        // shape per row, not once for the file.
+        const mixedOut = path.join(tmp, "mixed.jsonl");
+        let r7m = run(["export", "--out", mixedOut]);
+        check("exporting the mixed chain succeeds",
+            r7m.status === 0, (r7m.stdout + r7m.stderr).slice(0, 160));
+
+        const mixedText = fs.readFileSync(mixedOut, "utf8");
+        const mixedLines = mixedText.trim().split("\n");
+        check("...as four lines, one per record", mixedLines.length === 4,
+            mixedLines.length);
+        check("...with the native row now carrying its OWN prev and hash " +
+            "in the text — the exact thing the old export omitted (prev is " +
+            "16-hex here because it names the LEGACY row before it; hash " +
+            "is this row's own, always 64-hex for a native append)",
+            /"prev":"[0-9a-f]{16}"/.test(mixedLines[3]) &&
+            /"hash":"[0-9a-f]{64}"/.test(mixedLines[3]),
+            mixedLines[3]);
+
+        const mixDb = path.join(tmp, "mix.db").replace(/\\/g, "/");
+        const runMix = (args) => spawnSync(RINGSERV, ["journal", ...args, FIXTURE], {
+            encoding: "utf8", env: { ...process.env, RINGSERV_TEST_DB: mixDb },
+        });
+        r7m = runMix(["import", "--in", mixedOut]);
+        check("THE FILE THIS BINARY EXPORTED, THIS BINARY CAN IMPORT — " +
+            "friction 7, closed",
+            r7m.status === 0 && /INTACTE/.test(r7m.stdout + r7m.stderr),
+            (r7m.stdout + r7m.stderr).slice(0, 200));
+
+        r7m = runMix(["verify"]);
+        check("...and the re-imported mixed chain verifies INTACTE, all 4 events",
+            r7m.status === 0 && /4 event\(s\)/.test(r7m.stdout + r7m.stderr) &&
+            /INTACTE/.test(r7m.stdout + r7m.stderr),
+            (r7m.stdout + r7m.stderr).slice(0, 160));
+
+        const mixedRt = path.join(tmp, "mixed-rt.jsonl");
+        runMix(["export", "--out", mixedRt]);
+        check("...and re-exporting it a SECOND time is byte-identical to " +
+            "the first — no drift, no double injection",
+            fs.readFileSync(mixedOut, "utf8") === fs.readFileSync(mixedRt, "utf8"));
+
+        // A tampered NATIVE line must be refused exactly as a tampered
+        // legacy one is -- the retry that recovers a clean verify must
+        // not also recover a forged one.
+        const mixedBad = path.join(tmp, "mixed-bad.jsonl");
+        const badLines = mixedLines.slice();
+        badLines[3] = badLines[3].replace('"total":5', '"total":50000');
+        fs.writeFileSync(mixedBad, badLines.join("\n") + "\n");
+        const mixBadDb = path.join(tmp, "mixbad.db").replace(/\\/g, "/");
+        r7m = spawnSync(RINGSERV, ["journal", "import", "--in", mixedBad, FIXTURE], {
+            encoding: "utf8", env: { ...process.env, RINGSERV_TEST_DB: mixBadDb },
+        });
+        check("a tampered NATIVE line is refused at its line too",
+            r7m.status === 1 && /ROMPUE at line 4/.test(r7m.stdout + r7m.stderr),
+            (r7m.stdout + r7m.stderr).slice(0, 200));
     }
 
     // ============ 8. no value can forge a record boundary (routed finding)

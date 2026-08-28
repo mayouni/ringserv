@@ -126,6 +126,19 @@ func RsJournalHash cPrev, cBody
 #
 # The dialect is honoured, not upgraded: re-hashing an inalterable record
 # to 64 chars would break the very chain it came with.
+#
+# THE RETRY (added 2026-08-27, friction 7): a 64-hex line can arrive two
+# shapes. A row read straight from THIS worker's own table is bare — the
+# exact bytes JournalAppend hashed, and the plain check below matches on
+# the first try. A line that came through JournalExport/JournalImport
+# carries `prev` and `hash` INJECTED into the text (RsJournalInject), so
+# hashing it as-is can never match — the bytes it hashed to never
+# contained a `hash` field describing themselves. That is not a second
+# dialect, it is the same bytes with the injection still attached, so the
+# fallback strips the injection and checks again rather than guessing
+# from context which shape arrived. On a row from this worker's own
+# table the strip finds nothing and returns the text unchanged, so the
+# retry costs one failed scan on the hot path, never a wrong verdict.
 func RsJournalCheckOne cPrev, cBody, cHash
 	if len(cHash) = 16
 		if left(RsJournalHash(cPrev, RsJournalStripHash(cBody)), 16) = cHash
@@ -134,6 +147,9 @@ func RsJournalCheckOne cPrev, cBody, cHash
 		return 0
 	ok
 	if RsJournalHash(cPrev, cBody) = cHash
+		return 1
+	ok
+	if RsJournalHash(cPrev, RsJournalStripInjected(cBody)) = cHash
 		return 1
 	ok
 	return 0
@@ -161,6 +177,59 @@ func RsJournalStripHash cLine
 		nClose++
 	end
 	return left(cLine, nAt - 1) + substr(cLine, nClose + 1)
+
+# ---------------------------------------------- the native interchange shape
+#
+# Friction 7 (docs/FRICTIONS.md): `JournalExport` used to re-emit a native
+# row's `body` verbatim, and a native `body` carries no `prev` and no
+# `hash` — those are separate DB columns, kept out of the bytes that were
+# hashed. The exported line therefore had nothing for `JournalImport` to
+# verify, and refused with "carries no hash — not the interchange format"
+# on a file this very binary had just written.
+#
+# The fix makes a native line SELF-DESCRIBING for export, the way the
+# legacy dialect already is, without changing what gets hashed: `prev`
+# and `hash` are injected into the text only at the moment of export, and
+# stripped back out — recovering the EXACT bytes JournalAppend hashed —
+# the moment the line is read back in, either by RsJournalCheckOne's
+# retry above or by JournalImport before it stores the row. A native
+# record's stored `body` is bare before this and bare after it; nothing
+# elsewhere that reads `body` needs to know the injection ever happened.
+#
+# One fixed position, chosen so stripping is exact rather than
+# approximate: right before the object's closing `}`, prev then hash,
+# because JsonEncode(aFull) — the only thing that ever populates a
+# native body — always ends in `}` with no trailing bytes.
+func RsJournalInject cBody, cPrev, cHash
+	if len(cBody) = 0 or right(cBody, 1) != "}"
+		return cBody
+	ok
+	return left(cBody, len(cBody) - 1) + "," + char(34) + "prev" + char(34) +
+		":" + char(34) + cPrev + char(34) + "," + char(34) + "hash" + char(34) +
+		":" + char(34) + cHash + char(34) + "}"
+
+# The inverse of RsJournalInject: cut everything from the LAST `,"prev":`
+# to the end, and re-close the object. Not two strips (prev, then hash) —
+# one, because the injected suffix is a single unit written in one place
+# by one function, and finding its start is enough to remove all of it.
+#
+# A line with nothing injected returns unchanged: the needle is absent,
+# so this is the no-op that makes the retry above safe to attempt on
+# every 64-hex row, imported or not.
+func RsJournalStripInjected cLine
+	cNeedle = "," + char(34) + "prev" + char(34) + ":" + char(34)
+	nAt = 0
+	nFrom = 1
+	while true
+		nHit = substr(substr(cLine, nFrom), cNeedle)
+		if nHit = 0 exit ok
+		nAt = nFrom + nHit - 1
+		nFrom = nAt + 1
+	end
+	if nAt = 0
+		return cLine
+	ok
+	return left(cLine, nAt - 1) + "}"
 
 # ------------------------------------------------------------- the write
 
@@ -460,8 +529,20 @@ func JournalImport cName, cText
 		ok
 		nTs = RsDeclGet(aEv, "ts", 0)
 		if not isnumber(nTs) nTs = 0 ok
+
+		# THE STORAGE SHAPE MUST MATCH JournalAppend's, or a row born from
+		# import looks different from a row born native, and re-exporting
+		# it would inject a SECOND prev/hash into a line that already has
+		# one. 16-hex (legacy) already stores the full line — that is the
+		# germ's own convention, verified above, unchanged. 64-hex
+		# (native) stores the line with the injection stripped back out,
+		# recovering the exact bytes JournalAppend hashed at write time.
+		cStoreBody = cLine
+		if len(cLineHash) != 16
+			cStoreBody = RsJournalStripInjected(cLine)
+		ok
 		add(aLines, [ :ts = nTs, :type = "" + RsDeclGet(aEv, "type", "event"),
-			      :prev = cLinePrev, :hash = cLineHash, :body = cLine ])
+			      :prev = cLinePrev, :hash = cLineHash, :body = cStoreBody ])
 		cPrev = cLineHash
 	next
 	if len(aLines) = 0
@@ -485,11 +566,24 @@ func JournalImport cName, cText
 
 # The interchange format: one JSON object per line, the germ's own shape, so
 # a journal moves between a Commons and a RingServ without translation.
+#
+# A 16-hex (legacy) row's body IS the interchange line already — that
+# dialect has stored the full original text since phase 13, and it is
+# emitted verbatim, unchanged by this fix. A 64-hex (native) row's body
+# is bare, so `prev` and `hash` are injected before it goes out — the
+# other half of friction 7 (docs/FRICTIONS.md): a native journal's own
+# export used to produce a file its own import refused. Both dialects
+# can sit in one chain (an imported journal that was then appended to
+# natively), so the choice is made per row, not once for the file.
 func JournalExport cName
 	cOut = ""
 	for aRow in DataQuery("select body, prev, hash from " +
 			RsJournalTable(cName) + " order by seq asc", [])
-		cOut += aRow[:body] + nl
+		cLine = aRow[:body]
+		if len(aRow[:hash]) != 16
+			cLine = RsJournalInject(cLine, aRow[:prev], aRow[:hash])
+		ok
+		cOut += cLine + nl
 	next
 	return cOut
 
