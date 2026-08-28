@@ -238,11 +238,29 @@ fn workerMain(id: u32) void {
     // to create the same tables is safe — and the first one to win also
     // creates the file.
     _ = bridge.rs_call("__rs_data_apply", "0");
+    // THE RESULT OF THAT CALL WAS DISCARDED UNTIL 2026-08-28, and a
+    // worker marked itself "alive" whether or not it could actually reach
+    // its own database. Measured: a `:database` naming a directory that
+    // does not exist printed "serving on http://..." and answered
+    // /health 200, while every request that touched data failed 500 —
+    // a server reporting healthy while structurally unable to do the one
+    // thing it exists for. `rs_call`'s own contract already carries the
+    // failure (`rs_last_error()`); nothing here was checking it.
+    const data_err = std.mem.span(bridge.rs_last_error());
     if (rc != 0) {
         // The main thread already validated the app, so this is unexpected —
         // keep serving (dispatch will answer with clean 500 envelopes), but
         // say so.
         std.debug.print("ringserv: worker {d}: app eval failed: {s}\n", .{ id, bridge.rs_last_error() });
+    } else if (data_err.len != 0) {
+        // A worker that cannot open its own database will fail every
+        // future request that touches data, for as long as the process
+        // runs — the same shape of failure as `rc != 0` above, so it is
+        // treated the same way: named loudly, and NOT counted as alive.
+        // If every worker hits this, start() below refuses to serve at
+        // all rather than bind a port that can only ever answer 500.
+        std.debug.print("ringserv: worker {d}: cannot reach its database, refusing to serve: {s}\n", .{ id, data_err });
+        return;
     }
     _ = g_workers_alive.fetchAdd(1, .monotonic);
     _ = g_gen_workers.fetchAdd(1, .monotonic);
@@ -911,6 +929,28 @@ pub fn start(config: Config) !void {
     var waited: u32 = 0;
     while (g_workers_alive.load(.monotonic) == 0 and waited < 100) : (waited += 1) {
         std.Thread.sleep(20 * std.time.ns_per_ms);
+    }
+
+    // REFUSE TO SERVE ON ZERO WORKERS, rather than binding the port
+    // anyway once the wait above times out.
+    //
+    // Until 2026-08-28 this loop had no exit condition of its own: it
+    // simply stopped waiting after two seconds, success or not, and fell
+    // straight through to print "serving on http://..." and bind the
+    // port regardless. A deployment whose database directory does not
+    // exist -- every worker refusing in the fix just above this one --
+    // used to look exactly like a healthy server: 200 on /health, and a
+    // 500 on the very first real request, forever, with nothing in
+    // between to say why. Found by deploying a config that could never
+    // have worked, not by a report from someone it happened to.
+    if (g_workers_alive.load(.monotonic) == 0) {
+        std.debug.print(
+            "ringserv: no worker came up after {d} ms -- refusing to serve. " ++
+                "Each worker's own line above names why (an unreachable database " ++
+                "is the common case); this is not a hang to wait out.\n",
+            .{waited * 20},
+        );
+        return error.NoWorkerAvailable;
     }
 
     var server = try httpz.Server(void).init(alloc, .{

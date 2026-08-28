@@ -134,8 +134,22 @@ approximate.
   process breaks a run, and suites cannot run in parallel.
 - **`dev`'s child can outlive its parent** when the parent is killed
   abruptly (the CLI gates kill the tree explicitly to compensate).
-- **Untested error paths in `db.zig`**: a read-only file, a
-  nonexistent directory, a disk that fills.
+- ~~Untested error paths in `db.zig`: a read-only file, a nonexistent
+  directory, a disk that fills.~~ **Measured 2026-08-28.** The disk-full
+  case was already correct — the generic SQL-error path (phase 1) turns
+  `SQLITE_FULL` into a clean 500 and the server keeps serving, gated on
+  Linux by `tests/db-boot-gates.js` (a capped tmpfs; skipped by name
+  elsewhere, since it needs root). The other two were not: the fault
+  was never in `db.zig` itself but in `serve.zig`'s boot sequence —
+  `workerMain` discarded `__rs_data_apply`'s result and marked itself
+  "alive" regardless, and `start()`'s own wait loop served anyway if
+  zero workers ever came up. A read-only file or a missing parent
+  directory produced a server that printed "serving on http://..." and
+  answered `/health` 200 while every real request failed 500, forever,
+  with nothing to say why. Fixed by making both points check: a worker
+  that cannot reach its database refuses and names the reason;
+  `start()` refuses to serve at all if no worker ever came up. Gated by
+  `tests/db-boot-gates.js` (8 gates on every platform, 2 more Linux-only).
 - ~~Only the Windows binary has been run.~~ **False since 2026-08-22**
   (`.github/workflows/gates.yml`): macOS, Linux and Windows all build and
   run every gate on every push. Left here corrected rather than deleted,

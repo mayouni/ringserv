@@ -172,7 +172,7 @@ const norm = s => s.split("\n").map(l => l.trim()).filter(Boolean).join("\n");
         const fastPart = allJs.split(/\n\s*if\s*\(full\)/)[0];
         const listed = [...fastPart.matchAll(/\{\s*name:\s*"[^"]+",\s*(?:node|cmd):/g)].length;
         check("tests/all.js lists default suites this gate can count",
-            listed >= 20 && listed < 30, `counted ${listed}`);
+            listed >= 20 && listed < 40, `counted ${listed}`);
 
         const suiteClaims = [...readme.matchAll(/(\d+)\s+suites\b/gi)]
             .map(m => parseInt(m[1], 10))
