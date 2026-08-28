@@ -142,10 +142,23 @@ fn enqueue(job: *Job) void {
 // thread that is waiting for it. A win measured on a 12-core desktop that
 // becomes a loss on the target hardware is not a win.
 
-fn dequeue() *Job {
+// How often an idle worker wakes on its own to re-check the generation,
+// with no job and no signal. This is a BOUNDED WAIT, not the spin
+// rejected above -- one atomic load every 50 ms costs nothing measurable
+// and is the ordinary cost of any timed condition variable, on a
+// Raspberry Pi as much as a desktop. What it buys is correctness that
+// does not depend on delivery: see the note on postAdminReload below.
+const RELOAD_POLL_NS: u64 = 50 * std.time.ns_per_ms;
+
+/// A job if one was queued, or null if this worker woke on its own to
+/// check whether the world changed while it was asleep.
+fn dequeue() ?*Job {
     g_mutex.lock();
     defer g_mutex.unlock();
-    while (g_queue.items.len == 0) g_cond.wait(&g_mutex);
+    if (g_queue.items.len == 0) {
+        g_cond.timedWait(&g_mutex, RELOAD_POLL_NS) catch {};
+    }
+    if (g_queue.items.len == 0) return null;
     return g_queue.orderedRemove(0);
 }
 
@@ -235,17 +248,25 @@ fn workerMain(id: u32) void {
     _ = g_gen_workers.fetchAdd(1, .monotonic);
     var my_generation: u32 = g_app_generation.load(.monotonic);
     while (true) {
-        const job = dequeue();
+        // dequeue() returns null when this worker woke on its own with
+        // nothing queued -- itself the point, not a condition to filter
+        // out. See RELOAD_POLL_NS: this is what makes reload correct
+        // regardless of which worker a wake-up job happens to reach.
+        const maybe_job = dequeue();
 
         // BETWEEN TWO JOBS is the only safe moment to change the code a
-        // worker runs, and it is exactly here. Checked before serving and
-        // never during: a request that has already begun keeps the
-        // application it began under.
+        // worker runs, and it is exactly here -- and now it is checked on
+        // EVERY loop iteration, job or none, so no worker can go longer
+        // than RELOAD_POLL_NS without noticing a reload even if it is
+        // never handed a job again. A request already begun keeps the
+        // application it began under, because this runs only between jobs.
         const gen = g_app_generation.load(.acquire);
         if (gen != my_generation) reloadThisWorker(id, gen, &my_generation);
 
-        serveJob(job);
-        job.done.set();
+        if (maybe_job) |job| {
+            serveJob(job);
+            job.done.set();
+        }
     }
 }
 
@@ -435,15 +456,45 @@ fn postAdminReload(req: *httpz.Request, res: *httpz.Response) !void {
     g_reload_failures.store(0, .monotonic);
     _ = g_app_generation.fetchAdd(1, .release);
 
-    // Wake every worker so the reload happens NOW rather than whenever
-    // the next real request happens to arrive. One no-op dispatch each,
-    // on a path measured at 0.75 ms.
-    var i: u32 = 0;
-    while (i < workers) : (i += 1) {
-        var job = Job{ .entry = "__rs_noop", .body = "0", .raw_arg = true };
-        defer job.response.deinit(alloc);
-        enqueue(&job);
-        job.done.timedWait(20 * std.time.ns_per_s) catch {};
+    // WHY THIS IS NOT "ENQUEUE ONE NO-OP JOB PER WORKER" ANY MORE
+    // (found on macOS CI, 2026-08-27, two days after this shipped: the
+    // gates reported "2 of 3 workers took the new application" every
+    // single run, never all three).
+    //
+    // Jobs sit in ONE shared queue that any idle worker may take, and
+    // nothing pairs a job with a particular worker. Enqueueing N jobs
+    // sequentially -- wait for one, THEN enqueue the next -- lets a fast
+    // worker answer twice before a slower one wakes at all: worker A
+    // takes job 1, finishes, is idle again before job 2 is even
+    // enqueued, and takes that one too. A worker that never receives a
+    // job never reloads, and no amount of waiting fixes that, because
+    // there is nothing left in the queue to wait FOR. On Windows the
+    // three worker threads happened to interleave often enough that
+    // each got one; that was luck, not a guarantee, and macOS's
+    // scheduler simply did not oblige.
+    //
+    // The actual fix is not here -- it is that every worker now polls
+    // its own generation on a bounded wait regardless of whether a job
+    // ever reaches it (RELOAD_POLL_NS, in dequeue()/workerMain()). This
+    // broadcast is only the FAST PATH: it wakes any worker that is
+    // currently asleep so reload does not wait out a full poll interval
+    // in the common case. Correctness does not depend on it succeeding.
+    g_mutex.lock();
+    g_cond.broadcast();
+    g_mutex.unlock();
+
+    // Bounded, not indefinite: every worker is guaranteed to notice
+    // within RELOAD_POLL_NS of finishing whatever it is doing, so a
+    // wait many times that long is generous rather than hopeful. A
+    // worker that is mid-way through a genuinely slow request is not a
+    // failure to wait for -- it will reload the moment that request
+    // ends, which is the one guarantee this endpoint makes.
+    var waited_ns: u64 = 0;
+    const budget_ns: u64 = 2 * std.time.ns_per_s;
+    while (waited_ns < budget_ns) {
+        if (g_gen_workers.load(.monotonic) + g_reload_failures.load(.monotonic) >= workers) break;
+        std.Thread.sleep(2 * std.time.ns_per_ms);
+        waited_ns += 2 * std.time.ns_per_ms;
     }
 
     const took = g_gen_workers.load(.monotonic);

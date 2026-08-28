@@ -136,5 +136,21 @@ approximate.
   abruptly (the CLI gates kill the tree explicitly to compensate).
 - **Untested error paths in `db.zig`**: a read-only file, a
   nonexistent directory, a disk that fills.
-- **Only the Windows binary has been run.** Four other targets
-  cross-compile; that is not the same thing.
+- ~~Only the Windows binary has been run.~~ **False since 2026-08-22**
+  (`.github/workflows/gates.yml`): macOS, Linux and Windows all build and
+  run every gate on every push. Left here corrected rather than deleted,
+  because it just proved its own point: hot reload (phase 20) shipped
+  2026-08-25 with a real race — the wake-up mechanism enqueued one job
+  per worker into a SHARED queue with no guarantee a fast worker
+  couldn't steal a slow one's job, so a worker that was never handed one
+  never reloaded, ever. It read "2 of 3 workers took the new
+  application" on every run, and it read it on macOS. It could not have
+  read it on Windows: three fast threads on this development machine
+  happened to interleave often enough that each got exactly one job,
+  every time. CI stayed green for the same reason `docs/GATES.md`'s
+  claim above stayed unread for two days — a push that reports success
+  invites nobody to check the report. Fixed 2026-08-27 by making
+  correctness independent of delivery: every worker polls its own
+  generation on a bounded wait (`RELOAD_POLL_NS`) whether or not a job
+  ever reaches it, so no amount of scheduler luck is load-bearing any
+  more. See `src/serve.zig` at `dequeue()` for the account in full.

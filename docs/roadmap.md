@@ -710,6 +710,35 @@ including the panel bridge) and `reload-gates.js` (17). 29 suites.
 
 **Phase 20 is delivered.**
 
+**CORRECTED 2026-08-27, two days after delivery, and the correction is the
+part worth reading.** The paragraph above says a worker "re-evaluates
+between two jobs" as though every worker reliably gets a job to prompt it.
+It shipped with a real race hiding inside that assumption: the reload
+endpoint woke workers by enqueueing one no-op job per worker into a
+**single shared queue**, and nothing paired a job with a particular
+worker. A fast worker could finish job 1 and go idle again *before* job 2
+was even enqueued — taking that one too — leaving a slower worker with
+nothing to wake it, ever. CI caught it immediately: macOS reported "2 of 3
+workers took the new application" on every run from the push that shipped
+this phase. It stayed unnoticed for two days because a push that reports
+success invites nobody to re-open the report, and because Windows —
+the only platform tested by hand — never showed it: three threads on that
+machine happened to interleave often enough that each got exactly one
+job, every time. That is luck, not a guarantee, and it is the same lesson
+phase 4 already paid for once ("a gate that has only ever run in one
+environment is a gate that has only ever tested one environment").
+
+**The fix removes the dependency on delivery entirely**, rather than
+trying to guarantee fair delivery through the queue. Every worker now
+polls its own generation on a short bounded wait (`RELOAD_POLL_NS`, 50 ms)
+whether or not a job ever reaches it — so correctness no longer rests on
+which worker happens to grab which job. The reload endpoint's broadcast
+is now only a latency optimisation for the common case (wake a sleeping
+worker immediately rather than making it wait out one poll interval); a
+worker that never gets the broadcast still reloads on its own within
+50 ms. Reload latency is unchanged, 62–71 ms across five repeated runs on
+three workers and again on eight.
+
 ## Standing risks (tracked, not hidden)
 
 - **VM concurrency** — the N-worker model is designed, not proven;
