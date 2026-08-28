@@ -119,9 +119,15 @@ exists with every entry dispositioned.
 **DELIVERED 2026-08-25 — the Principal opened the gate.** A deployment of
 Comptoir stands at `D:\RingServ-Local` and has carried real orders; its
 journal verifies `INTACTE` and its restore is rehearsed, not assumed. The
-friction list is the deliverable and it has seven entries, six
-dispositioned and one open by decision. **Phase 8's held-open gate closes
-with it.** The record is in [roadmap.md](roadmap.md).
+friction list is the deliverable, and it stood at seven entries, six
+dispositioned and one open by decision, the day the gate was opened. **Phase
+8's held-open gate closes with it.** The record is in
+[roadmap.md](roadmap.md).
+
+*The list keeps growing after delivery, per its own practice — that is the
+point of it. As of 2026-08-27 it holds 11 entries, all dispositioned; the
+one that was open (friction 7, the journal export/import round trip) is now
+fixed. See [FRICTIONS.md](FRICTIONS.md) for the current count.*
 
 **Progress, 2026-08-23:** the session-side deliverables are built —
 `ringserv journal import` with the legacy dialect (verify-before-write,
