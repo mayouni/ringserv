@@ -156,7 +156,8 @@ app.listen(<span class="n">8080</span>)</pre>
       <span class="icon">&#10064;</span>
       <h3>A database already inside</h3>
       <p>Describe your tables, write ordinary SQL, and say what each request must contain —
-      bad requests are turned away before your code ever sees them.</p>
+      bad requests are turned away before your code ever sees them. And it is not across a
+      network: <a href="blog-the-hop-that-isnt-there.html">a query is a function call</a>.</p>
     </div>
     <div class="card">
       <span class="icon">&#10697;</span>
@@ -171,6 +172,31 @@ app.listen(<span class="n">8080</span>)</pre>
       Move one between them by changing a word, not the application.</p>
     </div>
   </div>
+</section>
+
+<section class="wrap narrow">
+  <h2>Your data is not across a network</h2>
+  <p class="lead">In a normal stack, the application talks to the database over a socket,
+  the cache over another, and the message broker over a third. Every one of those hops
+  costs a serialization, a connection and a wait — before any of your work begins.</p>
+  <p class="lead">Here they are <b>the same process</b>. A query is a function call into
+  SQLite in the same address space; the journal is in that same file; a page's live
+  subscription is state in this server, not a broker somewhere else. That is not a
+  performance trick bolted on — it is what "one static binary" means once you follow it
+  all the way down.</p>
+  <p class="lead">RingServ measured the difference on itself, which is the only comparison
+  with nothing else hiding in it — the <em>same</em> service dispatch, called two ways:</p>
+  <div class="stats">
+    <div><div class="num">0.08 ms</div><div class="what">the dispatch, in-process</div></div>
+    <div><div class="num">0.72 ms</div><div class="what">the same one, over HTTP</div></div>
+    <div><div class="num">0.91 ms</div><div class="what">a write, durable commit included</div></div>
+  </div>
+  <p class="lead" style="margin-top:1.6rem">Nine times, and it is the socket rather than
+  the language: <b>Ring is 11% of a request</b>. The industry has recently started
+  benchmarking this idea and giving it names; we wrote down what our own numbers support,
+  the four things co-location honestly does <em>not</em> buy — a fast engine is not one of
+  them — and the failure mode that arrives with it.
+  <a href="blog-the-hop-that-isnt-there.html">The hop that isn't there</a>.</p>
 </section>
 
 <section class="wrap narrow">

@@ -58,6 +58,10 @@ Each one answers "how do I", and says what it refuses to do.
   Ring VM bridge, SQLite, vendored substrate.
 - **[landscape.md](landscape.md)** — the study behind the design: Pionia,
   Hono, WinterTC/ECMA-429, local-first sync, the Zig substrate.
+- **[FUSION.md](FUSION.md)** — data, compute and messaging in one
+  process: what RingServ's own 0.08 ms-vs-0.72 ms measurement supports,
+  the four things co-location does *not* buy, and the failure mode it
+  introduces.
 - **[roadmap.md](roadmap.md)** — phases 0–8, each with its gate and what
   it actually cost.
 - **[VENDOR_PATCHES.md](VENDOR_PATCHES.md)** — every change to vendored

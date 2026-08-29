@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The hop that isn't there — RingServ</title>
+<meta name="description" content="The industry gave a name to putting data, compute and messaging in one process. RingServ was already built that way — and measured the gap on itself: 0.08 ms in-process against 0.72 ms over HTTP. With the four things co-location does not buy.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=0.9.0">
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="" width="26" height="26">Ring<span>Serv</span></a>
+    <a href="start.html">Start here</a>
+    <a href="build.html">Build</a>
+    <a href="deploy.html">Deploy</a>
+    <a href="monitor.html">Monitor</a>
+    <a class="active" href="blog.html">Blog</a>
+    <a class="gh" href="https://github.com/mayouni/ringserv" target="_blank" rel="noopener" aria-label="RingServ on GitHub"><svg viewBox="0 0 16 16" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+    <a class="cta" href="https://github.com/mayouni/ringserv/releases/latest" target="_blank" rel="noopener">Download <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <h1>The hop<br>that <em>isn't</em> there.</h1>
+  <p class="sub">Position · 2026-08-29 · The industry has started naming something
+  RingServ was already built as: data, compute and messaging in <b>one process</b>,
+  with no network between them. Here is the measurement that supports it — taken on
+  RingServ, by RingServ — and the four things it honestly does not buy.</p>
+</header>
+
+<section class="wrap narrow">
+  <h2>A paradigm got a name</h2>
+  <p class="lead">In August 2026 InfoQ reported a benchmark from Harper, arguing that
+  collapsing the usual tiers — an application process talking over a network to a
+  database, a cache and a message broker — into a <b>single runtime</b> is worth several
+  times the latency on live, personalized data. Their published figures: about
+  <b>0.4&nbsp;ms in-process against ~3&nbsp;ms across the network</b>, and up to ~14× on
+  the paths where the data is genuinely per-user and cannot be cached.</p>
+  <p class="lead">It is a vendor benchmarking its own architecture, and it should be read
+  that way. To their credit, the caveats are published with it: the dataset was warm and
+  in memory, and the serverless stack <em>wins</em> on cacheable content, broadcast
+  workloads and high fan-out. Those are real losses, honestly stated. We will state ours
+  further down.</p>
+  <p class="lead">We are writing about it because the argument is one RingServ made from
+  first principles before anyone was selling it — not as a performance strategy, but as a
+  consequence of a much simpler goal: <b>one file to download, nothing to install.</b></p>
+</section>
+
+<section class="wrap narrow">
+  <h2>What "in one process" actually means here</h2>
+  <p class="lead">RingServ is a single static binary. The Ring VM, SQLite, the QuickJS-ng
+  JavaScript engine and the web server are compiled into the same executable and run in
+  the same address space. The result is not a fast database call. It is the
+  <b>absence of a database call</b>, in the sense a tiered stack means it:</p>
+
+  <div class="grid">
+    <div class="card">
+      <span class="icon">&#10064;</span>
+      <h3>The data</h3>
+      <p>A query reaches SQLite through a function call. No socket, no wire protocol, no
+      connection pool, no serializing the query out and the rows back.</p>
+    </div>
+    <div class="card">
+      <span class="icon">&#10697;</span>
+      <h3>The record</h3>
+      <p>The append-only journal — the history nobody can quietly edit — is in the same
+      file, on the same connection discipline as everything else.</p>
+    </div>
+    <div class="card">
+      <span class="icon">&#8646;</span>
+      <h3>The messaging</h3>
+      <p>A page that subscribes is held as state in this server, not routed through a
+      broker somewhere else. No third system to run, secure and pay for.</p>
+    </div>
+    <div class="card">
+      <span class="icon">&#9673;</span>
+      <h3>The other language</h3>
+      <p>A JavaScript service is not a separate runtime either. It is resident too, and
+      calling a Ring service from it costs one extra dispatch — measured.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap narrow">
+  <h2>The number that decomposes the claim</h2>
+  <p class="lead">Here is the part worth having, and RingServ measured it on itself long
+  before the paradigm had a name. The <em>same</em> service dispatch, called two ways on
+  the same server — once over HTTP, once directly in the process:</p>
+
+  <div class="stats">
+    <div><div class="num">0.08 ms</div><div class="what">the dispatch, called in-process</div></div>
+    <div><div class="num">0.72 ms</div><div class="what">the same dispatch, over HTTP</div></div>
+    <div><div class="num">11%</div><div class="what">of a request is actually Ring</div></div>
+  </div>
+
+  <p class="lead" style="margin-top:1.6rem">Nine times, and it is the same shape Harper
+  published as 0.4 against 3 — different hardware, different stacks, same cause: a socket,
+  a queue and a thread handoff cost about an order of magnitude more than a function call.
+  What makes <em>our</em> version of the measurement useful is that <b>both sides of it are
+  the same server</b>. There is no second product's tuning hiding in the comparison.</p>
+  <p class="lead">It supports one precise sentence, and it has been in our benchmarks
+  document for months: <b>Ring is 11% of a request; the other 89% is the HTTP layer and
+  the handoff to a worker.</b> That is the entire fusion argument stated as an engineering
+  fact instead of a slogan — every hop you remove is worth roughly that much. RingServ
+  removed the database hop completely, which is why a create costs 0.91&nbsp;ms
+  <em>including</em> HTTP, dispatch, contract validation and a real durable commit — where
+  a tiered stack's three milliseconds is the hop <em>before</em> any of that work begins.</p>
+  <p class="lead">One honest footnote, because it is the more useful half: that same create
+  cost <b>10.13&nbsp;ms</b> here until the one-writer connection landed on 17 August 2026. Being in
+  one process did not make it fast. Being in one process <em>and</em> getting the
+  connection discipline right made it fast — and the second half was work.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>What it buys, and what it does not</h2>
+  <p class="lead">House rule: the losses go beside the wins, on the same screen, at the
+  same size. A benchmark that shrinks its own losses is an advertisement.</p>
+
+  <div class="race">
+    <div class="won">
+      <p class="cap">What co-location genuinely buys</p>
+      <ul>
+        <li>The database hop is <span class="num">gone</span>, not optimized — there is no
+        socket to tune, no pool to size, no serialization on the path.</li>
+        <li>A durable write, end to end over HTTP, in <span class="num">0.91 ms</span> —
+        contract validation and commit included.</li>
+        <li>Nothing to assemble: no broker, no cache tier, no ORM, no
+        <code>node_modules</code>. The supply-chain audit is one pinned list.</li>
+        <li>Boot to first answer in <span class="num">228 ms</span>, from a ~7&nbsp;MB file.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="cap">What it does not buy</p>
+      <ul>
+        <li><b>A fast engine.</b> Against plain <code>node:http</code>, Node wins every
+        row we publish — <span class="num">2.1×</span>, <span class="num">2.9×</span>,
+        <span class="num">2.2×</span>. Removing hops does not close an engine gap.</li>
+        <li><b>The client hop.</b> That 89% is <em>our own</em> HTTP transport. Every
+        architecture pays it, and quoting in-process latency as if it were end-to-end is
+        quoting the half of the journey you like.</li>
+        <li><b>Freedom from the working set.</b> Past SQLite's page cache it is disk I/O.
+        We degrade down a slope rather than off a cliff — but we have not measured that at
+        scale, so we do not claim it.</li>
+        <li><b>Elastic fan-out.</b> Peak here is <span class="num">~5,700</span> reads/s on
+        one machine, and scaling flattens past four workers. Our answer to growth is
+        <a href="unified.html">declared placement</a>, not autoscaling.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="wrap narrow">
+  <h2>The failure mode that arrives with it</h2>
+  <p class="lead">Every architectural property you gain brings a failure mode wearing that
+  property's own clothes. This one is worth naming because we paid for it — on
+  <b>2026-08-28</b>, the day before this article.</p>
+  <p class="lead">When the database is a separate tier, "can I reach it?" is a
+  <em>connection</em> question, asked continuously by a pool that retries. When data and
+  compute are one process, it quietly becomes a <b>boot</b> question about the process
+  itself — and a process that answers it wrong looks perfectly healthy from outside.</p>
+  <p class="lead">Which is exactly what ours did. A worker whose database could not be
+  reached — a read-only file, a directory that did not exist — marked itself alive anyway.
+  The server printed <code>serving on http://...</code>, answered its health check with a
+  cheerful 200, and failed every request that touched data, indefinitely, with nothing in
+  between to say why. It is fixed at both points now: a worker that cannot reach its
+  database refuses and names the reason, and the server refuses to start at all if no
+  worker ever came up. There is a test suite whose only job is to keep it that way.</p>
+  <p class="lead">We are telling you about a bug in an article about an architecture we
+  like, because the alternative is an architecture you cannot calibrate.</p>
+</section>
+
+<section class="wrap narrow">
+  <h2>What we are not going to do about it</h2>
+  <p class="lead">Nothing. No in-memory table type, no bundled cache tier, no broker —
+  none of the shopping list a paradigm tends to arrive with. RingServ's data layer is
+  <b>plain SQL over the most-deployed database in the world</b>, journaled, with none of
+  its own persistence inventions, and that is the property worth protecting.</p>
+  <p class="lead">This project settled that instinct once already, by deletion: there is no
+  framework query dialect here, because plain SQL was the better answer and <em>removing</em>
+  the idea was the better move. The same applies to a validated trend. The right response
+  to the industry agreeing with you is to write down what you can prove, publish what you
+  cannot, and keep building.</p>
+
+  <div class="actions" style="justify-content:flex-start">
+    <a class="btn primary" href="start.html">Try the ninety seconds</a>
+    <a class="btn ghost" href="https://github.com/mayouni/ringserv/blob/main/docs/FUSION.md" target="_blank" rel="noopener">The full position, with the method <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a class="btn ghost" href="https://github.com/mayouni/ringserv/blob/main/docs/BENCHMARKS.md" target="_blank" rel="noopener">All the numbers <span class="newtab" aria-hidden="true">&#8599;</span></a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>RingServ 0.9 — MIT</span>
+    <a href="https://github.com/mayouni/ringserv/tree/main/docs" target="_blank" rel="noopener">Documentation <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://ring-lang.github.io/" target="_blank" rel="noopener">Ring language <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/ringscript" target="_blank" rel="noopener">RingScript <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <a href="https://github.com/mayouni/stzlib" target="_blank" rel="noopener">Softanza <span class="newtab" aria-hidden="true">&#8599;</span></a>
+    <span class="sp">a Softanza project by Mansour Ayouni</span>
+  </div>
+</footer>
+
+</body>
+</html>
