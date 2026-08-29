@@ -258,17 +258,113 @@ pub fn runTests(arena: std.mem.Allocator, app_path: []const u8) !u8 {
 
 // ------------------------------------------------------------------ dev
 
+/// Not in std's kernel32 bindings; the three Win32 calls the orphan
+/// guard below needs.
+extern "kernel32" fn CreateJobObjectW(
+    lpJobAttributes: ?*anyopaque,
+    lpName: ?[*:0]const u16,
+) callconv(.winapi) ?std.os.windows.HANDLE;
+extern "kernel32" fn SetInformationJobObject(
+    hJob: std.os.windows.HANDLE,
+    JobObjectInformationClass: c_int,
+    lpJobObjectInformation: *const anyopaque,
+    cbJobObjectInformationLength: std.os.windows.DWORD,
+) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn AssignProcessToJobObject(
+    hJob: std.os.windows.HANDLE,
+    hProcess: std.os.windows.HANDLE,
+) callconv(.winapi) std.os.windows.BOOL;
+
+const JobObjectExtendedLimitInformation: c_int = 9;
+const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: std.os.windows.DWORD = 0x2000;
+
+// Layout matches JOBOBJECT_BASIC_LIMIT_INFORMATION / _EXTENDED_ / IO_COUNTERS
+// from winnt.h exactly — this is an ABI struct, not ours to reshape.
+const JOBOBJECT_BASIC_LIMIT_INFORMATION = extern struct {
+    PerProcessUserTimeLimit: std.os.windows.LARGE_INTEGER = 0,
+    PerJobUserTimeLimit: std.os.windows.LARGE_INTEGER = 0,
+    LimitFlags: std.os.windows.DWORD = 0,
+    MinimumWorkingSetSize: std.os.windows.SIZE_T = 0,
+    MaximumWorkingSetSize: std.os.windows.SIZE_T = 0,
+    ActiveProcessLimit: std.os.windows.DWORD = 0,
+    Affinity: std.os.windows.ULONG_PTR = 0,
+    PriorityClass: std.os.windows.DWORD = 0,
+    SchedulingClass: std.os.windows.DWORD = 0,
+};
+const IO_COUNTERS = extern struct {
+    ReadOperationCount: u64 = 0,
+    WriteOperationCount: u64 = 0,
+    OtherOperationCount: u64 = 0,
+    ReadTransferCount: u64 = 0,
+    WriteTransferCount: u64 = 0,
+    OtherTransferCount: u64 = 0,
+};
+const JOBOBJECT_EXTENDED_LIMIT_INFORMATION = extern struct {
+    BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION = .{},
+    IoInfo: IO_COUNTERS = .{},
+    ProcessMemoryLimit: std.os.windows.SIZE_T = 0,
+    JobMemoryLimit: std.os.windows.SIZE_T = 0,
+    PeakProcessMemoryUsed: std.os.windows.SIZE_T = 0,
+    PeakJobMemoryUsed: std.os.windows.SIZE_T = 0,
+};
+
+/// Windows only: a Job Object with KILL_ON_JOB_CLOSE, so the OS itself
+/// kills every child assigned to it the moment THIS process's handle to
+/// the job closes — which Windows does unconditionally on exit, including
+/// a hard kill nothing in this process could have caught to clean up
+/// after. Returns null on any failure; the caller treats that as "no
+/// guard available" rather than a reason to refuse to serve.
+fn makeKillOnCloseJob() ?std.os.windows.HANDLE {
+    const job = CreateJobObjectW(null, null) orelse return null;
+    var info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION{};
+    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if (SetInformationJobObject(job, JobObjectExtendedLimitInformation, &info, @sizeOf(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)) == 0) {
+        return null;
+    }
+    return job;
+}
+
 /// Serve the app and restart it whenever a .ring file changes.
 ///
 /// A supervisor over a child `run`, deliberately: a reload gets a
 /// genuinely fresh VM and a genuinely fresh database connection, so
 /// what you see after saving is what a cold start would give you.
 /// Residency is for production; honesty is for development.
+///
+/// ORPHAN GUARD (found 2026-08-28: docs/GATES.md had named this gap
+/// since phase 4). Killing `dev` the ordinary way — Ctrl-C, SIGTERM —
+/// already worked: the loop above catches nothing, but the process exit
+/// takes the child down with it via the OS's normal cleanup on some
+/// platforms and via the explicit kill below on the rest. The gap was
+/// an ABRUPT kill: SIGKILL, or `taskkill /F` without `/T`, leaves no
+/// userspace code in `dev` to run at all — reproduced by hand before
+/// writing this: killing only the `dev` process on Windows left the
+/// child `run` alive and still answering `/health`, forever, with the
+/// port still held. Two different mechanisms, because there is no
+/// single one both platforms share:
+///
+///   WINDOWS: a Job Object (below) — the OS kills the child when
+///   THIS process's last handle to the job closes, which Windows does
+///   unconditionally on any exit, including one nothing here saw coming.
+///
+///   POSIX: the CHILD watches for the ORIGINAL parent's death itself,
+///   armed only when `RINGSERV_DEV_CHILD` says it was launched by `dev`
+///   (see main.zig's armOrphanGuard — a bare `ringserv run` must never
+///   die just because its shell did, which is the normal, supported way
+///   to run it as a daemon).
 pub fn dev(arena: std.mem.Allocator, app_path: []const u8) !u8 {
     const exe = try std.fs.selfExePathAlloc(arena);
     const dir_path = std.fs.path.dirname(app_path) orelse ".";
 
     std.debug.print("ringserv dev — watching {s}/*.ring (Ctrl-C to stop)\n", .{dir_path});
+
+    const job: ?std.os.windows.HANDLE = if (builtin.os.tag == .windows) makeKillOnCloseJob() else null;
+
+    var env = try std.process.getEnvMap(arena);
+    try env.put("RINGSERV_DEV_CHILD", "1");
+    var ppid_buf: [32]u8 = undefined;
+    const own_pid = if (builtin.os.tag != .windows) std.c.getpid() else 0;
+    try env.put("RINGSERV_DEV_PPID", try std.fmt.bufPrint(&ppid_buf, "{d}", .{own_pid}));
 
     var last_stamp: i128 = 0;
     var child: ?std.process.Child = null;
@@ -283,15 +379,60 @@ pub fn dev(arena: std.mem.Allocator, app_path: []const u8) !u8 {
             }
             var c = std.process.Child.init(&.{ exe, "run", app_path }, arena);
             c.stdin_behavior = .Ignore;
+            c.env_map = &env;
             c.spawn() catch |e| {
                 std.debug.print("ringserv dev: cannot start server: {s}\n", .{@errorName(e)});
                 return 1;
             };
+            if (job) |j| _ = AssignProcessToJobObject(j, c.id);
             child = c;
             last_stamp = stamp;
         }
         std.Thread.sleep(400 * std.time.ns_per_ms);
     }
+}
+
+/// POSIX half of the orphan guard (see the doc comment on `dev` above
+/// for the whole picture, Windows included). A no-op unless
+/// RINGSERV_DEV_CHILD says `dev` spawned this very process — an
+/// ordinary `ringserv run app.ring` must keep serving if the shell that
+/// started it exits, which is the normal, supported way to run it as a
+/// daemon, and must not be punished for sharing a mechanism with `dev`.
+pub fn armOrphanGuard() void {
+    if (builtin.os.tag == .windows) return; // the Job Object does this instead
+    if (std.posix.getenv("RINGSERV_DEV_CHILD") == null) return;
+    const ppid_str = std.posix.getenv("RINGSERV_DEV_PPID") orelse return;
+    const ppid = std.fmt.parseInt(std.posix.pid_t, ppid_str, 10) catch return;
+
+    if (builtin.os.tag == .linux) {
+        // Event-driven: the kernel signals THIS thread the instant its
+        // parent dies, by any means, including SIGKILL -- nothing here
+        // has to run for it to fire.
+        _ = std.posix.prctl(.SET_PDEATHSIG, .{std.posix.SIG.TERM}) catch {};
+        // Closes the race where the parent was already gone (and this
+        // process already reparented) before prctl above had a chance
+        // to arm — one immediate check is enough; the poll loop below
+        // isn't needed on Linux because prctl already covers every
+        // later death.
+        std.posix.kill(ppid, 0) catch std.process.exit(0);
+        return;
+    }
+
+    // macOS/BSD have no PDEATHSIG equivalent, so this polls instead —
+    // checking the ORIGINAL parent's liveness (recorded at spawn time),
+    // never getppid(), because getppid() changes the moment this
+    // process is reparented, which is precisely the event being waited
+    // for.
+    const watch = struct {
+        fn run(pid: std.posix.pid_t) void {
+            while (true) {
+                std.Thread.sleep(1 * std.time.ns_per_s);
+                std.posix.kill(pid, 0) catch std.process.exit(0);
+            }
+        }
+    }.run;
+    const t = std.Thread.spawn(.{}, watch, .{ppid}) catch return;
+    t.detach();
 }
 
 /// Newest mtime among the app's .ring files and its public/ folder.

@@ -149,8 +149,29 @@ approximate.
   `sync-gates`, `crud-gates`, `soak-data`, `fuzz-data`, `data-gates`,
   `topology-gates`) were launched at once from one shell and all eight
   passed.
-- **`dev`'s child can outlive its parent** when the parent is killed
-  abruptly (the CLI gates kill the tree explicitly to compensate).
+- ~~`dev`'s child can outlive its parent when the parent is killed
+  abruptly (the CLI gates kill the tree explicitly to compensate).~~
+  **Fixed 2026-08-28.** Reproduced by hand first, on Windows and on
+  Linux: kill ONLY the `dev` process and its child `ringserv run` kept
+  serving, kept answering `/health` 200, and kept holding the port,
+  indefinitely. Ctrl-C and a clean SIGTERM were never affected — the
+  gap is only reachable when no userspace code in `dev` gets to run at
+  all (SIGKILL, or `taskkill /F` without `/T`), which is exactly what a
+  crash, an OOM kill or an impatient operator produces. Two mechanisms,
+  because none is portable: on Windows a **Job Object** with
+  `KILL_ON_JOB_CLOSE`, so the OS kills the child when this process's
+  handle closes — which Windows does on any exit, catchable or not; on
+  POSIX **the child watches for the original parent's death itself**
+  (`prctl(PR_SET_PDEATHSIG)` on Linux, a polling thread elsewhere),
+  armed only by an environment variable `dev` sets. That last detail is
+  load-bearing in the other direction: a bare `ringserv run` must keep
+  serving when the shell that started it exits, since that is the
+  normal way to run it as a daemon — so the guard must never fire for
+  it. Gated by `tests/devorphan-gates.js`, which asserts the outcome
+  rather than the mechanism (so it holds on either platform) and
+  asserts both directions. Verified to FAIL against the pre-fix binary,
+  on exactly the two orphan assertions — a gate that has never been
+  seen to fail is not yet known to test anything.
 - ~~Untested error paths in `db.zig`: a read-only file, a nonexistent
   directory, a disk that fills.~~ **Measured 2026-08-28.** The disk-full
   case was already correct — the generic SQL-error path (phase 1) turns

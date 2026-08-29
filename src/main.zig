@@ -590,6 +590,12 @@ pub fn main() !u8 {
             );
         }
 
+        // A no-op unless `dev` spawned this process (cli.zig's dev() doc
+        // comment has the full account): closes the gap where an abrupt
+        // kill of `dev` left its child `run` orphaned, still serving,
+        // still holding the port, forever.
+        cli.armOrphanGuard();
+
         // The family handshake, ON by default (docs/PLAN.md phase 12):
         // zero-config symbiosis is the point, and refusing is one word.
         // Started before serve.start because serve.start blocks.
