@@ -630,3 +630,8 @@ footer .sp { margin-left: auto; }
 nav a.gh { display: inline-flex; align-items: center; color: var(--ink-soft); }
 nav a.gh:hover { color: var(--accent); }
 nav a.gh svg { display: block; }
+
+/* Status note: the project has left Ring (see why.html on the Ring++ site) */
+.ringpp-note { background: var(--accent-soft); border-bottom: 1px solid var(--border); }
+.ringpp-note .wrap { padding-top: .6rem; padding-bottom: .6rem; font-size: var(--floor); line-height: 1.55; color: var(--ink); }
+.ringpp-note a { font-weight: 600; }

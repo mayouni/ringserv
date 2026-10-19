@@ -10,6 +10,11 @@
   sister of <a href="https://github.com/mayouni/ringscript">RingScript</a>
 </p>
 
+> **RingServ has left Ring.** It is no longer maintained on Ring: it is now a test project for
+> [Ring++](https://mayouni.github.io/ringpp/), and the starting point for HaroServ, Haro's own server.
+> [Why we left Ring](https://mayouni.github.io/ringpp/why.html).
+
+
 RingServ is the backend counterpart of
 [RingScript](https://github.com/mayouni/ringscript). Where RingScript
 makes [Ring](https://ring-lang.github.io/) resident in the browser,
